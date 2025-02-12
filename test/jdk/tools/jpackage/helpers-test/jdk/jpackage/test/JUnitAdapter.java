@@ -22,7 +22,16 @@
  */
 package jdk.jpackage.test;
 
+import static jdk.jpackage.internal.util.function.ThrowingRunnable.toRunnable;
+
+import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStreamReader;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -42,4 +51,22 @@ public class JUnitAdapter {
                 "--jpt-run=" + getClass().getName()
                 });
     }
+
+    static Stream<String> captureJPackageTestLog(Runnable runnable) {
+        final var buf = new ByteArrayOutputStream();
+        try (PrintStream ps = new PrintStream(buf, true, StandardCharsets.UTF_8)) {
+            TKit.withExtraLogStream(runnable, ps);
+        } finally {
+            try (final var in = new ByteArrayInputStream(buf.toByteArray(), StandardCharsets.UTF_8);
+                    final var reader = new InputStreamReader(in);
+                    final var bufReader = new BufferedReader(reader)) {
+                return bufReader.lines().map(line -> {
+                    // Skip timestamp
+                    return line.substring(LOG_MSG_TIMESTAMP_LENGTH);
+                });
+            }
+        }
+    }
+
+    private static final int LOG_MSG_TIMESTAMP_LENGTH = "[HH:mm:ss.SSS] ".length();
 }
