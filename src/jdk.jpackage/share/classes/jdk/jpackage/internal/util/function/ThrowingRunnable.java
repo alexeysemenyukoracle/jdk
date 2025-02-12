@@ -24,12 +24,15 @@
  */
 package jdk.jpackage.internal.util.function;
 
+import java.util.Objects;
+
 @FunctionalInterface
 public interface ThrowingRunnable {
 
     void run() throws Throwable;
 
     public static Runnable toRunnable(ThrowingRunnable v) {
+        Objects.requireNonNull(v);
         return () -> {
             try {
                 v.run();

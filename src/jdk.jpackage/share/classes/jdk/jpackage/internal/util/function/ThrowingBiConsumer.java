@@ -24,6 +24,7 @@
  */
 package jdk.jpackage.internal.util.function;
 
+import java.util.Objects;
 import java.util.function.BiConsumer;
 
 @FunctionalInterface
@@ -31,8 +32,8 @@ public interface ThrowingBiConsumer<T, U> {
 
     void accept(T t, U u) throws Throwable;
 
-    public static <T, U> BiConsumer<T, U> toBiConsumer(
-            ThrowingBiConsumer<T, U> v) {
+    public static <T, U> BiConsumer<T, U> toBiConsumer(ThrowingBiConsumer<T, U> v) {
+        Objects.requireNonNull(v);
         return (t, u) -> {
             try {
                 v.accept(t, u);

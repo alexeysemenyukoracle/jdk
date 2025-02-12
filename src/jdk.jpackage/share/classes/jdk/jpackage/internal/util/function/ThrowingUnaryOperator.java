@@ -24,6 +24,7 @@
  */
 package jdk.jpackage.internal.util.function;
 
+import java.util.Objects;
 import java.util.function.UnaryOperator;
 
 @FunctionalInterface
@@ -31,8 +32,8 @@ public interface ThrowingUnaryOperator<T> {
 
     T apply(T t) throws Throwable;
 
-    public static <T> UnaryOperator<T> toUnaryOperator(
-            ThrowingUnaryOperator<T> v) {
+    public static <T> UnaryOperator<T> toUnaryOperator(ThrowingUnaryOperator<T> v) {
+        Objects.requireNonNull(v);
         return t -> {
             try {
                 return v.apply(t);

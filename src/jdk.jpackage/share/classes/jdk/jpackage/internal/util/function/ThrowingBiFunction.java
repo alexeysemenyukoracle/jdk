@@ -24,6 +24,7 @@
  */
 package jdk.jpackage.internal.util.function;
 
+import java.util.Objects;
 import java.util.function.BiFunction;
 
 @FunctionalInterface
@@ -31,8 +32,8 @@ public interface ThrowingBiFunction<T, U, R> {
 
     R apply(T t, U u) throws Throwable;
 
-    public static <T, U, R> BiFunction<T, U, R> toBiFunction(
-            ThrowingBiFunction<T, U, R> v) {
+    public static <T, U, R> BiFunction<T, U, R> toBiFunction(ThrowingBiFunction<T, U, R> v) {
+        Objects.requireNonNull(v);
         return (t, u) -> {
             try {
                 return v.apply(t, u);

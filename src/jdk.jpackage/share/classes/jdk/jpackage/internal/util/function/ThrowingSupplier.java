@@ -24,6 +24,7 @@
  */
 package jdk.jpackage.internal.util.function;
 
+import java.util.Objects;
 import java.util.function.Supplier;
 
 @FunctionalInterface
@@ -32,6 +33,7 @@ public interface ThrowingSupplier<T> {
     T get() throws Throwable;
 
     public static <T> Supplier<T> toSupplier(ThrowingSupplier<T> v) {
+        Objects.requireNonNull(v);
         return () -> {
             try {
                 return v.get();

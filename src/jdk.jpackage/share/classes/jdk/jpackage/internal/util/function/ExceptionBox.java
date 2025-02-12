@@ -25,12 +25,14 @@
 package jdk.jpackage.internal.util.function;
 
 import java.lang.reflect.InvocationTargetException;
+import java.util.Objects;
 
 public class ExceptionBox extends RuntimeException {
 
     private static final long serialVersionUID = 1L;
 
     public static RuntimeException rethrowUnchecked(Throwable throwable) {
+        Objects.requireNonNull(throwable);
         if (throwable instanceof RuntimeException err) {
             throw err;
         }

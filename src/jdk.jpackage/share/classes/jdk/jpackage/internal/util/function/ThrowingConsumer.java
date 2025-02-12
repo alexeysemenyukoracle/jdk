@@ -24,6 +24,7 @@
  */
 package jdk.jpackage.internal.util.function;
 
+import java.util.Objects;
 import java.util.function.Consumer;
 
 @FunctionalInterface
@@ -32,6 +33,7 @@ public interface ThrowingConsumer<T> {
     void accept(T t) throws Throwable;
 
     public static <T> Consumer<T> toConsumer(ThrowingConsumer<T> v) {
+        Objects.requireNonNull(v);
         return o -> {
             try {
                 v.accept(o);
