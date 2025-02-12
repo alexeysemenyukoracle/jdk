@@ -25,13 +25,10 @@ package jdk.jpackage.test;
 import static jdk.jpackage.internal.util.function.ThrowingRunnable.toRunnable;
 import static jdk.jpackage.internal.util.function.ThrowingSupplier.toSupplier;
 
-import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.InputStreamReader;
-import java.io.PrintStream;
+import java.io.IOException;
 import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -211,6 +208,49 @@ public class TKitTest extends JUnitAdapter {
         }, methodCall.expectFail, methodCall.expectLog);
     }
 
+    @Test
+    @ParameterSupplier("testCreateTempFile")
+    public void testCreateTempFile(String tempFileRole, Path expectedFile, List<Path> existingFiles,
+            Class<Exception> expectedExceptionClass) throws IOException {
+        for (var existingFile : existingFiles) {
+            existingFile = TKit.workDir().resolve(existingFile);
+
+            Files.createDirectories(existingFile.getParent());
+            Files.createFile(existingFile);
+        }
+
+        if (expectedExceptionClass != null) {
+            try {
+                TKit.createTempFile(tempFileRole);
+                TKit.assertUnexpected("Exception expected");
+            } catch (Exception ex) {
+                TKit.assertTrue(expectedExceptionClass.isInstance(ex),
+                        String.format("Check exception [%s] is instance of %s class", ex, expectedExceptionClass));
+            }
+        } else {
+            final var tempPath = TKit.createTempFile(tempFileRole);
+
+            TKit.assertFileExists(tempPath);
+            TKit.assertTrue(tempPath.startsWith(TKit.workDir()), "Check temp file created in work directory");
+
+            final var relativeTempPath = TKit.workDir().relativize(tempPath);
+            TKit.assertTrue(expectedFile.equals(relativeTempPath),
+                    String.format("Check [%s]=[%s]", expectedFile, relativeTempPath));
+        }
+    }
+
+    public static Collection<Object[]> testCreateTempFile() {
+        return List.<Object[]>of(
+                new Object[] { "foo", Path.of("foo"), List.of(), null },
+                new Object[] { "foo", Path.of("foo-0"), List.of(Path.of("foo")), null },
+                new Object[] { "foo", Path.of("foo-1"), List.of(Path.of("foo"), Path.of("foo-0")), null },
+                new Object[] { "foo-0", Path.of("foo-0-0"), List.of(Path.of("foo-0")), null },
+                new Object[] { "foo/bar/buz", Path.of("foo/bar/buz"), List.of(), null },
+                new Object[] { "foo/bar/buz", Path.of("foo/bar/buz-0"), List.of(Path.of("foo/bar/buz")), null },
+                new Object[] { Path.of("").toAbsolutePath().toString(), null, List.of(), IllegalArgumentException.class }
+        );
+    }
+
     private static void runAssertWithExpectedLogOutput(ThrowingRunnable action,
             boolean expectFail, String... expectLogStrings) {
         runWithExpectedLogOutput(() -> {
@@ -220,23 +260,11 @@ public class TKitTest extends JUnitAdapter {
 
     private static void runWithExpectedLogOutput(ThrowingRunnable action,
             String... expectLogStrings) {
-        final var buf = new ByteArrayOutputStream();
-        try (PrintStream ps = new PrintStream(buf, true, StandardCharsets.UTF_8)) {
-            TKit.withExtraLogStream(action, ps);
-        } finally {
-            toRunnable(() -> {
-                var output = new BufferedReader(new InputStreamReader(
-                        new ByteArrayInputStream(buf.toByteArray()),
-                        StandardCharsets.UTF_8)).lines().map(line -> {
-                            // Skip timestamp
-                            return line.substring(LOG_MSG_TIMESTAMP_LENGTH);
-                        }).toList();
-                if (output.size() == 1 && expectLogStrings.length == 1) {
-                    TKit.assertEquals(expectLogStrings[0], output.get(0), null);
-                } else {
-                    TKit.assertStringListEquals(List.of(expectLogStrings), output, null);
-                }
-            }).run();
+        final var output = JUnitAdapter.captureJPackageTestLog(action);
+        if (output.size() == 1 && expectLogStrings.length == 1) {
+            TKit.assertEquals(expectLogStrings[0], output.get(0), null);
+        } else {
+            TKit.assertStringListEquals(List.of(expectLogStrings), output, null);
         }
     }
 
@@ -246,6 +274,4 @@ public class TKitTest extends JUnitAdapter {
         }
         return msg;
     }
-
-    private static final int LOG_MSG_TIMESTAMP_LENGTH = "[HH:mm:ss.SSS] ".length();
 }
