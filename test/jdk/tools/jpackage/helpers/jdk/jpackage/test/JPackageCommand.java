@@ -76,6 +76,7 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
         appLayoutAsserts = cmd.appLayoutAsserts;
         outputValidator = cmd.outputValidator;
         executeInDirectory = cmd.executeInDirectory;
+        winMsiLogFile = cmd.winMsiLogFile;
     }
 
     JPackageCommand createImmutableCopy() {
@@ -991,6 +992,15 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
         return this;
     }
 
+    JPackageCommand winMsiLogFile(Path v) {
+        this.winMsiLogFile = v;
+        return this;
+    }
+
+    public Optional<Path> winMsiLogFile() {
+        return Optional.ofNullable(winMsiLogFile);
+    }
+
     private JPackageCommand adjustArgumentsBeforeExecution() {
         if (!isWithToolProvider()) {
             // if jpackage is launched as a process then set the jlink.debug system property
@@ -1167,6 +1177,7 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
     private final Actions prerequisiteActions;
     private final Actions verifyActions;
     private Path executeInDirectory;
+    private Path winMsiLogFile;
     private Set<AppLayoutAssert> appLayoutAsserts = Set.of(AppLayoutAssert.values());
     private Consumer<Stream<String>> outputValidator;
     private static boolean defaultWithToolProvider;
