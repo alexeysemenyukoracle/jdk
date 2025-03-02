@@ -22,7 +22,7 @@
  */
 
 
-import static java.util.stream.Collectors.joining;
+import static java.util.stream.Collectors.toMap;
 import static jdk.internal.util.OperatingSystem.LINUX;
 import static jdk.internal.util.OperatingSystem.MACOS;
 import static jdk.internal.util.OperatingSystem.WINDOWS;
@@ -31,16 +31,15 @@ import static jdk.jpackage.test.CannedFormattedString.cannedAbsolutePath;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import jdk.jpackage.internal.util.TokenReplace;
 import jdk.jpackage.test.Annotations.Parameter;
 import jdk.jpackage.test.Annotations.ParameterSupplier;
 import jdk.jpackage.test.Annotations.Test;
@@ -87,26 +86,36 @@ public final class ErrorTest {
             appImageCmd.execute();
 
             return appImageCmd.outputBundle().toString();
-        });
+        }),
+        ADD_LAUNCHER_PROPERTY_FILE;
 
-        private Token(Function<JPackageCommand, String> valueSupplier) {
-            this.valueSupplier = Objects.requireNonNull(valueSupplier);
+        private Token() {
+            this.valueSupplier = Optional.empty();
+        }
+
+        private Token(Function<JPackageCommand, Object> valueSupplier) {
+            this.valueSupplier = Optional.of(valueSupplier);
         }
 
         String token() {
             return makeToken(name());
         }
 
-        static String makeToken(String v) {
+        TokenReplace asTokenReplace() {
+            return tokenReplace;
+        }
+
+        Optional<Object> expand(JPackageCommand cmd) {
+            return valueSupplier.map(func -> func.apply(cmd));
+        }
+
+        private static String makeToken(String v) {
             Objects.requireNonNull(v);
             return String.format("@@%s@@", v);
         }
 
-        String expand(JPackageCommand cmd) {
-            return valueSupplier.apply(cmd);
-        }
-
-        private final Function<JPackageCommand, String> valueSupplier;
+        private final Optional<Function<JPackageCommand, Object>> valueSupplier;
+        private final TokenReplace tokenReplace = new TokenReplace(token());
     }
 
     public record TestSpec(Optional<PackageType> type, Optional<String> appDesc, List<String> addArgs,
@@ -228,23 +237,34 @@ public final class ErrorTest {
         }
 
         void test() {
+            test(Map.of());
+        }
+
+        void test(Map<Token, Function<JPackageCommand, Object>> tokenValueSuppliers) {
             final var cmd = appDesc.map(JPackageCommand::helloAppImage).orElseGet(JPackageCommand::new);
             type.ifPresent(cmd::setPackageType);
 
             removeArgs.forEach(cmd::removeArgumentWithValue);
             cmd.addArguments(addArgs);
 
-            final Map<String, String> lazyExpandedTokens = new HashMap<>();
+            final var tokenValueSupplier = TokenReplace.createCachingTokenValueSupplier(Stream.of(Token.values()).collect(toMap(Token::token, token -> {
+                return () -> {
+                    return token.expand(cmd).orElseGet(() -> {
+                        final var tvs = Objects.requireNonNull(tokenValueSuppliers.get(token), () -> {
+                            return String.format("No token value supplier for token [%s]", token);
+                        });
+                        return tvs.apply(cmd);
+                    });
+                };
+            })));
 
-            final var newArgs = cmd.getAllArguments().stream().map(TOKEN_REGEXP::matcher).map(m -> {
-                return m.replaceAll(mr -> {
-                    final var key = mr.group(2);
-                    return Objects.requireNonNull(lazyExpandedTokens.computeIfAbsent(key, token -> {
-                        return Matcher.quoteReplacement(Token.valueOf(token).expand(cmd));
-                    }));
-                });
-            }).toList();
-            cmd.clearArguments().addArguments(newArgs);
+            for (final var token : Token.values()) {
+                final var newArgs = cmd.getAllArguments().stream().map(arg -> {
+                    return TokenReplace.applyTo(List.of(token.asTokenReplace()), arg, tokenValueSupplier);
+                }).toList();
+                cmd.clearArguments().addArguments(newArgs);
+            }
+
             defaultInit(cmd, expectedErrors);
             cmd.execute(1);
         }
@@ -269,8 +289,6 @@ public final class ErrorTest {
         }
 
         private final static String DEFAULT_APP_DESC = "Hello";
-        private final static Pattern TOKEN_REGEXP = Pattern.compile(String.format("(%s)", Token.makeToken(
-                Stream.of(Token.values()).map(Token::name).collect(joining("|", "(", ")")))));
     }
 
     private static TestSpec.Builder testSpec() {
@@ -413,10 +431,36 @@ public final class ErrorTest {
     }
 
     @Test
+    @ParameterSupplier
+    public static void testAdditionLaunchers(TestSpec spec) {
+        final Path propsFile = TKit.createTempFile("add-launcher.properties");
+        TKit.createPropertiesFile(propsFile, Map.of());
+        spec.test(Map.of(Token.ADD_LAUNCHER_PROPERTY_FILE, cmd -> propsFile));
+    }
+
+    public static Collection<Object[]> testAdditionLaunchers() {
+        return fromTestSpecBuilders(Stream.of(
+            testSpec().addArgs("--add-launcher", Token.ADD_LAUNCHER_PROPERTY_FILE.token())
+                    .error("ERR_NoAddLauncherName"),
+            testSpec().removeArgs("--name").addArgs("--name", "foo", "--add-launcher", "foo=" + Token.ADD_LAUNCHER_PROPERTY_FILE.token())
+                    .error("ERR_NoUniqueName")
+        ));
+    }
+
+    @Test
     @ParameterSupplier("invalidNames")
     public static void testInvalidAppName(String name) {
         testSpec().removeArgs("--name").addArgs("--name", name)
                 .error("ERR_InvalidAppName", adjustTextStreamVerifierArg(name)).create().test();
+    }
+
+    @Test
+    @ParameterSupplier("invalidNames")
+    public static void testInvalidAddLauncherName(String name) {
+        testAdditionLaunchers(testSpec()
+                .addArgs("--add-launcher", name + "=" + Token.ADD_LAUNCHER_PROPERTY_FILE.token())
+                .error("ERR_InvalidSLName", adjustTextStreamVerifierArg(name))
+                .create());
     }
 
     public static Collection<Object[]> invalidNames() {
