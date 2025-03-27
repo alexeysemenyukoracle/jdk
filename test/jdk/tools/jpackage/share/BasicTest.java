@@ -36,6 +36,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import jdk.jpackage.test.TKit;
 import jdk.jpackage.test.JPackageCommand;
+import jdk.jpackage.test.JPackageStringBundle;
 import jdk.jpackage.test.JavaAppDesc;
 import jdk.jpackage.test.PackageTest;
 import jdk.jpackage.test.HelloApp;
@@ -45,7 +46,7 @@ import jdk.jpackage.test.Annotations.Test;
 import jdk.jpackage.test.Annotations.Parameter;
 import jdk.jpackage.test.Annotations.ParameterSupplier;
 import jdk.jpackage.internal.util.function.ThrowingConsumer;
-import jdk.tools.jlink.internal.LinkableRuntimeImage;
+//import jdk.tools.jlink.internal.LinkableRuntimeImage;
 import static jdk.jpackage.test.RunnablePackageTest.Action.CREATE_AND_UNPACK;
 
 /*
@@ -78,7 +79,7 @@ public final class BasicTest {
     private static boolean isAllModulePathCapable() {
         Path jmods = Path.of(System.getProperty("java.home"), "jmods");
         boolean noJmods = Files.notExists(jmods);
-        if (LinkableRuntimeImage.isLinkableRuntime() && noJmods) {
+        if (noJmods) {
            TKit.trace("ALL-MODULE-PATH test skipped for linkable run-time image");
            return false;
         }
@@ -381,7 +382,10 @@ public final class BasicTest {
         );
 
         if (TestTempType.TEMPDIR_NOT_EMPTY.equals(type)) {
-            pkgTest.setExpectedExitCode(1).addBundleVerifier(cmd -> {
+            pkgTest.setExpectedExitCode(1).addInitializer(cmd -> {
+                cmd.validateOutput(JPackageStringBundle.MAIN.cannedFormattedString(
+                        "ERR_BuildRootInvalid", cmd.getArgumentValue("--temp")));
+            }).addBundleVerifier(cmd -> {
                 // Check jpackage didn't use the supplied directory.
                 Path tempDir = Path.of(cmd.getArgumentValue("--temp"));
                 TKit.assertDirectoryContent(tempDir).match(Path.of("foo.txt"));

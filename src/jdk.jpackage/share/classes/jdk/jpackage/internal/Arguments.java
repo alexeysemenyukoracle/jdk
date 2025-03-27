@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,6 +24,8 @@
  */
 package jdk.jpackage.internal;
 
+import jdk.jpackage.internal.model.ConfigException;
+import jdk.jpackage.internal.model.PackagerException;
 import jdk.internal.util.OperatingSystem;
 
 import java.io.IOException;
@@ -42,6 +44,7 @@ import java.util.Properties;
 import java.util.ResourceBundle;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import jdk.jpackage.internal.util.function.ExceptionBox;
 
 /**
  * Arguments
@@ -137,7 +140,9 @@ public class Arguments {
     // CLIOptions is public for DeployParamsTest
     public enum CLIOptions {
         PACKAGE_TYPE("type", "t", OptionCategories.PROPERTY, () -> {
-            context().deployParams.setTargetFormat(popArg());
+            var type = popArg();
+            context().deployParams.setTargetFormat(type);
+            setOptionValue("type", type);
         }),
 
         INPUT ("input", "i", OptionCategories.PROPERTY, () -> {
@@ -547,9 +552,6 @@ public class Arguments {
                 }
                 usedNames.add(slName);
             }
-            if (runtimeInstaller && bp.getName() == null) {
-                throw new PackagerException("ERR_NoJreInstallerName");
-            }
 
             generateBundle(bp.getBundleParamsAsMap());
             return true;
@@ -703,16 +705,26 @@ public class Arguments {
 
         Map<String, ? super Object> localParams = new HashMap<>(params);
         try {
-            bundler.validate(localParams);
-            Path result = bundler.execute(localParams,
-                    StandardBundlerParam.OUTPUT_DIR.fetchFrom(params));
-            if (result == null) {
-                throw new PackagerException("MSG_BundlerFailed",
-                        bundler.getID(), bundler.getName());
+            try {
+                bundler.validate(localParams);
+                Path result = bundler.execute(localParams,
+                        StandardBundlerParam.OUTPUT_DIR.fetchFrom(params));
+                if (result == null) {
+                    throw new PackagerException("MSG_BundlerFailed",
+                            bundler.getID(), bundler.getName());
+                }
+                Log.verbose(MessageFormat.format(
+                        I18N.getString("message.bundle-created"),
+                        bundler.getName()));
+            } catch (ExceptionBox ex) {
+                if (ex.getCause() instanceof ConfigException cfgEx) {
+                    throw cfgEx;
+                } else if (ex.getCause() instanceof PackagerException pkgEx) {
+                    throw pkgEx;
+                } else {
+                    throw ex;
+                }
             }
-            Log.verbose(MessageFormat.format(
-                    I18N.getString("message.bundle-created"),
-                    bundler.getName()));
         } catch (ConfigException e) {
             Log.verbose(e);
             if (e.getAdvice() != null)  {
