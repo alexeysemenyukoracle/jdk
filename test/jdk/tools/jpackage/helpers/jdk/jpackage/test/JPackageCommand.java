@@ -32,6 +32,7 @@ import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -706,7 +707,7 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
         return validateOutput(validator::apply);
     }
 
-    public JPackageCommand validateOutput(Consumer<Stream<String>> validator) {
+    public JPackageCommand validateOutput(Consumer<Iterator<String>> validator) {
         Objects.requireNonNull(validator);
         saveConsoleOutput(true);
         outputValidators.add(validator);
@@ -748,7 +749,9 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
         // Will look up the given errors in the order they are specified.
         Stream.of(str).map(this::getValue)
                 .map(TKit::assertTextStream)
-                .reduce(TKit.TextStreamVerifier::andThen).ifPresent(this::validateOutput);
+                .reduce(TKit.TextStreamVerifier.group(),
+                        TKit.TextStreamVerifier.Group::add,
+                        TKit.TextStreamVerifier.Group::add).tryCreate().ifPresent(this::validateOutput);
         return this;
     }
 
@@ -831,7 +834,7 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
                 .execute(expectedExitCode);
 
         for (final var outputValidator: outputValidators) {
-            outputValidator.accept(result.getOutput().stream());
+            outputValidator.accept(result.getOutput().iterator());
         }
 
         if (result.exitCode() == 0) {
@@ -1282,7 +1285,7 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
     private Path executeInDirectory;
     private Path winMsiLogFile;
     private Set<AppLayoutAssert> appLayoutAsserts = Set.of(AppLayoutAssert.values());
-    private List<Consumer<Stream<String>>> outputValidators = new ArrayList<>();
+    private List<Consumer<Iterator<String>>> outputValidators = new ArrayList<>();
     private static boolean defaultWithToolProvider;
 
     private static final Map<String, PackageType> PACKAGE_TYPES = Functional.identity(
