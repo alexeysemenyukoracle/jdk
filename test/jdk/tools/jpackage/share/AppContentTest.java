@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Random;
 import java.util.stream.Stream;
 import jdk.jpackage.internal.util.FileUtils;
@@ -60,7 +61,6 @@ public class AppContentTest {
 
     private static final Content TEST_JAVA = new DefaultContent("apps/PrintEnv.java");
     private static final Content TEST_DUKE = new DefaultContent("apps/dukeplug.png");
-    private static final Content TEST_DUKE_LINK = new SymlinkContent("dukeplugLink.txt");
     private static final Content TEST_DIR = new DefaultContent("apps");
     private static final Content TEST_BAD = new NonExistantPath();
 
@@ -86,7 +86,9 @@ public class AppContentTest {
 
     public static Collection<Object[]> testSymlink() {
         return Stream.of(
-                build().add(TEST_JAVA).add(TEST_DUKE_LINK)
+                build().add(TEST_JAVA)
+                        .add(new SymlinkContent("Links", "duke-link", "duke-target"))
+                        .add(new SymlinkContent("", "a/b/foo-link", "c/bar-target"))
         ).map(TestSpec.Builder::create).map(v -> {
             return new Object[] {v};
         }).toList();
@@ -103,7 +105,7 @@ public class AppContentTest {
         public TestSpec {
             content.stream().flatMap(List::stream).forEach(Objects::requireNonNull);
         }
-        
+
         @Override
         public String toString() {
             return content.stream().map(group -> {
@@ -122,7 +124,11 @@ public class AppContentTest {
             new PackageTest().configureHelloApp()
                 .addInitializer(cmd -> {
                     content.stream().map(group -> {
-                        return Stream.of("--app-content", group.stream().map(Content::init).map(Path::toString).collect(joining(",")));
+                        return Stream.of("--app-content", group.stream()
+                                .map(Content::init)
+                                .flatMap(List::stream)
+                                .map(Path::toString)
+                                .collect(joining(",")));
                     }).flatMap(x -> x).forEachOrdered(cmd::addArgument);
                 })
                 .addInstallVerifier(cmd -> {
@@ -167,7 +173,7 @@ public class AppContentTest {
             private final List<List<Content>> groups = new ArrayList<>();
         }
     }
-    
+
     private static TestSpec.Builder build() {
         return new TestSpec.Builder();
     }
@@ -181,15 +187,23 @@ public class AppContentTest {
         }
     }
 
+    private static Path createAppContentRoot() {
+        if (copyInResources) {
+            return TKit.createTempDirectory("app-content").resolve(RESOURCES_DIR);
+        } else {
+            return TKit.createTempDirectory("app-content");
+        }
+    }
+
     public interface Content {
-        Path init();
+        List<Path> init();
         default void verify(Path appContentRoot) {}
     }
 
     private static final class NonExistantPath implements Content {
         @Override
-        public Path init() {
-            return Path.of("non-existant-" + Integer.toHexString(new Random().ints(100, 200).findFirst().getAsInt()));
+        public List<Path> init() {
+            return List.of(Path.of("non-existant-" + Integer.toHexString(new Random().ints(100, 200).findFirst().getAsInt())));
         }
 
         @Override
@@ -210,12 +224,12 @@ public class AppContentTest {
         }
 
         @Override
-        public Path init() {
+        public List<Path> init() {
             final var srcPath = TKit.TEST_SRC_ROOT.resolve(path);
             if (!copyInResources) {
-                return srcPath;
+                return List.of(srcPath);
             } else {
-                final var appContentArg = TKit.createTempDirectory("app-content").resolve(RESOURCES_DIR);
+                final var appContentArg = createAppContentRoot();
                 final var dstPath = appContentArg.resolve(srcPath.getFileName());
                 try {
                     Files.createDirectories(dstPath.getParent());
@@ -223,7 +237,7 @@ public class AppContentTest {
                 } catch (IOException ex) {
                     throw new UncheckedIOException(ex);
                 }
-                return appContentArg;
+                return List.of(appContentArg);
             }
         }
 
@@ -238,58 +252,70 @@ public class AppContentTest {
         }
     }
 
-    private record SymlinkContent(Path path) implements Content {
+    private record SymlinkContent(Path basedir, Path symlink, Path symlinked) implements Content {
         SymlinkContent {
-            if (path.isAbsolute()) {
-                throw new IllegalArgumentException();
+            for (final var path : List.of(basedir, symlink, symlinked)) {
+                if (path.isAbsolute()) {
+                    throw new IllegalArgumentException();
+                }
             }
         }
 
-        SymlinkContent(String path) {
-            this(Path.of(path));
+        SymlinkContent(String basedir, String symlink, String symlinked) {
+            this(Path.of(basedir), Path.of(symlink), Path.of(symlinked));
         }
 
         @Override
-        public Path init() {
-            final var basedir = TKit.createTempDirectory("app-content");
-            final Path appContentArg;
-            if (copyInResources) {
-                appContentArg = basedir.resolve(RESOURCES_DIR);
-            } else {
-                appContentArg = basedir;
-            }
+        public List<Path> init() {
+            final var appContentRoot = createAppContentRoot();
 
-            final var linkPath = appContentArg.resolve(linkPath());
+            final var symlinkPath = appContentRoot.resolve(symlinkPath());
+            final var symlinkedPath = appContentRoot.resolve(symlinkedPath());
             try {
-                Files.createDirectories(linkPath.getParent());
+                Files.createDirectories(symlinkPath.getParent());
+                Files.createDirectories(symlinkedPath.getParent());
                 // Create the target file for the link.
-                Files.writeString(appContentArg.resolve(linkTarget()), linkTarget().toString());
+                Files.writeString(symlinkedPath, symlinkedPath().toString());
                 // Create the link.
-                Files.createSymbolicLink(linkPath, linkTarget().getFileName());
+                Files.createSymbolicLink(symlinkPath, symlinkTarget());
             } catch (IOException ex) {
                 throw new UncheckedIOException(ex);
             }
 
-            return appContentArg;
+            if (copyInResources) {
+                return List.of(appContentRoot);
+            } else if (basedir.equals(Path.of(""))) {
+                return Stream.of(symlinkPath(), symlinkedPath()).map(path -> {
+                    return path.getName(0);
+                }).map(appContentRoot::resolve).toList();
+            } else {
+                return List.of(appContentRoot.resolve(basedir));
+            }
         }
 
         @Override
         public void verify(Path appContentRoot) {
-            TKit.assertSymbolicLinkExists(appContentRoot.resolve(linkPath()));
-            TKit.assertFileExists(appContentRoot.resolve(linkTarget()));
+            TKit.assertSymbolicLinkExists(appContentRoot.resolve(symlinkPath()));
+            TKit.assertFileExists(appContentRoot.resolve(symlinkedPath()));
         }
 
         @Override
         public String toString() {
-            return String.format("symlink:[%s]->[%s]", path, linkTarget());
+            return String.format("symlink:[%s]->[%s][%s]", symlinkPath(), symlinkedPath(), symlinkTarget());
         }
 
-        private Path linkPath() {
-            return Path.of("Links").resolve(path);
+        private Path symlinkPath() {
+            return basedir.resolve(symlink);
         }
-        
-        private Path linkTarget() {
-            return Path.of(linkPath().toString() + "-target");
+
+        private Path symlinkedPath() {
+            return basedir.resolve(symlinked);
+        }
+
+        private Path symlinkTarget() {
+            return Optional.ofNullable(symlinkPath().getParent()).map(dir -> {
+                return dir.relativize(symlinkedPath());
+            }).orElseGet(this::symlinkedPath);
         }
     }
 }
