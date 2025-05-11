@@ -126,7 +126,19 @@ public final class TKit {
         }
     }
 
+    enum RunTestMode {
+        FAIL_FAST;
+
+        final static Set<RunTestMode> DEFAULTS = Set.of();
+    }
+
     static void runTests(List<TestInstance> tests) {
+        runTests(tests, RunTestMode.DEFAULTS);
+    }
+
+    static void runTests(List<TestInstance> tests, Set<RunTestMode> modes) {
+        Objects.requireNonNull(tests);
+        Objects.requireNonNull(modes);
         if (currentTest != null) {
             throw new IllegalStateException(
                     "Unexpected nested or concurrent Test.run() call");
@@ -136,7 +148,11 @@ public final class TKit {
             tests.stream().forEach(test -> {
                 currentTest = test;
                 try {
-                    ignoreExceptions(test).run();
+                    if (modes.contains(RunTestMode.FAIL_FAST)) {
+                        ThrowingRunnable.toRunnable(test::run).run();
+                    } else {
+                        ignoreExceptions(test).run();
+                    }
                 } finally {
                     currentTest = null;
                     if (extraLogStream != null) {
