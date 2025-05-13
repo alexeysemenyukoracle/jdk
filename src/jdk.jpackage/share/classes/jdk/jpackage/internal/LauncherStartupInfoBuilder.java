@@ -70,8 +70,7 @@ final class LauncherStartupInfoBuilder {
         @Override
         public LauncherStartupInfo apply(LauncherStartupInfo base) {
             return LauncherModularStartupInfo.create(base,
-                    new LauncherModularStartupInfoMixin.Stub(moduleName,
-                            modulePath));
+                    new LauncherModularStartupInfoMixin.Stub(moduleName));
         }
     }
 
