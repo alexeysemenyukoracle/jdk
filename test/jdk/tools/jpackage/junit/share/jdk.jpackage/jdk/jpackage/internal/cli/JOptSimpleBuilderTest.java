@@ -22,6 +22,7 @@
  */
 package jdk.jpackage.internal.cli;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.nio.file.Path;
@@ -30,51 +31,22 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Stream;
 import jdk.jpackage.internal.model.BundlingOperation;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 public class JOptSimpleBuilderTest {
 
-    @Test
-    public void testInput() {
-        final var pwd = Path.of("").toAbsolutePath();
-        test().addOptionValue(
-                build("input").shortName("i").ofDirectory(),
-                pwd
-        ).addArgs(
-                "--input", "", "-i", pwd.toString()
-        ).run();
-    }
+    public record TestSpec(Map<OptionValue<?>, Object> options, List<String> args) {
+        public TestSpec {
+            Objects.requireNonNull(options);
+            Objects.requireNonNull(args);
+        }
 
-    @Test
-    public void testArguments() {
-        test().addOptionValue(
-                build("arguments").ofStringList(),
-                List.of("a", "b", "c", "de")
-        ).addArgs(
-                "--arguments", "a b c", "--arguments", "de"
-        ).run();
-
-        test().addOptionValue(
-                build("arguments").withoutValueSeparator().ofStringList(),
-                List.of("a b c", "de")
-        ).addArgs(
-                "--arguments", "a b c", "--arguments", "de"
-        ).run();
-    }
-
-    private static OptionSpecBuilder build(String optionName) {
-        return new OptionSpecBuilder().name(optionName).scope(new BundlingOperation() {});
-    }
-
-    private static TestBuilder test() {
-        return new TestBuilder();
-    }
-
-    private static class TestBuilder {
-
-        void run() {
+        void test() {
             final var parser = JOptSimpleBuilder.createParser(
                     options.keySet().stream().map(OptionValue::asOption).map(Optional::orElseThrow).toList());
 
@@ -84,25 +56,86 @@ public class JOptSimpleBuilderTest {
                 final var optionValue = e.getKey();
                 final var expectedValue = e.getValue();
                 final var actualValue = optionValue.getFrom(cmdline);
-                assertEquals(expectedValue, actualValue);
+                if (expectedValue.getClass().isArray()) {
+                    assertArrayEquals((Object[])expectedValue, (Object[])actualValue);
+                } else {
+                    assertEquals(expectedValue, actualValue);
+                }
             }
         }
 
-        TestBuilder addOptionValue(OptionValue<?> option, Object expectedValue) {
-            options.put(option, expectedValue);
-            return this;
-        }
+        static class Builder {
 
-        TestBuilder addArgs(String...v) {
-            return addArgs(List.of(v));
-        }
+            TestSpec create() {
+                return new TestSpec(options, args);
+            }
 
-        TestBuilder addArgs(Collection<String> v) {
-            args.addAll(v);
-            return this;
-        }
+            Builder addOptionValue(OptionValue<?> option, Object expectedValue) {
+                options.put(option, expectedValue);
+                return this;
+            }
 
-        private final Map<OptionValue<?>, Object> options = new HashMap<>();
-        private final List<String> args = new ArrayList<>();
+            Builder addArgs(String...v) {
+                return addArgs(List.of(v));
+            }
+
+            Builder addArgs(Collection<String> v) {
+                args.addAll(v);
+                return this;
+            }
+
+            private final Map<OptionValue<?>, Object> options = new HashMap<>();
+            private final List<String> args = new ArrayList<>();
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    public void test(TestSpec spec) {
+        spec.test();
+    }
+
+    private static Collection<TestSpec> test() {
+        final var pwd = Path.of("").toAbsolutePath();
+        return Stream.of(
+                build().addOptionValue(
+                        build("input").shortName("i").ofDirectory(),
+                        pwd
+                ).addArgs(
+                        "--input", "", "-i", pwd.toString()
+                ),
+
+                build().addOptionValue(
+                        build("arguments").ofStringList(),
+                        List.of("", "a", "b", "c", "", "de")
+                ).addArgs(
+                        "--arguments", " a b  c", "--arguments", " de"
+                ),
+
+                build().addOptionValue(
+                        build("arguments").withoutValueSeparator().ofStringList(),
+                        List.of("a b c", "de")
+                ).addArgs(
+                        "--arguments", "a b c", "--arguments", "de"
+                ),
+
+                build().addOptionValue(
+                        build("arguments").valueSeparator(";+").ofStringList(),
+                        List.of("a b", "c", "de")
+                ).addArgs(
+                        "--arguments", "a b;;c", "--arguments", "de;"
+                ),
+
+                build().addOptionValue(build("foo").ofString(), "--foo").addArgs("--foo", "--foo"),
+                build().addOptionValue(build("foo").ofStringArray().create(), new String[] { "--foo" }).addArgs("--foo", "--foo")
+        ).map(TestSpec.Builder::create).toList();
+    }
+
+    private static OptionSpecBuilder build(String optionName) {
+        return new OptionSpecBuilder().name(optionName).scope(new BundlingOperation() {});
+    }
+
+    private static TestSpec.Builder build() {
+        return new TestSpec.Builder();
     }
 }

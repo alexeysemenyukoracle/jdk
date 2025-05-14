@@ -69,7 +69,7 @@ final class OptionSpecBuilder {
     }
 
     OptionValue.Builder<String[]> ofStringArray() {
-        return repetitive().valueSeparatorIfUnknown("\\s").valueConverter(stringArrayConv(valueSeparator())).toOptionValueBuilder();
+        return repetitive().valueSeparatorIfUnknown("\\s+").valueConverter(stringArrayConv(valueSeparator())).toOptionValueBuilder();
     }
 
     OptionValue.Builder<Path[]> ofPathArray() {
