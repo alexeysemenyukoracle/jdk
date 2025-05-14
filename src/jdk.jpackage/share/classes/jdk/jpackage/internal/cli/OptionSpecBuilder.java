@@ -24,6 +24,7 @@
  */
 package jdk.jpackage.internal.cli;
 
+import static java.util.stream.Collectors.toSet;
 import static jdk.jpackage.internal.cli.StandardValueConverter.identityConv;
 import static jdk.jpackage.internal.cli.StandardValueConverter.pathArrayConv;
 import static jdk.jpackage.internal.cli.StandardValueConverter.pathConv;
@@ -31,10 +32,12 @@ import static jdk.jpackage.internal.cli.StandardValueConverter.stringArrayConv;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 import jdk.jpackage.internal.model.BundlingOperation;
 
 final class OptionSpecBuilder {
@@ -146,6 +149,16 @@ final class OptionSpecBuilder {
     OptionSpecBuilder scope(Set<BundlingOperation> v) {
         scope = v;
         return this;
+    }
+
+    OptionSpecBuilder enhanceScope(BundlingOperation... v) {
+        return enhanceScope(Set.of(v));
+    }
+
+    OptionSpecBuilder enhanceScope(Set<BundlingOperation> v) {
+        return scope(scope().map(s -> {
+            return Stream.of(v, s).flatMap(Collection::stream).collect(toSet());
+        }).orElse(v));
     }
 
     Optional<String> name() {

@@ -31,7 +31,6 @@ import static jdk.jpackage.internal.cli.StandardBundlingOperation.CREATE_NATIVE;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.MAC_SIGNING;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.SIGN_MAC_APP_IMAGE;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.fromOptionName;
-import static jdk.jpackage.internal.cli.StandardBundlingOperation.scope;
 import static jdk.jpackage.internal.util.function.ThrowingFunction.toFunction;
 
 import java.lang.reflect.Modifier;
@@ -85,7 +84,7 @@ public final class StandardOptionValue {
 
     public final static OptionValue<Boolean> VERBOSE = build("verbose").noValue();
 
-    public final static OptionValue<Path> RESOURCE_DIR = build("resource-dir", scope().add(CREATE_BUNDLE).add(MAC_SIGNING).create()).ofDirectory();
+    public final static OptionValue<Path> RESOURCE_DIR = build("resource-dir").enhanceScope(CREATE_BUNDLE).enhanceScope(MAC_SIGNING).ofDirectory();
 
     public final static OptionValue<List<String>> ARGUMENTS = build("arguments").ofStringList();
 
@@ -128,7 +127,7 @@ public final class StandardOptionValue {
 
     public final static OptionValue<Path> INSTALL_DIR = build("install-dir").ofPath();
 
-    public final static OptionValue<Path> PREDEFINED_APP_IMAGE = build("app-image", scope().add(CREATE_NATIVE).add(SIGN_MAC_APP_IMAGE).create()).ofDirectory();
+    public final static OptionValue<Path> PREDEFINED_APP_IMAGE = build("app-image").enhanceScope(CREATE_NATIVE).enhanceScope(SIGN_MAC_APP_IMAGE).ofDirectory();
 
     public final static OptionValue<Path> PREDEFINED_RUNTIME_IMAGE = build("runtime-image").ofDirectory();
 
@@ -168,9 +167,9 @@ public final class StandardOptionValue {
 
     public final static OptionValue<List<Path>> DMG_CONTENT = build("mac-dmg-content").ofPathArray().to(List::of).defaultValue(List.of()).create();
 
-    public final static OptionValue<Boolean> MAC_SIGN = build("mac-sign", MAC_SIGNING).shortName("s").noValue();
+    public final static OptionValue<Boolean> MAC_SIGN = build("mac-sign").scope(MAC_SIGNING).shortName("s").noValue();
 
-    public final static OptionValue<Boolean> MAC_APP_STORE = build("mac-app-store", MAC_SIGNING).noValue();
+    public final static OptionValue<Boolean> MAC_APP_STORE = build("mac-app-store").scope(MAC_SIGNING).noValue();
 
     public final static OptionValue<String> MAC_CATEGORY = build("mac-app-category").ofString();
 
@@ -178,17 +177,17 @@ public final class StandardOptionValue {
 
     public final static OptionValue<String> MAC_BUNDLE_IDENTIFIER = build("mac-package-identifier").ofString();
 
-    public final static OptionValue<String> MAC_BUNDLE_SIGNING_PREFIX = build("mac-package-signing-prefix", MAC_SIGNING).ofString();
+    public final static OptionValue<String> MAC_BUNDLE_SIGNING_PREFIX = build("mac-package-signing-prefix").scope(MAC_SIGNING).ofString();
 
-    public final static OptionValue<String> MAC_SIGNING_KEY_NAME = build("mac-signing-key-user-name", MAC_SIGNING).ofString();
+    public final static OptionValue<String> MAC_SIGNING_KEY_NAME = build("mac-signing-key-user-name").scope(MAC_SIGNING).ofString();
 
-    public final static OptionValue<String> MAC_APP_IMAGE_SIGN_IDENTITY = build("mac-app-image-sign-identity", MAC_SIGNING).ofString();
+    public final static OptionValue<String> MAC_APP_IMAGE_SIGN_IDENTITY = build("mac-app-image-sign-identity").scope(MAC_SIGNING).ofString();
 
     public final static OptionValue<String> MAC_INSTALLER_SIGN_IDENTITY = build("mac-installer-sign-identity", CREATE_NATIVE).ofString();
 
-    public final static OptionValue<Path> MAC_SIGNING_KEYCHAIN = build("mac-signing-keychain", MAC_SIGNING).ofPath();
+    public final static OptionValue<Path> MAC_SIGNING_KEYCHAIN = build("mac-signing-keychain").scope(MAC_SIGNING).ofPath();
 
-    public final static OptionValue<Path> MAC_ENTITLEMENTS = build("mac-entitlements", MAC_SIGNING).ofPath();
+    public final static OptionValue<Path> MAC_ENTITLEMENTS = build("mac-entitlements").scope(MAC_SIGNING).ofPath();
 
     //
     // Windows-specific
@@ -212,7 +211,7 @@ public final class StandardOptionValue {
 
     public final static OptionValue<String> WIN_UPGRADE_UUID = build("win-upgrade-uuid", CREATE_NATIVE).ofString();
 
-    public final static OptionValue<Boolean> WIN_CONSOLE_HINT = build("win-console", CREATE_NATIVE).noValue();
+    public final static OptionValue<Boolean> WIN_CONSOLE_HINT = build("win-console").noValue();
 
     static Set<Option> options() {
         return Stream.of(StandardOptionValue.class.getFields()).filter(f -> {
