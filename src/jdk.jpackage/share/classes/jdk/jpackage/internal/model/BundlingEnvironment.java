@@ -38,7 +38,7 @@ public interface BundlingEnvironment {
      * @return the default bundling operation
      * @throws ConfigException in not a single bundling operation can be performed.
      */
-    BundlingOperation defaultOperation() throws ConfigException;
+    BundlingOperation defaultOperation();
 
     /**
      * Returns supported bundling operations.
