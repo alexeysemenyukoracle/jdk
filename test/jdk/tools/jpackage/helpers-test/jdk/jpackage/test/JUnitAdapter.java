@@ -30,11 +30,9 @@ import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Stream;
 import jdk.jpackage.internal.util.function.ThrowingRunnable;
 import org.junit.jupiter.api.DynamicTest;
@@ -42,30 +40,32 @@ import org.junit.jupiter.api.TestFactory;
 
 public class JUnitAdapter {
 
-    public JUnitAdapter() {
+    static {
         if (System.getProperty("test.src") == null) {
             // Was called by somebody else but not by jtreg
             System.setProperty("test.src", Path.of("@@openJdkDir@@/test/jdk/tools/jpackage").toString());
         }
     }
 
-    @TestFactory
-    Stream<DynamicTest> createJPackageTests() throws Throwable {
+    public Stream<DynamicTest> createJPackageTests(ClassLoader testClassLoader, String... args) throws Throwable {
         final List<TestInstance> tests = new ArrayList<>();
-        try (final var testBuilder = TestBuilder.build().workDirRoot(Path.of("")).testConsumer(tests::add).create()) {
-            testBuilder.processCmdLineArg("--jpt-before-run=jdk.jpackage.test.JPackageCommand.useToolProviderByDefault");
-            testBuilder.processCmdLineArg("--jpt-run=" + getClass().getName());
+        try (final var testBuilder = TestBuilder.build().workDirRoot(Path.of("")).testClassLoader(testClassLoader).testConsumer(tests::add).create()) {
+            for (final var arg : args) {
+                testBuilder.processCmdLineArg(arg);
+            }
         }
         return tests.stream().map(test -> {
             return DynamicTest.dynamicTest(test.fullName(), () -> {
-                final var rootWorkDir = Files.createTempDirectory("jdk.jpackage-test");
-                try {
-                    TKit.runTests(List.of(new TestInstance(test, rootWorkDir)), Set.of(TKit.RunTestMode.FAIL_FAST));
-                } finally {
-                    TKit.deleteDirectoryRecursive(rootWorkDir);
-                }
+                TKit.runAdhocTest(test);
             });
         });
+    }
+
+    @TestFactory
+    Stream<DynamicTest> createJPackageTests() throws Throwable {
+        return createJPackageTests(getClass().getClassLoader(),
+                "--jpt-before-run=jdk.jpackage.test.JPackageCommand.useToolProviderByDefault",
+                "--jpt-run=" + getClass().getName());
     }
 
     static List<String> captureJPackageTestLog(ThrowingRunnable runnable) {
