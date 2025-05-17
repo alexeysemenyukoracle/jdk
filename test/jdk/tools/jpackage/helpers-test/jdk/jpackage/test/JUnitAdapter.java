@@ -47,7 +47,7 @@ public class JUnitAdapter {
         }
     }
 
-    public Stream<DynamicTest> createJPackageTests(ClassLoader testClassLoader, String... args) throws Throwable {
+    public static Stream<DynamicTest> createJPackageTests(ClassLoader testClassLoader, String... args) throws Throwable {
         final List<TestInstance> tests = new ArrayList<>();
         try (final var testBuilder = TestBuilder.build().workDirRoot(Path.of("")).testClassLoader(testClassLoader).testConsumer(tests::add).create()) {
             for (final var arg : args) {
@@ -63,9 +63,7 @@ public class JUnitAdapter {
 
     @TestFactory
     Stream<DynamicTest> createJPackageTests() throws Throwable {
-        return createJPackageTests(getClass().getClassLoader(),
-                "--jpt-before-run=jdk.jpackage.test.JPackageCommand.useToolProviderByDefault",
-                "--jpt-run=" + getClass().getName());
+        return createJPackageTests(getClass().getClassLoader(), "--jpt-run=" + getClass().getName());
     }
 
     static List<String> captureJPackageTestLog(ThrowingRunnable runnable) {
