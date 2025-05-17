@@ -27,6 +27,7 @@ package jdk.jpackage.internal.cli;
 import static java.util.stream.Collectors.toSet;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.CREATE_APP_IMAGE;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.CREATE_BUNDLE;
+import static jdk.jpackage.internal.cli.StandardBundlingOperation.CREATE_MAC_PKG;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.CREATE_NATIVE;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.MAC_SIGNING;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.SIGN_MAC_APP_IMAGE;
@@ -40,21 +41,19 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Stream;
-import jdk.jpackage.internal.model.AppImagePackageType;
-import jdk.jpackage.internal.model.BundlingOperation;
 import jdk.jpackage.internal.model.PackageType;
-import jdk.jpackage.internal.model.StandardPackageType;
 
 public final class StandardOptionValue {
 
     public final static OptionValue<PackageType> TYPE = build("type").shortName("t").valueConverter(new ValueConverter<PackageType>() {
         @Override
         public PackageType convert(String value) {
-            if ("app-image".equals(value)) {
-                return AppImagePackageType.APP_IMAGE;
-            } else {
-                return fromCmdLineType(value);
-            }
+            Objects.requireNonNull(value);
+            return Stream.of(StandardBundlingOperation.values()).filter(bundlingOperation -> {
+                return bundlingOperation.packageTypeValue().equals(value);
+            }).map(StandardBundlingOperation::packageType).findFirst().orElseThrow(() -> {
+                return I18N.buildException().message("ERR_InvalidInstallerType", value).create(IllegalArgumentException::new);
+            });
         }
 
         @Override
@@ -62,12 +61,6 @@ public final class StandardOptionValue {
             return PackageType.class;
         }
 
-        private static StandardPackageType fromCmdLineType(String type) {
-            Objects.requireNonNull(type);
-            return Stream.of(StandardPackageType.values()).filter(pt -> {
-                return pt.suffix().substring(1).equals(type);
-            }).findAny().get();
-        }
     }).createOptionValue();
 
     public final static OptionValue<Path> INPUT = build("input", CREATE_APP_IMAGE).shortName("i").ofDirectory();
@@ -165,7 +158,7 @@ public final class StandardOptionValue {
     // MacOS-specific
     //
 
-    public final static OptionValue<List<Path>> DMG_CONTENT = build("mac-dmg-content").ofPathArray().to(List::of).defaultValue(List.of()).create();
+    public final static OptionValue<List<Path>> MAC_DMG_CONTENT = build("mac-dmg-content").ofPathArray().to(List::of).defaultValue(List.of()).create();
 
     public final static OptionValue<Boolean> MAC_SIGN = build("mac-sign").scope(MAC_SIGNING).shortName("s").noValue();
 
@@ -183,7 +176,7 @@ public final class StandardOptionValue {
 
     public final static OptionValue<String> MAC_APP_IMAGE_SIGN_IDENTITY = build("mac-app-image-sign-identity").scope(MAC_SIGNING).ofString();
 
-    public final static OptionValue<String> MAC_INSTALLER_SIGN_IDENTITY = build("mac-installer-sign-identity", CREATE_NATIVE).ofString();
+    public final static OptionValue<String> MAC_INSTALLER_SIGN_IDENTITY = build("mac-installer-sign-identity").scope(CREATE_MAC_PKG).ofString();
 
     public final static OptionValue<Path> MAC_SIGNING_KEYCHAIN = build("mac-signing-keychain").scope(MAC_SIGNING).ofPath();
 
@@ -213,6 +206,24 @@ public final class StandardOptionValue {
 
     public final static OptionValue<Boolean> WIN_CONSOLE_HINT = build("win-console").noValue();
 
+    /**
+     * Options in additional launcher .propertiy files.
+     */
+    public final static Set<OptionValue<?>> LAUNCHER_PROPERTIES = Set.of(
+            MAIN_JAR,
+            APPCLASS,
+            MODULE,
+            DESCRIPTION,
+            ICON,
+            LAUNCHER_AS_SERVICE,
+            WIN_CONSOLE_HINT,
+            WIN_SHORTCUT_HINT,
+            WIN_MENU_HINT,
+            LINUX_SHORTCUT_HINT,
+            ARGUMENTS,
+            JAVA_OPTIONS
+    );
+
     static Set<Option> options() {
         return Stream.of(StandardOptionValue.class.getFields()).filter(f -> {
             return Modifier.isStatic(f.getModifiers());
@@ -229,7 +240,7 @@ public final class StandardOptionValue {
         return new OptionSpecBuilder().name(name).scope(fromOptionName(name));
     }
 
-    private static OptionSpecBuilder build(String name, Collection<BundlingOperation> baselineScope) {
+    private static OptionSpecBuilder build(String name, Collection<? extends OptionScope> baselineScope) {
         final var builder = build(name);
         builder.scope().map(scope -> {
             return scope.stream().filter(baselineScope::contains).collect(toSet());

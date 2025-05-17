@@ -23,6 +23,7 @@
 package jdk.jpackage.internal.cli;
 
 import static java.util.stream.Collectors.joining;
+import static jdk.jpackage.internal.cli.OptionSpec.formatOptionNameForCommandLine;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -34,7 +35,6 @@ import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
-import jdk.jpackage.internal.model.BundlingOperation;
 import jdk.jpackage.test.Comm;
 import org.junit.jupiter.api.Test;
 
@@ -65,29 +65,18 @@ public class StandardOptionValueTest {
 
         private static String formatOptionNames(OptionSpec<?> spec) {
             final var sb = new StringBuilder();
-            sb.append(formatOptionName(spec.name()));
-            spec.shortName().map(OptionSpecFormatter::formatOptionName).ifPresent(v -> {
+            sb.append(formatOptionNameForCommandLine(spec.name()));
+            spec.shortName().map(OptionSpec::formatOptionNameForCommandLine).ifPresent(v -> {
                 sb.append(", ").append(v);
             });
             return sb.toString();
         }
 
-        private static String formatOptionName(String optionName) {
-            if (optionName.isEmpty()) {
-                throw new IllegalArgumentException();
-            }
-            if (optionName.length() == 1) {
-                return "-" + optionName;
-            } else {
-                return "--" + optionName;
-            }
-        }
-
-        private static String format(BundlingOperation op) {
+        private static String format(OptionScope op) {
             return Optional.ofNullable(KNOWN_BUNDLING_OPERATIONS.get(op)).orElseGet(op::toString);
         }
 
-        private static String format(Set<BundlingOperation> ops) {
+        private static String format(Set<OptionScope> ops) {
             final List<String> knownScopeLabels = new ArrayList<>();
 
             for (;;) {
@@ -114,7 +103,7 @@ public class StandardOptionValueTest {
             ).sorted().collect(joining(","));
         }
 
-        private final static Map<BundlingOperation, String> KNOWN_BUNDLING_OPERATIONS = Map.of(
+        private final static Map<OptionScope, String> KNOWN_BUNDLING_OPERATIONS = Map.of(
                 StandardBundlingOperation.CREATE_WIN_APP_IMAGE, "app-image-win",
                 StandardBundlingOperation.CREATE_LINUX_APP_IMAGE, "app-image-linux",
                 StandardBundlingOperation.CREATE_MAC_APP_IMAGE, "app-image-mac",
@@ -127,14 +116,14 @@ public class StandardOptionValueTest {
                 StandardBundlingOperation.SIGN_MAC_APP_IMAGE, "mac-sign"
         );
 
-        private final static Map<Set<BundlingOperation>, String> KNOWN_SCOPES = Map.of(
-                StandardBundlingOperation.CREATE_APP_IMAGE, "app-image",
-                StandardBundlingOperation.WINDOWS, "win",
-                StandardBundlingOperation.MACOS, "mac",
+        private final static Map<Set<OptionScope>, String> KNOWN_SCOPES = Map.of(
+                Set.copyOf(StandardBundlingOperation.CREATE_APP_IMAGE), "app-image",
+                Set.copyOf(StandardBundlingOperation.WINDOWS), "win",
+                Set.copyOf(StandardBundlingOperation.MACOS), "mac",
                 Set.of(StandardBundlingOperation.CREATE_MAC_APP_IMAGE, StandardBundlingOperation.CREATE_MAC_DMG, StandardBundlingOperation.CREATE_MAC_PKG), "mac-bundle",
-                StandardBundlingOperation.LINUX, "linux",
-                StandardBundlingOperation.CREATE_NATIVE, "native-bundle",
-                StandardBundlingOperation.CREATE_BUNDLE, "bundle"
+                Set.copyOf(StandardBundlingOperation.LINUX), "linux",
+                Set.copyOf(StandardBundlingOperation.CREATE_NATIVE), "native-bundle",
+                Set.copyOf(StandardBundlingOperation.CREATE_BUNDLE), "bundle"
         );
     }
 

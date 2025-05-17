@@ -29,6 +29,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 
 /**
@@ -36,33 +38,42 @@ import java.util.Optional;
  * <p>
  * Use {@link OptionValue} for typed access of the stored objects.
  */
-@FunctionalInterface
 public interface Options {
 
-    <T> Optional<T> find(OptionIdentifier id);
+    Optional<Object> find(OptionIdentifier id);
+
+    boolean contains(String optionName);
 
     default boolean contains(OptionIdentifier id) {
         return find(id).isPresent();
     }
 
+    default Options setDefaultValue(OptionIdentifier id, Object value) {
+        Objects.requireNonNull(id);
+        Objects.requireNonNull(value);
+        if (contains(id)) {
+            return this;
+        } else {
+            return concat(this, of(Map.of(id, value)));
+        }
+    }
+
     default Options setParent(Options other) {
-        Objects.requireNonNull(other);
-        final var that = this;
-        return new Options() {
-            @Override
-            public <T> Optional<T> find(OptionIdentifier id) {
-                return that.<T>find(id).or(() -> other.find(id));
-            }
-        };
+        return concat(this, other);
     }
 
     public static Options of(Map<OptionIdentifier, Object> map) {
         Objects.requireNonNull(map);
         return new Options() {
-            @SuppressWarnings("unchecked")
             @Override
-            public <T> Optional<T> find(OptionIdentifier id) {
-                return Optional.ofNullable((T)map.get(id));
+            public Optional<Object> find(OptionIdentifier id) {
+                return Optional.ofNullable(map.get(id));
+            }
+
+            @Override
+            public boolean contains(String optionName) {
+                Objects.requireNonNull(optionName);
+                return false;
             }
         };
     }
@@ -71,11 +82,61 @@ public interface Options {
         final var copy = List.copyOf(List.of(options));
         return new Options() {
             @Override
-            public <T> Optional<T> find(OptionIdentifier id) {
+            public Optional<Object> find(OptionIdentifier id) {
                 return copy.stream().map(o -> {
-                    return o.<T>find(id);
+                    return o.find(id);
                 }).filter(Optional::isPresent).map(Optional::orElseThrow).findFirst();
             }
+
+            @Override
+            public boolean contains(String optionName) {
+                return copy.stream().anyMatch(StandardPredicate.containts(optionName));
+            }
         };
+    }
+
+    public final static class StandardPredicate {
+
+        public static Predicate<Options> containts(OptionIdentifier id) {
+            Objects.requireNonNull(id);
+            return options -> {
+                return options.contains(id);
+            };
+        }
+
+        public static Predicate<Options> containts(String optionName) {
+            Objects.requireNonNull(optionName);
+            return options -> {
+                return options.contains(optionName);
+            };
+        }
+
+        public static <T> Predicate<Options> containts(OptionValue<T> ov) {
+            return ov::containsIn;
+        }
+
+        public static <T> Predicate<Options> isEqual(OptionIdentifier id, T value) {
+            return isEqual(id, () -> value);
+        }
+
+        public static <T> Predicate<Options> isEqual(OptionValue<T> ov, T value) {
+            return isEqual(ov, (Supplier<T>)() -> value);
+        }
+
+        public static <T> Predicate<Options> isEqual(OptionIdentifier id, Supplier<T> supplier) {
+            Objects.requireNonNull(id);
+            Objects.requireNonNull(supplier);
+            return options -> {
+                return options.find(id).map(supplier.get()::equals).isPresent();
+            };
+        }
+
+        public static <T> Predicate<Options> isEqual(OptionValue<T> ov, Supplier<T> supplier) {
+            Objects.requireNonNull(ov);
+            Objects.requireNonNull(supplier);
+            return options -> {
+                return ov.findIn(options).map(supplier.get()::equals).isPresent();
+            };
+        }
     }
 }

@@ -25,21 +25,8 @@
 
 package jdk.jpackage.internal.cli;
 
-import java.util.Objects;
-
 /**
- * Option identifier associated with option specification.
+ * Option scope.
  */
-interface Option extends OptionIdentifier {
-    OptionSpec<?> getSpec();
-
-    static Option create(OptionSpec<?> spec) {
-        Objects.requireNonNull(spec);
-        return new Option() {
-            @Override
-            public OptionSpec<?> getSpec() {
-                return spec;
-            }
-        };
-    }
+interface OptionScope {
 }

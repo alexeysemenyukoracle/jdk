@@ -28,6 +28,7 @@ package jdk.jpackage.internal.cli;
 import static java.util.stream.Collectors.toMap;
 
 import java.lang.reflect.Array;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -42,46 +43,96 @@ import jdk.internal.joptsimple.OptionParser;
  */
 public final class JOptSimpleBuilder {
 
-    public static Function<String[], Options> createParser() {
+    public static Function<List<String>, Options> createParser() {
         return createParser(StandardOptionValue.options());
     }
 
-    static Function<String[], Options> createParser(Iterable<Option> options) {
-        final var parser = new OptionParser();
+    static Function<List<String>, Options> createParser(Iterable<Option> options) {
+        // No abbreviations!
+        // Otherwise for the configured option "foo" it will recognize "f" as its abbreviation.
+        final var parser = new OptionParser(false);
         final var optionMap = initParser(parser, StreamSupport.stream(options.spliterator(), false));
 
         return args -> {
-            final var optionSet = parser.parse(args);
+            final var optionSet = parser.parse(args.toArray(String[]::new));
 
             return new Options() {
-                @SuppressWarnings("unchecked")
                 @Override
-                public <T> Optional<T> find(OptionIdentifier id) {
-                    final var joptOptionSpec = Objects.requireNonNull(optionMap.get(id), "Unknown option id");
-                    final var cliOptionSpec = (OptionSpec<T>)((Option)id).getSpec();
-                    final List<T> values = (List<T>)optionSet.valuesOf(joptOptionSpec);
-                    return getOptionValue(values, cliOptionSpec);
+                public Optional<Object> find(OptionIdentifier id) {
+                    final var joptOptionSpecs = optionMap.get(id);
+                    if (joptOptionSpecs == null) {
+                        return Optional.empty();
+                    }
+
+                    final var cliOptionSpec = ((Option)id).getSpec();
+
+                    final List<Object> values = new ArrayList<>();
+                    for (final var joptOptionSpec : joptOptionSpecs) {
+                        values.addAll(optionSet.valuesOf(joptOptionSpec));
+                    }
+
+                    if (!values.isEmpty()) {
+                        return getOptionValue(values, cliOptionSpec);
+                    } else {
+                        for (final var joptOptionSpec : joptOptionSpecs) {
+                            if (optionSet.has(joptOptionSpec)) {
+                                return Optional.of(OPTON_PRESENT);
+                            }
+                        }
+                        return Optional.empty();
+                    }
+                }
+
+                @Override
+                public boolean contains(String optionName) {
+                    return optionSet.has(optionName);
                 }
             };
         };
     }
 
-    private static Map<Option, jdk.internal.joptsimple.OptionSpec<?>> initParser(OptionParser parser, Stream<Option> options) {
+    private static Map<Option, List<? extends jdk.internal.joptsimple.OptionSpec<?>>> initParser(OptionParser parser, Stream<Option> options) {
         Objects.requireNonNull(parser);
+        final var optionSpecApplier = new OptionSpecApplier().optionSpecForShortName(true);
         return options.collect(toMap(x -> x, option -> {
-            return addOptionSpecToParser(parser, option.getSpec());
+            return optionSpecApplier.applyToParser(parser, option.getSpec());
         }));
     }
 
-    private static jdk.internal.joptsimple.OptionSpec<?> addOptionSpecToParser(OptionParser parser, OptionSpec<?> spec) {
-        final var specBuilder = parser.accepts(spec.name());
-        if (spec.withValue()) {
-            final var argBuilder = specBuilder.withRequiredArg();
-            spec.valueConverterAndValidator().map(JOptSimpleBuilder::conv).ifPresent(argBuilder::withValuesConvertedBy);
-            return argBuilder;
-        } else {
-            return specBuilder;
+    private final static class OptionSpecApplier {
+
+        @SuppressWarnings("unchecked")
+        <T> List<jdk.internal.joptsimple.OptionSpec<T>> applyToParser(OptionParser parser, OptionSpec<T> spec) {
+            if (optionSpecForShortName) {
+                return spec.generateForEveryName().map(individualSpec -> {
+                    return (jdk.internal.joptsimple.OptionSpec<T>)applyToParserInternal(parser, individualSpec);
+                }).toList();
+            } else {
+                return List.of((jdk.internal.joptsimple.OptionSpec<T>)applyToParserInternal(parser, spec));
+            }
         }
+
+        private jdk.internal.joptsimple.OptionSpec<?> applyToParserInternal(OptionParser parser, OptionSpec<?> spec) {
+            final var specBuilder = parser.acceptsAll(spec.names());
+            if (spec.withValue()) {
+                final var argBuilder = specBuilder.withRequiredArg();
+                final var joptOptionSpec = spec.valueConverterAndValidator().map(JOptSimpleBuilder::conv);
+                if (joptOptionSpec.isPresent()) {
+                    return argBuilder.withValuesConvertedBy(joptOptionSpec.orElseThrow());
+                } else {
+                    return argBuilder;
+                }
+            } else {
+                return specBuilder;
+            }
+        }
+
+        OptionSpecApplier optionSpecForShortName(boolean v) {
+            optionSpecForShortName = v;
+            return this;
+        }
+
+        private boolean optionSpecForShortName;
     }
 
     private static <T> jdk.internal.joptsimple.ValueConverter<T> conv(ValueConverter<T> from) {
@@ -104,7 +155,7 @@ public final class JOptSimpleBuilder {
     }
 
     @SuppressWarnings("unchecked")
-    private static <T> Optional<T> getOptionValue(List<T> values, OptionSpec<T> spec) {
+    private static Optional<Object> getOptionValue(List<?> values, OptionSpec<?> spec) {
         Objects.requireNonNull(spec);
         if(values.isEmpty()) {
             return Optional.empty();
@@ -119,21 +170,20 @@ public final class JOptSimpleBuilder {
                     return Optional.of(values.getFirst());
                 }
                 case CONCATENATE -> {
-                    return Optional.of((T)concatArrays((List<T[]>)values));
+                    return Optional.of(concatArrays((List<Object[]>)values));
                 }
             }
             throw new IllegalStateException();
         }
     }
 
-    private static <T> T[] concatArrays(List<T[]> arrays) {
+    private static Object concatArrays(List<Object[]> arrays) {
         int length = 0;
         for (final var arr : arrays) {
             length += arr.length;
         }
 
-        @SuppressWarnings("unchecked")
-        final var result = (T[])Array.newInstance(arrays.getFirst().getClass().getComponentType(), length);
+        final var result = Array.newInstance(arrays.getFirst().getClass().getComponentType(), length);
         int idx = 0;
         for (final var arr : arrays) {
             System.arraycopy(arr, 0, result, idx, arr.length);
@@ -142,4 +192,6 @@ public final class JOptSimpleBuilder {
 
         return result;
     }
+
+    private final static Object OPTON_PRESENT = new Object();
 }

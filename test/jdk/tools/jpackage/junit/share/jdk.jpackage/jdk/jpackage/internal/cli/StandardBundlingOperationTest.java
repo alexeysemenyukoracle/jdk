@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import jdk.jpackage.internal.model.BundlingOperation;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
@@ -35,12 +34,12 @@ public class StandardBundlingOperationTest {
 
     @ParameterizedTest
     @MethodSource
-    public void testFromOptionName(Map.Entry<String, Set<BundlingOperation>> testSpec) {
+    public void testFromOptionName(Map.Entry<String, Set<BundlingOperationOptionScope>> testSpec) {
         final var actualScope = StandardBundlingOperation.fromOptionName(testSpec.getKey());
         assertEquals(testSpec.getValue(), actualScope);
     }
 
-    private static List<Map.Entry<String, Set<BundlingOperation>>> testFromOptionName() {
+    private static List<Map.Entry<String, Set<BundlingOperationOptionScope>>> testFromOptionName() {
         return List.of(
                 Map.entry("foo", StandardBundlingOperation.CREATE_BUNDLE),
                 Map.entry("win-foo", StandardBundlingOperation.WINDOWS),
@@ -55,7 +54,7 @@ public class StandardBundlingOperationTest {
         );
     }
 
-    private final static Set<BundlingOperation> MAC_CREATE_BUNDLE = Set.of(
+    private final static Set<BundlingOperationOptionScope> MAC_CREATE_BUNDLE = Set.of(
             StandardBundlingOperation.CREATE_MAC_APP_IMAGE,
             StandardBundlingOperation.CREATE_MAC_DMG,
             StandardBundlingOperation.CREATE_MAC_PKG);

@@ -25,15 +25,16 @@
 
 package jdk.jpackage.internal.cli;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
-import jdk.jpackage.internal.model.BundlingOperation;
+import java.util.stream.Stream;
 
 
 record OptionSpec<T>(String name, Optional<ValueConverter<T>> valueConverter,
-        Optional<String> shortName, Set<BundlingOperation> scope,
+        Optional<String> shortName, Set<OptionScope> scope,
         Optional<Consumer<T>> valueValidator, MergePolicy mergePolicy) {
 
     enum MergePolicy {
@@ -54,6 +55,24 @@ record OptionSpec<T>(String name, Optional<ValueConverter<T>> valueConverter,
         }
     }
 
+    List<String> names() {
+        return shortName.map(v -> List.of(name, v)).orElseGet(() -> List.of(name));
+    }
+
+    Stream<OptionSpec<T>> generateForEveryName() {
+        return names().stream().map(v -> {
+            return new OptionSpec<>(v, valueConverter, Optional.empty(), scope, valueValidator, mergePolicy);
+        });
+    }
+
+    List<String> findNamesIn(Options cmdline) {
+        return names().stream().filter(cmdline::contains).toList();
+    }
+
+    String formatNameForErrorMessage(Options cmdline) {
+        return formatOptionNameForCommandLine(findNamesIn(cmdline).getFirst());
+    }
+
     boolean withValue() {
         return valueConverter.isPresent();
     }
@@ -65,6 +84,17 @@ record OptionSpec<T>(String name, Optional<ValueConverter<T>> valueConverter,
             return valueConverter.map(c -> {
                 return new ValidatingValueConverter<>(c, valueValidator.orElseThrow());
             });
+        }
+    }
+
+    static String formatOptionNameForCommandLine(String optionName) {
+        if (optionName.isEmpty()) {
+            throw new IllegalArgumentException();
+        }
+        if (optionName.length() == 1) {
+            return "-" + optionName;
+        } else {
+            return "--" + optionName;
         }
     }
 

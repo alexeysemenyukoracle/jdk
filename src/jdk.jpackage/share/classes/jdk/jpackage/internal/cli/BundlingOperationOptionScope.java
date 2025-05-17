@@ -25,13 +25,13 @@
 
 package jdk.jpackage.internal.cli;
 
-import jdk.jpackage.internal.model.BundleSpec;
+
 import jdk.jpackage.internal.model.BundlingOperation;
 
 /**
- * Bundle specification creators environment. Defines mapping between {@link BundlingOperation} and {@link BundleSpecCreator}.
+ * Bundling operation scope.
+ * <p>
+ * The scope of bundling operations. E.g., app image or native package bundling.
  */
-public interface BundleSpecCreatorEnvironment<T extends BundleSpec> {
-
-    BundleSpecCreator<T> getBundleCreator(BundlingOperation op);
+interface BundlingOperationOptionScope extends OptionScope, BundlingOperation {
 }

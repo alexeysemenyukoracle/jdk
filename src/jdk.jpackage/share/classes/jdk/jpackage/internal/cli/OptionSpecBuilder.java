@@ -24,7 +24,6 @@
  */
 package jdk.jpackage.internal.cli;
 
-import static java.util.stream.Collectors.toSet;
 import static jdk.jpackage.internal.cli.StandardValueConverter.identityConv;
 import static jdk.jpackage.internal.cli.StandardValueConverter.pathArrayConv;
 import static jdk.jpackage.internal.cli.StandardValueConverter.pathConv;
@@ -33,12 +32,11 @@ import static jdk.jpackage.internal.cli.StandardValueConverter.stringArrayConv;
 import java.io.File;
 import java.nio.file.Path;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.stream.Stream;
-import jdk.jpackage.internal.model.BundlingOperation;
 
 final class OptionSpecBuilder {
     OptionSpec<?> createOptionSpec() {
@@ -100,7 +98,8 @@ final class OptionSpecBuilder {
     }
 
     OptionValue<Boolean> noValue() {
-        return oneOrZero().valueValidator(null).<Void>toOptionValueBuilder().to(_ -> true).create();
+        final OptionValue.Builder<Object> ovBuilder = oneOrZero().valueValidator(null).toOptionValueBuilder();
+        return ovBuilder.to(_ -> true).defaultValue(false).create();
     }
 
     OptionSpecBuilder repetitive() {
@@ -142,23 +141,25 @@ final class OptionSpecBuilder {
         return valueSeparator(null);
     }
 
-    OptionSpecBuilder scope(BundlingOperation... v) {
+    OptionSpecBuilder scope(OptionScope... v) {
         return scope(Set.of(v));
     }
 
-    OptionSpecBuilder scope(Set<BundlingOperation> v) {
-        scope = v;
+    OptionSpecBuilder scope(Collection<? extends OptionScope> v) {
+        scope = Set.copyOf(v);
         return this;
     }
 
-    OptionSpecBuilder enhanceScope(BundlingOperation... v) {
+    OptionSpecBuilder enhanceScope(OptionScope... v) {
         return enhanceScope(Set.of(v));
     }
 
-    OptionSpecBuilder enhanceScope(Set<BundlingOperation> v) {
-        return scope(scope().map(s -> {
-            return Stream.of(v, s).flatMap(Collection::stream).collect(toSet());
-        }).orElse(v));
+    OptionSpecBuilder enhanceScope(Collection<? extends OptionScope> v) {
+        final Set<OptionScope> newScope = new HashSet<>();
+        newScope.addAll(v);
+        scope().ifPresent(newScope::addAll);
+        scope = newScope;
+        return this;
     }
 
     Optional<String> name() {
@@ -181,7 +182,7 @@ final class OptionSpecBuilder {
         return Optional.ofNullable(valueSeparatorRegexp);
     }
 
-    Optional<Set<BundlingOperation>> scope() {
+    Optional<Set<OptionScope>> scope() {
         return Optional.ofNullable(scope);
     }
 
@@ -203,6 +204,6 @@ final class OptionSpecBuilder {
     private String shortName;
     private String valueSeparatorRegexp;
     private boolean valueSeparatorRegexpConfigured;
-    private Set<BundlingOperation> scope;
+    private Set<OptionScope> scope;
     private OptionSpec.MergePolicy mergePolicy;
 }

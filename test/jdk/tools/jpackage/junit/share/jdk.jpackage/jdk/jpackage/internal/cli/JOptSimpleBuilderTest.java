@@ -22,8 +22,10 @@
  */
 package jdk.jpackage.internal.cli;
 
+import static jdk.jpackage.internal.cli.OptionSpec.formatOptionNameForCommandLine;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -33,9 +35,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
-import jdk.jpackage.internal.model.BundlingOperation;
+import java.util.stream.StreamSupport;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 public class JOptSimpleBuilderTest {
@@ -47,10 +53,9 @@ public class JOptSimpleBuilderTest {
         }
 
         void test() {
-            final var parser = JOptSimpleBuilder.createParser(
-                    options.keySet().stream().map(OptionValue::asOption).map(Optional::orElseThrow).toList());
+            final var parser = createParser(options.keySet());
 
-            final var cmdline = parser.apply(args.toArray(String[]::new));
+            final var cmdline = parser.apply(args);
 
             for (final var e : options.entrySet()) {
                 final var optionValue = e.getKey();
@@ -87,6 +92,72 @@ public class JOptSimpleBuilderTest {
             private final Map<OptionValue<?>, Object> options = new HashMap<>();
             private final List<String> args = new ArrayList<>();
         }
+    }
+
+    enum ShortNameTestCase {
+        LONG(hasLongOption().and(hasShortOption().negate()), addLongValue()),
+        SHORT(hasLongOption().negate().and(hasShortOption()), addShortValue()),
+        LONG_AND_SHORT(hasLongOption().and(hasShortOption()), addLongValue(), addShortValue()),
+        SHORT_AND_LONG(hasLongOption().and(hasShortOption()), addShortValue(), addLongValue()),
+        NONE(hasLongOption().negate().and(hasShortOption().negate()));
+
+        @SafeVarargs
+        ShortNameTestCase(Predicate<Options> validator, Consumer<List<String>>... optionInitializers) {
+            this.optionInitializer = args -> {
+                for (final var optionInitializer : optionInitializers) {
+                    optionInitializer.accept(args);
+                }
+            };
+            this.validator = validator;
+        }
+
+        void run() {
+            final var parser = createParser(OV);
+            final List<String> args = new ArrayList<>();
+            optionInitializer.accept(args);
+            assertTrue(validator.test(parser.apply(args)));
+        }
+
+        private static Predicate<Options> hasLongOption() {
+            return cmdline -> {
+                return cmdline.contains(LONG_NAME);
+            };
+        }
+
+        private static Predicate<Options> hasShortOption() {
+            return cmdline -> {
+                return cmdline.contains(SHORT_NAME);
+            };
+        }
+
+        private static Consumer<List<String>> addLongValue() {
+            return args -> {
+                args.addAll(List.of(formatOptionNameForCommandLine(LONG_NAME), FOO));
+            };
+        }
+
+        private static Consumer<List<String>> addShortValue() {
+            return args -> {
+                args.addAll(List.of(formatOptionNameForCommandLine(SHORT_NAME), BAR));
+            };
+        }
+
+        private final Consumer<List<String>> optionInitializer;
+        private final Predicate<Options> validator;
+
+        private final static String LONG_NAME = "input";
+        private final static String SHORT_NAME = "i";
+
+        private final static OptionValue<String> OV = build(LONG_NAME).shortName(SHORT_NAME).ofString();
+
+        private final static String FOO = "foo";
+        private final static String BAR = "bar";
+    }
+
+    @ParameterizedTest
+    @EnumSource(ShortNameTestCase.class)
+    public void testShortName(ShortNameTestCase testCase) {
+        testCase.run();
     }
 
     @ParameterizedTest
@@ -127,12 +198,24 @@ public class JOptSimpleBuilderTest {
                 ),
 
                 build().addOptionValue(build("foo").ofString(), "--foo").addArgs("--foo", "--foo"),
-                build().addOptionValue(build("foo").ofStringArray().create(), new String[] { "--foo" }).addArgs("--foo", "--foo")
+                build().addOptionValue(build("foo").ofStringArray().create(), new String[] { "--foo" }).addArgs("--foo", "--foo"),
+
+                build().addOptionValue(build("foo").noValue(), true).addOptionValue(build("bar").noValue(), false).addArgs("--foo")
         ).map(TestSpec.Builder::create).toList();
     }
 
     private static OptionSpecBuilder build(String optionName) {
-        return new OptionSpecBuilder().name(optionName).scope(new BundlingOperation() {});
+        return new OptionSpecBuilder().name(optionName).scope(new BundlingOperationOptionScope() {});
+    }
+
+    @SafeVarargs
+    private static Function<List<String>, Options> createParser(OptionValue<?>... options) {
+        return createParser(List.of(options));
+    }
+
+    private static Function<List<String>, Options> createParser(Iterable<OptionValue<?>> options) {
+        return JOptSimpleBuilder.createParser(StreamSupport.stream(options.spliterator(), false)
+                .map(OptionValue::asOption).map(Optional::orElseThrow).toList());
     }
 
     private static TestSpec.Builder build() {

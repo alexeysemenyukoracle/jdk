@@ -28,13 +28,13 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Typed getter of option values in {@link Options} objects.
  *
  * @param <T> option value type.
  */
-@FunctionalInterface
 public interface OptionValue<T> {
 
     OptionIdentifier id();
@@ -47,8 +47,9 @@ public interface OptionValue<T> {
         }
     }
 
+    @SuppressWarnings("unchecked")
     default Optional<T> findIn(Options cmdline) {
-        return cmdline.find(id());
+        return (Optional<T>)cmdline.find(id());
     }
 
     default T getFrom(Options cmdline) {
@@ -64,13 +65,40 @@ public interface OptionValue<T> {
     }
 
     public static <U> OptionValue<U> create() {
-        final Builder<U> builder = build();
-        return builder.create();
+        return new OptionValue<>() {
+            @Override
+            public OptionIdentifier id() {
+                return id;
+            }
+
+            private final OptionIdentifier id = OptionIdentifier.createUnique();
+        };
     }
 
     public static <U, V> OptionValue<U> conv(OptionValue<V> from, Function<V, U> conv) {
         final Builder<V> builder = build();
         return builder.to(conv).create();
+    }
+
+    public static <T> OptionValue<T> createFromGetter(Function<Options, T> getter) {
+        Objects.requireNonNull(getter);
+        return new OptionValue<>() {
+            @Override
+            public OptionIdentifier id() {
+                return id;
+            }
+
+            @Override
+            public Optional<T> findIn(Options cmdline) {
+                return Optional.of(getter.apply(cmdline));
+            }
+
+            private final OptionIdentifier id = OptionIdentifier.createUnique();
+        };
+    }
+
+    public static OptionValue<Boolean> createFromPredicate(Predicate<Options> pred) {
+        return createFromGetter((Function<Options, Boolean>)pred::test);
     }
 
     public static <U> Builder<U> build() {
@@ -139,12 +167,7 @@ public interface OptionValue<T> {
                     return OptionValue.super.findIn(cmdline).or(() -> defaultValue);
                 }
 
-                private final OptionIdentifier id = new Option() {
-                    @Override
-                    public OptionSpec<?> getSpec() {
-                        return spec;
-                    }
-                };
+                private final OptionIdentifier id = Option.create(spec);
             };
         }
 
