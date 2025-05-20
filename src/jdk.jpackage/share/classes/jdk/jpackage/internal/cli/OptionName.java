@@ -24,30 +24,26 @@
  */
 package jdk.jpackage.internal.cli;
 
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.util.Objects;
 
-final class StandardValueValidator {
+record OptionName(String name) {
 
-    static void validateDirectory(Path path) {
-        if (!Files.isDirectory(path)) {
-            throw new IllegalArgumentException();
+    OptionName {
+        Objects.requireNonNull(name);
+        if (name.isEmpty() || name.startsWith("-")) {
+            throw new IllegalArgumentException("Name should not be empty and should not start with the '-' character");
         }
     }
 
-    static void validateDirectoryArray(Path[] paths) {
-        for (var path : paths) {
-            validateDirectory(path);
-        }
+    static OptionName of(String name) {
+        return new OptionName(name);
     }
 
-    static void validateUrl(String str) {
-        try {
-            new URI(str);
-        } catch (URISyntaxException ex) {
-            throw new IllegalArgumentException(ex);
-        }
+    boolean isShort() {
+        return name.length() == 1;
+    }
+
+    String formatForCommandLine() {
+        return (isShort() ? "-" : "--") + name;
     }
 }

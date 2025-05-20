@@ -22,7 +22,6 @@
  */
 package jdk.jpackage.internal.cli;
 
-import static jdk.jpackage.internal.cli.OptionSpec.formatOptionNameForCommandLine;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -44,7 +43,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
-public class JOptSimpleBuilderTest {
+public class JOptSimpleOptionsBuilderTest {
 
     public record TestSpec(Map<OptionValue<?>, Object> options, List<String> args) {
         public TestSpec {
@@ -132,23 +131,23 @@ public class JOptSimpleBuilderTest {
 
         private static Consumer<List<String>> addLongValue() {
             return args -> {
-                args.addAll(List.of(formatOptionNameForCommandLine(LONG_NAME), FOO));
+                args.addAll(List.of(LONG_NAME.formatForCommandLine(), FOO));
             };
         }
 
         private static Consumer<List<String>> addShortValue() {
             return args -> {
-                args.addAll(List.of(formatOptionNameForCommandLine(SHORT_NAME), BAR));
+                args.addAll(List.of(SHORT_NAME.formatForCommandLine(), BAR));
             };
         }
 
         private final Consumer<List<String>> optionInitializer;
         private final Predicate<Options> validator;
 
-        private final static String LONG_NAME = "input";
-        private final static String SHORT_NAME = "i";
+        private final static OptionName LONG_NAME = OptionName.of("input");
+        private final static OptionName SHORT_NAME = OptionName.of("i");
 
-        private final static OptionValue<String> OV = build(LONG_NAME).shortName(SHORT_NAME).ofString();
+        private final static OptionValue<String> OV = build(LONG_NAME.name()).shortName(SHORT_NAME.name()).ofString();
 
         private final static String FOO = "foo";
         private final static String BAR = "bar";
@@ -177,35 +176,35 @@ public class JOptSimpleBuilderTest {
                 ),
 
                 build().addOptionValue(
-                        build("arguments").ofStringList(),
+                        build("arguments").convert().split("\\s+").toStringArray().createOptionValue(),
                         List.of("", "a", "b", "c", "", "de")
                 ).addArgs(
                         "--arguments", " a b  c", "--arguments", " de"
                 ),
 
                 build().addOptionValue(
-                        build("arguments").withoutValueSeparator().ofStringList(),
+                        build("arguments").convert().split(str -> new String[] { str }).toStringArray().createOptionValue(),
                         List.of("a b c", "de")
                 ).addArgs(
                         "--arguments", "a b c", "--arguments", "de"
                 ),
 
                 build().addOptionValue(
-                        build("arguments").valueSeparator(";+").ofStringList(),
+                        build("arguments").convert().split(";+").toStringArray().createOptionValue(),
                         List.of("a b", "c", "de")
                 ).addArgs(
                         "--arguments", "a b;;c", "--arguments", "de;"
                 ),
 
                 build().addOptionValue(build("foo").ofString(), "--foo").addArgs("--foo", "--foo"),
-                build().addOptionValue(build("foo").ofStringArray().create(), new String[] { "--foo" }).addArgs("--foo", "--foo"),
+                build().addOptionValue(build("foo").convert().split("\\s+").toStringArray().createOptionValue(), new String[] { "--foo" }).addArgs("--foo", "--foo"),
 
                 build().addOptionValue(build("foo").noValue(), true).addOptionValue(build("bar").noValue(), false).addArgs("--foo")
         ).map(TestSpec.Builder::create).toList();
     }
 
-    private static OptionSpecBuilder build(String optionName) {
-        return new OptionSpecBuilder().name(optionName).scope(new BundlingOperationOptionScope() {});
+    private static OptionSpecBuilder<String> build(String optionName) {
+        return OptionSpecBuilder.create().name(optionName).scope(new BundlingOperationOptionScope() {});
     }
 
     @SafeVarargs
@@ -214,8 +213,11 @@ public class JOptSimpleBuilderTest {
     }
 
     private static Function<List<String>, Options> createParser(Iterable<OptionValue<?>> options) {
-        return JOptSimpleBuilder.createParser(StreamSupport.stream(options.spliterator(), false)
-                .map(OptionValue::asOption).map(Optional::orElseThrow).toList());
+        final var builder = new JOptSimpleOptionsBuilder().options(StreamSupport.stream(options.spliterator(), false).map(OptionValue::asOption).map(Optional::orElseThrow).toList());
+        final var parse = builder.create();
+        return args -> {
+            return parse.apply(args.toArray(String[]::new)).orElseThrow().convertedOptions().orElseThrow().validatedOptions().orElseThrow().create();
+        };
     }
 
     private static TestSpec.Builder build() {

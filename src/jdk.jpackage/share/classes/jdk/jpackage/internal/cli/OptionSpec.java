@@ -29,13 +29,12 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 
-record OptionSpec<T>(String name, Optional<ValueConverter<T>> valueConverter,
-        Optional<String> shortName, Set<OptionScope> scope,
-        Optional<Consumer<T>> valueValidator, MergePolicy mergePolicy) {
+record OptionSpec<T>(List<OptionName> names, Optional<OptionValueConverter<T>> valueConverter,
+        Set<OptionScope> scope, Optional<Validator<T, ? extends Exception>> valueValidator,
+        MergePolicy mergePolicy) {
 
     enum MergePolicy {
         USE_FIRST,
@@ -44,72 +43,50 @@ record OptionSpec<T>(String name, Optional<ValueConverter<T>> valueConverter,
     }
 
     OptionSpec {
-        Objects.requireNonNull(name);
+        Objects.requireNonNull(names);
+        if (names.isEmpty()) {
+            throw new IllegalArgumentException("Empty name list");
+        }
         Objects.requireNonNull(valueConverter);
-        Objects.requireNonNull(shortName);
         Objects.requireNonNull(scope);
-        Objects.requireNonNull(valueValidator);
-        Objects.requireNonNull(mergePolicy);
         if (scope.isEmpty()) {
             throw new IllegalArgumentException("Empty scope");
         }
+        Objects.requireNonNull(valueValidator);
+        Objects.requireNonNull(mergePolicy);
+
+        if (valueConverter.isEmpty() && valueValidator.isPresent()) {
+            throw new IllegalArgumentException("Validator is not applicable");
+        }
     }
 
-    List<String> names() {
-        return shortName.map(v -> List.of(name, v)).orElseGet(() -> List.of(name));
+    OptionName name() {
+        return names.getFirst();
+    }
+
+    List<OptionName> otherNames() {
+        return names.subList(1, names.size());
     }
 
     Stream<OptionSpec<T>> generateForEveryName() {
         return names().stream().map(v -> {
-            return new OptionSpec<>(v, valueConverter, Optional.empty(), scope, valueValidator, mergePolicy);
+            return new OptionSpec<>(List.of(v), valueConverter, scope, valueValidator, mergePolicy);
         });
     }
 
-    List<String> findNamesIn(Options cmdline) {
+    List<OptionName> findNamesIn(Options cmdline) {
         return names().stream().filter(cmdline::contains).toList();
     }
 
     String formatNameForErrorMessage(Options cmdline) {
-        return formatOptionNameForCommandLine(findNamesIn(cmdline).getFirst());
+        return findNamesIn(cmdline).getFirst().formatForCommandLine();
     }
 
-    boolean withValue() {
+    boolean hasValue() {
         return valueConverter.isPresent();
     }
 
-    Optional<ValueConverter<T>> valueConverterAndValidator() {
-        if (valueValidator.isEmpty()) {
-            return valueConverter;
-        } else {
-            return valueConverter.map(c -> {
-                return new ValidatingValueConverter<>(c, valueValidator.orElseThrow());
-            });
-        }
-    }
-
-    static String formatOptionNameForCommandLine(String optionName) {
-        if (optionName.isEmpty()) {
-            throw new IllegalArgumentException();
-        }
-        if (optionName.length() == 1) {
-            return "-" + optionName;
-        } else {
-            return "--" + optionName;
-        }
-    }
-
-    private record ValidatingValueConverter<T>(ValueConverter<T> converter, Consumer<T> validator) implements ValueConverter<T> {
-
-        @Override
-        public T convert(String value) {
-            final var v = converter.convert(value);
-            validator.accept(v);
-            return v;
-        }
-
-        @Override
-        public Class<? extends T> valueType() {
-            return converter.valueType();
-        }
+    boolean isValueTypeArray() {
+        return valueConverter.map(OptionValueConverter::valueType).map(Class::isArray).orElse(false);
     }
 }

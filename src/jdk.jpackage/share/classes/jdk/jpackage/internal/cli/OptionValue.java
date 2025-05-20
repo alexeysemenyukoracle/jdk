@@ -76,8 +76,7 @@ public interface OptionValue<T> {
     }
 
     public static <U, V> OptionValue<U> conv(OptionValue<V> from, Function<V, U> conv) {
-        final Builder<V> builder = build();
-        return builder.to(conv).create();
+        return OptionValue.<V>build().to(conv).create();
     }
 
     public static <T> OptionValue<T> createFromGetter(Function<Options, T> getter) {
@@ -132,8 +131,7 @@ public interface OptionValue<T> {
         }
 
         <U> Builder<U> to(Function<T, U> conv) {
-            final Builder<U> builder = build();
-            return builder.from(create(), conv);
+            return OptionValue.<U>build().from(create(), conv);
         }
 
         private static <U, V> OptionValue<V> create(OptionValue<U> base, Function<U, V> conv, Optional<V> defaultValue) {

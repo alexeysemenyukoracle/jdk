@@ -25,6 +25,9 @@
 
 package jdk.jpackage.internal.cli;
 
+import static java.util.stream.Collectors.toSet;
+
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -42,7 +45,7 @@ public interface Options {
 
     Optional<Object> find(OptionIdentifier id);
 
-    boolean contains(String optionName);
+    boolean contains(OptionName optionName);
 
     default boolean contains(OptionIdentifier id) {
         return find(id).isPresent();
@@ -63,17 +66,20 @@ public interface Options {
     }
 
     public static Options of(Map<OptionIdentifier, Object> map) {
-        Objects.requireNonNull(map);
+        final var mapCopy = Map.copyOf(map);
+        final var optionNames = map.keySet()
+                .stream().filter(Option.class::isInstance).map(Option.class::cast)
+                .map(Option::getSpec).map(OptionSpec::names)
+                .flatMap(Collection::stream).collect(toSet());
         return new Options() {
             @Override
             public Optional<Object> find(OptionIdentifier id) {
-                return Optional.ofNullable(map.get(id));
+                return Optional.ofNullable(mapCopy.get(id));
             }
 
             @Override
-            public boolean contains(String optionName) {
-                Objects.requireNonNull(optionName);
-                return false;
+            public boolean contains(OptionName optionName) {
+                return optionNames.contains(Objects.requireNonNull(optionName));
             }
         };
     }
@@ -89,7 +95,7 @@ public interface Options {
             }
 
             @Override
-            public boolean contains(String optionName) {
+            public boolean contains(OptionName optionName) {
                 return copy.stream().anyMatch(StandardPredicate.containts(optionName));
             }
         };
@@ -104,7 +110,7 @@ public interface Options {
             };
         }
 
-        public static Predicate<Options> containts(String optionName) {
+        public static Predicate<Options> containts(OptionName optionName) {
             Objects.requireNonNull(optionName);
             return options -> {
                 return options.contains(optionName);

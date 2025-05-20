@@ -36,32 +36,51 @@ import static jdk.jpackage.internal.util.function.ThrowingFunction.toFunction;
 
 import java.lang.reflect.Modifier;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import jdk.jpackage.internal.cli.OptionValueExceptionFactory.StandardArgumentsMapper;
+import jdk.jpackage.internal.model.ConfigException;
 import jdk.jpackage.internal.model.PackageType;
 
 public final class StandardOptionValue {
 
-    public final static OptionValue<PackageType> TYPE = build("type").shortName("t").valueConverter(new ValueConverter<PackageType>() {
-        @Override
-        public PackageType convert(String value) {
-            Objects.requireNonNull(value);
-            return Stream.of(StandardBundlingOperation.values()).filter(bundlingOperation -> {
-                return bundlingOperation.packageTypeValue().equals(value);
-            }).map(StandardBundlingOperation::packageType).findFirst().orElseThrow(() -> {
-                return I18N.buildException().message("ERR_InvalidInstallerType", value).create(IllegalArgumentException::new);
-            });
-        }
+    private static final OptionValueExceptionFactory<ConfigException> UNREACHABLE_EXCEPTION_FACTORY =
+            new OptionValueExceptionFactory<>() {
+                @Override
+                public ConfigException create(OptionName optionName, String optionValue, String msgId) {
+                    throw new UnsupportedOperationException();
+                }
 
-        @Override
-        public Class<? extends PackageType> valueType() {
-            return PackageType.class;
-        }
+                @Override
+                public ConfigException create(OptionName optionName, String optionValue, String msgId, Throwable cause) {
+                    throw new UnsupportedOperationException();
+                }
+            };
 
-    }).createOptionValue();
+    private static final OptionValueExceptionFactory<ConfigException> ERROR_WITH_VALUE =
+            OptionValueExceptionFactory.create(ConfigException::new, StandardArgumentsMapper.VALUE);
+
+    private static final OptionValueExceptionFactory<ConfigException> ERROR_WITH_VALUE_AND_OPTION_NAME =
+            OptionValueExceptionFactory.create(ConfigException::new, StandardArgumentsMapper.VALUE_AND_NAME);
+
+    private static final OptionValueExceptionFactory<ConfigException> ERROR_WITH_OPTION_NAME_AND_VALUE =
+            OptionValueExceptionFactory.create(ConfigException::new, StandardArgumentsMapper.NAME_AND_VALUE);
+
+    public final static OptionValue<PackageType> TYPE = build("type").shortName("t")
+            .convert().exceptionFactory(ERROR_WITH_VALUE).msgId("ERR_InvalidInstallerType")
+            .converter(ValueConverter.create(value -> {
+                Objects.requireNonNull(value);
+                return Stream.of(StandardBundlingOperation.values()).filter(bundlingOperation -> {
+                    return bundlingOperation.packageTypeValue().equals(value);
+                }).map(StandardBundlingOperation::packageType).findFirst().orElseThrow(IllegalArgumentException::new);
+            }, PackageType.class)).createOptionValue();
 
     public final static OptionValue<Path> INPUT = build("input", CREATE_APP_IMAGE).shortName("i").ofDirectory();
 
@@ -79,9 +98,9 @@ public final class StandardOptionValue {
 
     public final static OptionValue<Path> RESOURCE_DIR = build("resource-dir").enhanceScope(CREATE_BUNDLE).enhanceScope(MAC_SIGNING).ofDirectory();
 
-    public final static OptionValue<List<String>> ARGUMENTS = build("arguments").ofStringList();
+    public final static OptionValue<List<String>> ARGUMENTS = build("arguments").convert().split(stringListTokenizer()).toStringArray().toOptionValueBuilder().to(List::of).create();
 
-    public final static OptionValue<List<String>> JLINK_OPTIONS = build("jlink-options").ofStringList();
+    public final static OptionValue<List<String>> JLINK_OPTIONS = build("jlink-options").convert().split(stringListTokenizer()).toStringArray().toOptionValueBuilder().to(List::of).create();
 
     public final static OptionValue<Path> ICON = build("icon").ofPath();
 
@@ -91,32 +110,47 @@ public final class StandardOptionValue {
 
     public final static OptionValue<String> VERSION = build("app-version").ofString();
 
-    public final static OptionValue<String> ABOUT_URL = build("about-url").ofUrl();
+    public final static OptionValue<String> ABOUT_URL = build("about-url").validate().isUrl().ofString();
 
-    public final static OptionValue<List<String>> JAVA_OPTIONS = build("java-options").ofStringList();
+    public final static OptionValue<List<String>> JAVA_OPTIONS = build("java-options").convert().split(stringListTokenizer()).toStringArray().toOptionValueBuilder().to(List::of).create();
 
     public final static OptionValue<List<Path>> APP_CONTENT = build("app-content").ofPathList();
 
     public final static OptionValue<List<Path>> FILE_ASSOCIATIONS = build("file-associations").ofPathList();
 
-    public final static OptionValue<List<AdditionalLauncher>> ADD_LAUNCHER = build("add-launcher").valueConverter(new ValueConverter<AdditionalLauncher[]>() {
-        @Override
-        public AdditionalLauncher[] convert(String value) {
-            var components = value.split("=", 2);
-            if (components.length == 1) {
-                components = new String[] { null, components[0] };
-            }
-            return new AdditionalLauncher[] { new AdditionalLauncher(components[0],
-                    StandardValueConverter.pathConv().convert(components[1])) };
+    private final static class IllegalAddLauncherSyntaxException extends IllegalArgumentException {
+
+        IllegalAddLauncherSyntaxException() {
         }
 
-        @Override
-        public Class<? extends AdditionalLauncher[]> valueType() {
-            return AdditionalLauncher[].class;
-        }
-    }).repetitive().<AdditionalLauncher[]>toOptionValueBuilder().to(List::of).defaultValue(List.of()).create();
+        private static final long serialVersionUID = 1L;
+    }
 
-    public final static OptionValue<Path> TEMP_ROOT = build("temp").ofDirectory();
+    public final static OptionValue<List<AdditionalLauncher>> ADD_LAUNCHER = build("add-launcher")
+            .convert().msgId("")
+            .exceptionFactory(new OptionValueExceptionFactory<>() {
+                @Override
+                public ConfigException create(OptionName optionName, String optionValue, String msgId) {
+                    return UNREACHABLE_EXCEPTION_FACTORY.create(optionName, optionValue, msgId);
+                }
+
+                @Override
+                public ConfigException create(OptionName optionName, String optionValue, String msgId, Throwable cause) {
+                    if (cause instanceof IllegalAddLauncherSyntaxException) {
+                        return ERROR_WITH_VALUE_AND_OPTION_NAME.create(optionName, optionValue, "error.paramater-add-launcher-malformed");
+                    } else {
+                        return ERROR_WITH_VALUE_AND_OPTION_NAME.create(optionName, optionValue, "error.paramater-add-launcher-not-path", cause);
+                    }
+                }
+            }).converter(ValueConverter.create(value -> {
+                var components = value.split("=", 2);
+                if (components.length != 2) {
+                    throw new IllegalAddLauncherSyntaxException();
+                }
+                return new AdditionalLauncher[] { new AdditionalLauncher(components[0], StandardValueConverter.pathConv().convert(components[1])) };
+            }, AdditionalLauncher[].class)).toOptionValueBuilder().to(List::of).defaultValue(List.of()).create();
+
+    public final static OptionValue<Path> TEMP_ROOT = build("temp").convert().toPath().validate().exceptionFactory(ERROR_WITH_VALUE).msgId("ERR_BuildRootInvalid").isDirectoryEmptyOrNonExistant().createOptionValue();
 
     public final static OptionValue<Path> INSTALL_DIR = build("install-dir").ofPath();
 
@@ -126,9 +160,9 @@ public final class StandardOptionValue {
 
     public final static OptionValue<Path> MAIN_JAR = build("main-jar").ofPath();
 
-    public final static OptionValue<String> MODULE = build("main-jar").shortName("m").ofString();
+    public final static OptionValue<String> MODULE = build("module").shortName("m").ofString();
 
-    public final static OptionValue<List<String>> ADD_MODULES = build("add-modules").ofStringList();
+    public final static OptionValue<List<String>> ADD_MODULES = build("add-modules").convert().split(",").toStringArray().toOptionValueBuilder().to(List::of).create();
 
     public final static OptionValue<List<Path>> MODULE_PATH = build("module-path").ofPathList();
 
@@ -186,9 +220,9 @@ public final class StandardOptionValue {
     // Windows-specific
     //
 
-    public final static OptionValue<String> WIN_HELP_URL = build("win-help-url", CREATE_NATIVE).ofUrl();
+    public final static OptionValue<String> WIN_HELP_URL = build("win-help-url", CREATE_NATIVE).validate().isUrl().ofString();
 
-    public final static OptionValue<String> WIN_UPDATE_URL = build("win-update-url", CREATE_NATIVE).ofUrl();
+    public final static OptionValue<String> WIN_UPDATE_URL = build("win-update-url", CREATE_NATIVE).validate().isUrl().ofString();
 
     public final static OptionValue<Boolean> WIN_MENU_HINT = build("win-menu", CREATE_NATIVE).noValue();
 
@@ -236,15 +270,116 @@ public final class StandardOptionValue {
                 .collect(toSet());
     }
 
-    private static OptionSpecBuilder build(String name) {
-        return new OptionSpecBuilder().name(name).scope(fromOptionName(name));
+    private static OptionSpecBuilder<String> build(String name) {
+        final OptionSpecBuilder<String> builder = OptionSpecBuilder.create();
+
+        builder.setConverterBuilder(String.class, () -> {
+            return OptionValueConverter.build(String.class).msgId("").exceptionFactory(UNREACHABLE_EXCEPTION_FACTORY);
+        });
+        builder.setConverterBuilder(String[].class, () -> {
+            return OptionValueConverter.build(String[].class).msgId("").exceptionFactory(UNREACHABLE_EXCEPTION_FACTORY);
+        });
+        builder.setConverterBuilder(Path.class, () -> {
+            return OptionValueConverter.build(Path.class).msgId("error.paramater-not-path").exceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME);
+        });
+        builder.setConverterBuilder(Path[].class, () -> {
+            return OptionValueConverter.build(Path[].class).msgId("error.paramater-not-path").exceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME);
+        });
+
+        builder.setValidatorBuilder(StandardValidator.IS_DIRECTORY, () -> {
+            return Validator.build(Path.class, ERROR_WITH_VALUE_AND_OPTION_NAME).msgId("error.paramater-not-directory");
+        });
+        builder.setValidatorBuilder(StandardValidator.IS_URL, () -> {
+            return Validator.build(String.class, ERROR_WITH_VALUE_AND_OPTION_NAME).msgId("error.paramater-not-url");
+        });
+
+        return builder.name(name).scope(fromOptionName(name));
     }
 
-    private static OptionSpecBuilder build(String name, Collection<? extends OptionScope> baselineScope) {
+    private static OptionSpecBuilder<String> build(String name, Collection<? extends OptionScope> baselineScope) {
         final var builder = build(name);
         builder.scope().map(scope -> {
             return scope.stream().filter(baselineScope::contains).collect(toSet());
         }).ifPresent(builder::scope);
         return builder;
+    }
+
+    private static Function<String, String[]> stringListTokenizer() {
+        return str -> {
+            return Arguments.getArgumentList(str).toArray(String[]::new);
+        };
+    }
+
+    private final class Arguments {
+
+        //
+        // This is a an extract from jdk.jpackage.internal.Arguments class copied as-is.
+        //
+
+        // regexp for parsing args (for example, for additional launchers)
+        private static Pattern pattern = Pattern.compile(
+              "(?:(?:([\"'])(?:\\\\\\1|.)*?(?:\\1|$))|(?:\\\\[\"'\\s]|[^\\s]))++");
+
+        static List<String> getArgumentList(String inputString) {
+            List<String> list = new ArrayList<>();
+            if (inputString == null || inputString.isEmpty()) {
+                 return list;
+            }
+
+            // The "pattern" regexp attempts to abide to the rule that
+            // strings are delimited by whitespace unless surrounded by
+            // quotes, then it is anything (including spaces) in the quotes.
+            Matcher m = pattern.matcher(inputString);
+            while (m.find()) {
+                String s = inputString.substring(m.start(), m.end()).trim();
+                // Ensure we do not have an empty string. trim() will take care of
+                // whitespace only strings. The regex preserves quotes and escaped
+                // chars so we need to clean them before adding to the List
+                if (!s.isEmpty()) {
+                    list.add(unquoteIfNeeded(s));
+                }
+            }
+            return list;
+        }
+
+        private static String unquoteIfNeeded(String in) {
+            if (in == null) {
+                return null;
+            }
+
+            if (in.isEmpty()) {
+                return "";
+            }
+
+            // Use code points to preserve non-ASCII chars
+            StringBuilder sb = new StringBuilder();
+            int codeLen = in.codePointCount(0, in.length());
+            int quoteChar = -1;
+            for (int i = 0; i < codeLen; i++) {
+                int code = in.codePointAt(i);
+                if (code == '"' || code == '\'') {
+                    // If quote is escaped make sure to copy it
+                    if (i > 0 && in.codePointAt(i - 1) == '\\') {
+                        sb.deleteCharAt(sb.length() - 1);
+                        sb.appendCodePoint(code);
+                        continue;
+                    }
+                    if (quoteChar != -1) {
+                        if (code == quoteChar) {
+                            // close quote, skip char
+                            quoteChar = -1;
+                        } else {
+                            sb.appendCodePoint(code);
+                        }
+                    } else {
+                        // opening quote, skip char
+                        quoteChar = code;
+                    }
+                } else {
+                    sb.appendCodePoint(code);
+                }
+            }
+            return sb.toString();
+        }
     }
 }

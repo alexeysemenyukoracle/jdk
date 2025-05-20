@@ -22,47 +22,24 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
+
 package jdk.jpackage.internal.cli;
 
 import java.util.Objects;
-import java.util.function.Function;
 
-interface ValueConverter<T> {
 
-    /**
-     * Converts the given string value into a Java type.
-     *
-     * @param value the string to convert
-     * @return the converted value
-     * @throws IllegalArgumentException if the given string value can not be
-     *                                  converted to an object of type {@link T}
-     */
-    T convert(String value) throws IllegalArgumentException;
+final class OptionException extends RuntimeException {
 
-    /**
-     * Gives the class of the type of values this converter converts to.
-     *
-     * @return the target class for conversion
-     */
-    Class<? extends T> valueType();
-
-    static <T> ValueConverter<T> create(Function<String, T> mapper, Class<? extends T> type) {
-        Objects.requireNonNull(mapper);
-        Objects.requireNonNull(type);
-
-        return new ValueConverter<>() {
-
-            @Override
-            public T convert(String value) {
-                Objects.requireNonNull(value);
-                return mapper.apply(value);
-            }
-
-            @Override
-            public Class<? extends T> valueType() {
-                return type;
-            }
-
-        };
+    OptionException(OptionIdentifier option, Throwable cause) {
+        super(cause);
+        this.option = Objects.requireNonNull(option);
     }
+
+    OptionIdentifier getOption() {
+        return option;
+    }
+
+    private final OptionIdentifier option;
+
+    private static final long serialVersionUID = 1L;
 }

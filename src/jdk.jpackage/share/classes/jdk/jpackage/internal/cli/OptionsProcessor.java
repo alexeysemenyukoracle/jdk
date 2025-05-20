@@ -95,9 +95,7 @@ public final class OptionsProcessor {
     OptionsProcessor(Options cmdline, BundlingEnvironment bundlingEnv) {
         this(cmdline.setDefaultValue(BUNDLING_OPERATION.id(), BUNDLING_OPERATION.findIn(cmdline).or(() -> {
             return getBundlingOperation(cmdline, OperatingSystem.current(), bundlingEnv);
-        }).orElseThrow(() -> {
-            return I18N.buildConfigException("ERR_InvalidInstallerType", StandardOptionValue.TYPE.getFrom(cmdline)).create();
-        })));
+        }).orElseThrow()));
     }
 
     OptionsProcessor(Options cmdline) {

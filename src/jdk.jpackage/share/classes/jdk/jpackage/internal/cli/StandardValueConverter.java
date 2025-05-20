@@ -25,9 +25,9 @@
 
 package jdk.jpackage.internal.cli;
 
+import java.lang.reflect.Array;
 import java.nio.file.Path;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 
@@ -41,60 +41,26 @@ final class StandardValueConverter {
         return PATH_CONV;
     }
 
-    static ValueConverter<String[]> stringArrayConv(Optional<String> splitRegexp) {
-        Objects.requireNonNull(splitRegexp);
-        return new ValueConverter<>() {
-            @Override
-            public String[] convert(String value) {
-                return splitRegexp.map(value::split).orElseGet(() -> {
-                    return new String[] { Objects.requireNonNull(value) };
-                });
-            }
+    @SuppressWarnings("unchecked")
+    static final <T> ValueConverter<T[]> toArray(ValueConverter<T> from, Function<String, String[]> conv) {
+        final var stringArrayConv = stringArrayConv(conv);
+        return ValueConverter.create(value -> {
+            return Stream.of(stringArrayConv.convert(value)).map(from::convert).toArray(length -> {
+                return (T[])Array.newInstance(from.valueType(), length);
+            });
+        }, (Class<? extends T[]>)from.valueType().arrayType());
+    }
 
-            @Override
-            public Class<? extends String[]> valueType() {
-                return String[].class;
-            }
+    static ValueConverter<String[]> stringArrayConv(Function<String, String[]> conv) {
+        return ValueConverter.create(conv, String[].class);
+    }
+
+    static Function<String, String[]> regexpSplitter(String regexp) {
+        return str -> {
+            return str.split(regexp);
         };
     }
 
-    static ValueConverter<Path[]> pathArrayConv(Optional<String> splitRegexp) {
-        Objects.requireNonNull(splitRegexp);
-        final var stringArrayConv = stringArrayConv(splitRegexp);
-        return new ValueConverter<>() {
-            @Override
-            public Path[] convert(String value) {
-                return Stream.of(stringArrayConv.convert(value)).map(Path::of).toArray(Path[]::new);
-            }
-
-            @Override
-            public Class<? extends Path[]> valueType() {
-                return Path[].class;
-            }
-        };
-    }
-
-    private static final ValueConverter<String> IDENTITY_CONV = new ValueConverter<>() {
-        @Override
-        public String convert(String value) {
-            return Objects.requireNonNull(value);
-        }
-
-        @Override
-        public Class<? extends String> valueType() {
-            return String.class;
-        }
-    };
-
-    private static final ValueConverter<Path> PATH_CONV = new ValueConverter<>() {
-        @Override
-        public Path convert(String value) {
-            return Path.of(value);
-        }
-
-        @Override
-        public Class<? extends Path> valueType() {
-            return Path.class;
-        }
-    };
+    private static final ValueConverter<String> IDENTITY_CONV = ValueConverter.create(x -> x, String.class);
+    private static final ValueConverter<Path> PATH_CONV = ValueConverter.create(Path::of, Path.class);
 }

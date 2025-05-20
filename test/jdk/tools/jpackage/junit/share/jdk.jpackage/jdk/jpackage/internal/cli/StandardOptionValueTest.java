@@ -23,8 +23,11 @@
 package jdk.jpackage.internal.cli;
 
 import static java.util.stream.Collectors.joining;
-import static jdk.jpackage.internal.cli.OptionSpec.formatOptionNameForCommandLine;
+import static java.util.stream.Collectors.toMap;
+import static jdk.jpackage.internal.util.function.ThrowingFunction.toFunction;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -41,6 +44,25 @@ import org.junit.jupiter.api.Test;
 public class StandardOptionValueTest {
 
     @Test
+    public void testNames() {
+
+        final var options = StandardOptionValue.options();
+
+        final var expectedOptionCount = Stream.of(StandardOptionValue.class.getFields()).filter(f -> {
+            return Modifier.isStatic(f.getModifiers());
+        }).map(f -> {
+            return toFunction(f::get).apply(null);
+        }).filter(OptionValue.class::isInstance).count();
+
+        final var actualOptionCount = options.size();
+
+        assertEquals(expectedOptionCount, actualOptionCount);
+
+        // Test option names are unique. Let Collectors.toMap() do it.
+        options.stream().map(Option::getSpec).map(OptionSpec::names).flatMap(Collection::stream).map(OptionName::name).collect(toMap(x -> x, x -> x));
+    }
+
+    @Test
     public void groupByOption() {
         OptionSpecFormatter.print(OptionSpecFormatter::groupByOption);
     }
@@ -53,7 +75,7 @@ public class StandardOptionValueTest {
         static void groupByOption(Consumer<String>sink, Collection<OptionSpec<Object>> specs) {
             sink.accept("| Option | Scope |");
             sink.accept("| --- | --- |");
-            for (final var spec : specs.stream().sorted(Comparator.comparing(OptionSpec::name)).toList()) {
+            for (final var spec : specs.stream().sorted(Comparator.comparing(v -> { return v.name().name(); })).toList()) {
                 sink.accept(String.format("| %s | %s |", formatOptionNames(spec), format(spec.scope())));
             }
         }
@@ -64,12 +86,7 @@ public class StandardOptionValueTest {
         }
 
         private static String formatOptionNames(OptionSpec<?> spec) {
-            final var sb = new StringBuilder();
-            sb.append(formatOptionNameForCommandLine(spec.name()));
-            spec.shortName().map(OptionSpec::formatOptionNameForCommandLine).ifPresent(v -> {
-                sb.append(", ").append(v);
-            });
-            return sb.toString();
+            return spec.names().stream().map(OptionName::formatForCommandLine).collect(joining(", "));
         }
 
         private static String format(OptionScope op) {
