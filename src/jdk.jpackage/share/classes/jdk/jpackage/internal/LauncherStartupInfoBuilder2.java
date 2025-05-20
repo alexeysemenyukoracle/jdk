@@ -108,12 +108,12 @@ final class LauncherStartupInfoBuilder2 {
         return Optional.ofNullable(mainClassName);
     }
 
-    @SuppressWarnings("unchecked")
     private <T extends LauncherStartupInfoBuilder> T ensureLauncherStartupInfo(Class<T> type, Supplier<T> ctor) {
+        Objects.requireNonNull(ctor);
         if (!type.isInstance(specifics)) {
             specifics = ctor.get();
         }
-        return (T)specifics;
+        return type.cast(specifics);
     }
 
     private JarStartupInfo ensureJarStartupInfo() {
