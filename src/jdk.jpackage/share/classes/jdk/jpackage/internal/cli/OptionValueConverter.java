@@ -73,28 +73,7 @@ interface OptionValueConverter<T> {
     static final class Builder<T> {
 
         OptionValueConverter<T> create() {
-            final var localConverter = Objects.requireNonNull(converter);
-            final var localExceptionFactory = Objects.requireNonNull(exceptionFactory);
-            final var localMsgId = Objects.requireNonNull(msgId);
-
-            return new OptionValueConverter<>() {
-                @Override
-                public T convert(OptionName optionName, String optionValue) {
-                    Objects.requireNonNull(optionName);
-                    try {
-                        return localConverter.convert(optionValue);
-                    } catch (IllegalArgumentException ex) {
-                        throw localExceptionFactory.create(optionName, optionValue, localMsgId, ex);
-                    } catch (Exception ex) {
-                        throw new ConverterException(ex);
-                    }
-                }
-
-                @Override
-                public Class<? extends T> valueType() {
-                    return converter.valueType();
-                }
-            };
+            return new DefaultOptionValueConverter<>(converter, formatString, exceptionFactory);
         }
 
         Builder<T> converter(ValueConverter<T> v) {
@@ -104,13 +83,13 @@ interface OptionValueConverter<T> {
 
         <U> Builder<U> convert(ValueConverter<U> v) {
             final Builder<U> newBuilder = build();
-            msgId().ifPresent(newBuilder::msgId);
+            formatString().ifPresent(newBuilder::formatString);
             exceptionFactory().ifPresent(newBuilder::exceptionFactory);
             return newBuilder.converter(v);
         }
 
-        Builder<T> msgId(String v) {
-            msgId = v;
+        Builder<T> formatString(String v) {
+            formatString = v;
             return this;
         }
 
@@ -123,16 +102,43 @@ interface OptionValueConverter<T> {
             return Optional.ofNullable(converter);
         }
 
-        Optional<String> msgId() {
-            return Optional.ofNullable(msgId);
+        Optional<String> formatString() {
+            return Optional.ofNullable(formatString);
         }
 
         Optional<OptionValueExceptionFactory<? extends RuntimeException>> exceptionFactory() {
             return Optional.ofNullable(exceptionFactory);
         }
 
+        private record DefaultOptionValueConverter<T>(ValueConverter<T> converter, String formatString,
+                OptionValueExceptionFactory<? extends RuntimeException> exceptionFactory) implements OptionValueConverter<T> {
+
+            DefaultOptionValueConverter {
+                Objects.requireNonNull(converter);
+                Objects.requireNonNull(formatString);
+                Objects.requireNonNull(exceptionFactory);
+            }
+
+            @Override
+            public T convert(OptionName optionName, String optionValue) {
+                Objects.requireNonNull(optionName);
+                try {
+                    return converter.convert(optionValue);
+                } catch (IllegalArgumentException ex) {
+                    throw exceptionFactory.create(optionName, optionValue, formatString, ex);
+                } catch (Exception ex) {
+                    throw new ConverterException(ex);
+                }
+            }
+
+            @Override
+            public Class<? extends T> valueType() {
+                return converter.valueType();
+            }
+        }
+
         private ValueConverter<T> converter;
-        private String msgId;
+        private String formatString;
         private OptionValueExceptionFactory<? extends RuntimeException> exceptionFactory;
     }
 }

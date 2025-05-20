@@ -29,16 +29,15 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.stream.Stream;
-import jdk.jpackage.internal.util.LocalizedExceptionBuilder;
 
 interface OptionValueExceptionFactory<T extends Exception> {
 
-    T create(OptionName optionName, String optionValue, String msgId);
+    T create(OptionName optionName, String optionValue, String formatString);
 
-    T create(OptionName optionName, String optionValue, String msgId, Throwable cause);
+    T create(OptionName optionName, String optionValue, String formatString, Throwable cause);
 
     static <U extends Exception> OptionValueExceptionFactory<U> create(BiFunction<String, Throwable, U> ctor) {
-        return create(ctor, StandardArgumentsMapper.NAME_AND_VALUE);
+        return build(ctor).create();
     }
 
     @FunctionalInterface
@@ -70,31 +69,6 @@ interface OptionValueExceptionFactory<T extends Exception> {
         }
     }
 
-    static <T extends Exception> OptionValueExceptionFactory<T> create(BiFunction<String, Throwable, T> ctor, ArgumentsMapper formatArgumentsTransformer) {
-        Objects.requireNonNull(ctor);
-        Objects.requireNonNull(formatArgumentsTransformer);
-
-        return new OptionValueExceptionFactory<>() {
-
-            @Override
-            public T create(OptionName optionName, String optionValue, String msgId) {
-                return createMessage(optionName, optionValue, msgId).create(ctor);
-            }
-
-            @Override
-            public T create(OptionName optionName, String optionValue, String msgId, Throwable cause) {
-                return createMessage(optionName, optionValue, msgId).cause(cause).create(ctor);
-            }
-
-            private LocalizedExceptionBuilder<?> createMessage(OptionName optionName, String optionValue, String msgId) {
-                Objects.requireNonNull(optionName);
-                Objects.requireNonNull(optionValue);
-                Objects.requireNonNull(msgId);
-                return I18N.buildException().message(msgId, Stream.of(formatArgumentsTransformer.apply(optionName.formatForCommandLine(), optionValue)).toArray());
-            }
-        };
-    }
-
     static <T extends Exception> Builder<T> build() {
         return new Builder<>();
     }
@@ -104,10 +78,18 @@ interface OptionValueExceptionFactory<T extends Exception> {
         return builder.ctor(ctor);
     }
 
+
     static final class Builder<T extends Exception> {
 
         OptionValueExceptionFactory<T> create() {
-            return OptionValueExceptionFactory.create(ctor, Optional.ofNullable(formatArgumentsTransformer).orElse(StandardArgumentsMapper.NAME_AND_VALUE));
+            return OptionValueExceptionFactory.create(ctor,
+                    Optional.ofNullable(formatArgumentsTransformer).orElse(StandardArgumentsMapper.NAME_AND_VALUE),
+                    Optional.ofNullable(messageFormatter).orElse(I18N::format));
+        }
+
+        Builder<T> messageFormatter(BiFunction<String, Object[], String> v) {
+            messageFormatter = v;
+            return this;
         }
 
         Builder<T> ctor(BiFunction<String, Throwable, T> v) {
@@ -122,5 +104,47 @@ interface OptionValueExceptionFactory<T extends Exception> {
 
         private BiFunction<String, Throwable, T> ctor;
         private ArgumentsMapper formatArgumentsTransformer;
+        private BiFunction<String, Object[], String> messageFormatter;
     }
+
+
+    private static <T extends Exception> OptionValueExceptionFactory<T> create(BiFunction<String, Throwable, T> ctor,
+            ArgumentsMapper formatArgumentsTransformer, BiFunction<String, Object[], String> messageFormatter) {
+        Objects.requireNonNull(ctor);
+        Objects.requireNonNull(formatArgumentsTransformer);
+        Objects.requireNonNull(messageFormatter);
+
+        return new OptionValueExceptionFactory<>() {
+
+            @Override
+            public T create(OptionName optionName, String optionValue, String formatString) {
+                return ctor.apply(createMessage(optionName, optionValue, formatString), null);
+            }
+
+            @Override
+            public T create(OptionName optionName, String optionValue, String formatString, Throwable cause) {
+                return ctor.apply(createMessage(optionName, optionValue, formatString), cause);
+            }
+
+            private String createMessage(OptionName optionName, String optionValue, String formatString) {
+                Objects.requireNonNull(optionName);
+                Objects.requireNonNull(optionValue);
+                Objects.requireNonNull(formatString);
+                return messageFormatter.apply(formatString,
+                        Stream.of(formatArgumentsTransformer.apply(optionName.formatForCommandLine(), optionValue)).toArray());
+            }
+        };
+    }
+
+    static final OptionValueExceptionFactory<RuntimeException> UNREACHABLE_EXCEPTION_FACTORY = new OptionValueExceptionFactory<>() {
+        @Override
+        public RuntimeException create(OptionName optionName, String optionValue, String formatString) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public RuntimeException create(OptionName optionName, String optionValue, String formatString, Throwable cause) {
+            throw new UnsupportedOperationException();
+        }
+    };
 }

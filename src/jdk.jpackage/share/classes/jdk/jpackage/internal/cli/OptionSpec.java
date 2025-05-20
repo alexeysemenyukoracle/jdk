@@ -58,6 +58,12 @@ record OptionSpec<T>(List<OptionName> names, Optional<OptionValueConverter<T>> v
         if (valueConverter.isEmpty() && valueValidator.isPresent()) {
             throw new IllegalArgumentException("Validator is not applicable");
         }
+
+        final var typeMustBeArray = mergePolicy.equals(MergePolicy.CONCATENATE);
+        final var type = valueType(valueConverter);
+        if (typeMustBeArray != type.isArray()) {
+            throw new IllegalArgumentException(String.format("Invalid merge policy [%s] for type [%s]", mergePolicy, type));
+        }
     }
 
     OptionName name() {
@@ -86,7 +92,12 @@ record OptionSpec<T>(List<OptionName> names, Optional<OptionValueConverter<T>> v
         return valueConverter.isPresent();
     }
 
-    boolean isValueTypeArray() {
-        return valueConverter.map(OptionValueConverter::valueType).map(Class::isArray).orElse(false);
+    Class<? extends T> valueType() {
+        return valueType(valueConverter);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> Class<T> valueType(Optional<OptionValueConverter<T>> valueConverter) {
+        return valueConverter.map(OptionValueConverter::valueType).map(x -> (Class<T>)x).orElse((Class<T>)String.class);
     }
 }

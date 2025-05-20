@@ -83,7 +83,10 @@ public class OptionsValidationFailTest {
             @Override
             public int run(PrintWriter out, PrintWriter err, String... args) {
                 // Parse and validate the command line
-                final var options = new JOptSimpleOptionsBuilder().options(StandardOptionValue.options()).create().apply(args).orElseThrow().convertedOptions().orElseThrow().validatedOptions().orElseThrow().create();
+                final var options = new JOptSimpleOptionsBuilder().options(StandardOptionValue.options()).create().apply(args)
+                        .orElseThrow().convertedOptions()
+                        .orElseThrow().validatedOptions()
+                        .orElseThrow().create();
 
                 // Validate parsed options
                 final var validationError = new OptionsProcessor(options, new BundlingEnvironment() {

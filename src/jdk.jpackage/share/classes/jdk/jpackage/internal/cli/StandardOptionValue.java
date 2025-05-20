@@ -51,30 +51,17 @@ import jdk.jpackage.internal.model.PackageType;
 
 public final class StandardOptionValue {
 
-    private static final OptionValueExceptionFactory<ConfigException> UNREACHABLE_EXCEPTION_FACTORY =
-            new OptionValueExceptionFactory<>() {
-                @Override
-                public ConfigException create(OptionName optionName, String optionValue, String msgId) {
-                    throw new UnsupportedOperationException();
-                }
-
-                @Override
-                public ConfigException create(OptionName optionName, String optionValue, String msgId, Throwable cause) {
-                    throw new UnsupportedOperationException();
-                }
-            };
-
     private static final OptionValueExceptionFactory<ConfigException> ERROR_WITH_VALUE =
-            OptionValueExceptionFactory.create(ConfigException::new, StandardArgumentsMapper.VALUE);
+            OptionValueExceptionFactory.build(ConfigException::new).formatArgumentsTransformer(StandardArgumentsMapper.VALUE).create();
 
     private static final OptionValueExceptionFactory<ConfigException> ERROR_WITH_VALUE_AND_OPTION_NAME =
-            OptionValueExceptionFactory.create(ConfigException::new, StandardArgumentsMapper.VALUE_AND_NAME);
+            OptionValueExceptionFactory.build(ConfigException::new).formatArgumentsTransformer(StandardArgumentsMapper.VALUE_AND_NAME).create();
 
     private static final OptionValueExceptionFactory<ConfigException> ERROR_WITH_OPTION_NAME_AND_VALUE =
-            OptionValueExceptionFactory.create(ConfigException::new, StandardArgumentsMapper.NAME_AND_VALUE);
+            OptionValueExceptionFactory.build(ConfigException::new).formatArgumentsTransformer(StandardArgumentsMapper.NAME_AND_VALUE).create();
 
     public final static OptionValue<PackageType> TYPE = build("type").shortName("t")
-            .convert().exceptionFactory(ERROR_WITH_VALUE).msgId("ERR_InvalidInstallerType")
+            .convert().exceptionFactory(ERROR_WITH_VALUE).formatString("ERR_InvalidInstallerType")
             .converter(ValueConverter.create(value -> {
                 Objects.requireNonNull(value);
                 return Stream.of(StandardBundlingOperation.values()).filter(bundlingOperation -> {
@@ -127,15 +114,15 @@ public final class StandardOptionValue {
     }
 
     public final static OptionValue<List<AdditionalLauncher>> ADD_LAUNCHER = build("add-launcher")
-            .convert().msgId("")
+            .convert().formatString("")
             .exceptionFactory(new OptionValueExceptionFactory<>() {
                 @Override
-                public ConfigException create(OptionName optionName, String optionValue, String msgId) {
-                    return UNREACHABLE_EXCEPTION_FACTORY.create(optionName, optionValue, msgId);
+                public ConfigException create(OptionName optionName, String optionValue, String formatString) {
+                    throw new UnsupportedOperationException();
                 }
 
                 @Override
-                public ConfigException create(OptionName optionName, String optionValue, String msgId, Throwable cause) {
+                public ConfigException create(OptionName optionName, String optionValue, String formatString, Throwable cause) {
                     if (cause instanceof IllegalAddLauncherSyntaxException) {
                         return ERROR_WITH_VALUE_AND_OPTION_NAME.create(optionName, optionValue, "error.paramater-add-launcher-malformed");
                     } else {
@@ -150,7 +137,7 @@ public final class StandardOptionValue {
                 return new AdditionalLauncher[] { new AdditionalLauncher(components[0], StandardValueConverter.pathConv().convert(components[1])) };
             }, AdditionalLauncher[].class)).toOptionValueBuilder().to(List::of).defaultValue(List.of()).create();
 
-    public final static OptionValue<Path> TEMP_ROOT = build("temp").convert().toPath().validate().exceptionFactory(ERROR_WITH_VALUE).msgId("ERR_BuildRootInvalid").isDirectoryEmptyOrNonExistant().createOptionValue();
+    public final static OptionValue<Path> TEMP_ROOT = build("temp").convert().toPath().validate().exceptionFactory(ERROR_WITH_VALUE).formatString("ERR_BuildRootInvalid").isDirectoryEmptyOrNonExistant().createOptionValue();
 
     public final static OptionValue<Path> INSTALL_DIR = build("install-dir").ofPath();
 
@@ -273,24 +260,18 @@ public final class StandardOptionValue {
     private static OptionSpecBuilder<String> build(String name) {
         final OptionSpecBuilder<String> builder = OptionSpecBuilder.create();
 
-        builder.setConverterBuilder(String.class, () -> {
-            return OptionValueConverter.build(String.class).msgId("").exceptionFactory(UNREACHABLE_EXCEPTION_FACTORY);
-        });
-        builder.setConverterBuilder(String[].class, () -> {
-            return OptionValueConverter.build(String[].class).msgId("").exceptionFactory(UNREACHABLE_EXCEPTION_FACTORY);
-        });
         builder.setConverterBuilder(Path.class, () -> {
-            return OptionValueConverter.build(Path.class).msgId("error.paramater-not-path").exceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME);
+            return OptionValueConverter.build(Path.class).formatString("error.paramater-not-path").exceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME);
         });
         builder.setConverterBuilder(Path[].class, () -> {
-            return OptionValueConverter.build(Path[].class).msgId("error.paramater-not-path").exceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME);
+            return OptionValueConverter.build(Path[].class).formatString("error.paramater-not-path").exceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME);
         });
 
         builder.setValidatorBuilder(StandardValidator.IS_DIRECTORY, () -> {
-            return Validator.build(Path.class, ERROR_WITH_VALUE_AND_OPTION_NAME).msgId("error.paramater-not-directory");
+            return Validator.build(Path.class, ERROR_WITH_VALUE_AND_OPTION_NAME).formatString("error.paramater-not-directory");
         });
         builder.setValidatorBuilder(StandardValidator.IS_URL, () -> {
-            return Validator.build(String.class, ERROR_WITH_VALUE_AND_OPTION_NAME).msgId("error.paramater-not-url");
+            return Validator.build(String.class, ERROR_WITH_VALUE_AND_OPTION_NAME).formatString("error.paramater-not-url");
         });
 
         return builder.name(name).scope(fromOptionName(name));

@@ -262,7 +262,7 @@ final class JOptSimpleOptionsBuilder {
                         value.put(option, v);
                     });
                     result.errors().ifPresent(errors::addAll);
-                } else {
+                } else if (optionSet.has(mainSpec.name().name())) {
                     value.put(option, List.of());
                 }
             }
@@ -353,7 +353,7 @@ final class JOptSimpleOptionsBuilder {
         }
 
         @SuppressWarnings("unchecked")
-        <U extends Exception> Optional<U> validateCastUnsafe(Validator<?, U> validator) {
+        <U extends Exception> Optional<U> validateCastUnchecked(Validator<?, U> validator) {
             return validate((Validator<T, U>)validator);
         }
     }
@@ -384,7 +384,7 @@ final class JOptSimpleOptionsBuilder {
                 final var mainSpec = option.getSpec();
                 mainSpec.valueValidator().map(validator -> {
                     return e.getValue().stream().map(optionWithValue -> {
-                        return optionWithValue.validateCastUnsafe(validator);
+                        return optionWithValue.validateCastUnchecked(validator);
                     }).filter(Optional::isPresent).map(Optional::orElseThrow).toList();
                 }).ifPresent(errors::addAll);
             }
@@ -405,15 +405,30 @@ final class JOptSimpleOptionsBuilder {
                 final var optionSpec = option.getSpec();
                 if (!optionSpec.hasValue()) {
                     return Boolean.TRUE;
-                } else {
-                    final var mergedValues = getOptionValue(value.stream().map(OptionWithValue::value).toList(), optionSpec.mergePolicy());
-                    if (optionSpec.isValueTypeArray()) {
-                        return mergedValues.toArray(size -> {
-                            return (Object[])Array.newInstance(mergedValues.getFirst().getClass(), size);
-                        });
-                    } else {
-                        return mergedValues.getFirst();
+                } else if (optionSpec.valueType().isArray()) {
+                    switch (optionSpec.mergePolicy()) {
+                        case USE_LAST -> {
+                            return value.getFirst().value();
+                        }
+                        case USE_FIRST -> {
+                            return value.getLast().value();
+                        }
+                        case CONCATENATE -> {
+                            return value.stream().map(OptionWithValue::value).map(Object.class::cast).reduce((a, b) -> {
+                                final var al = Array.getLength(a);
+                                final var bl = Array.getLength(b);
+                                final var arr = Array.newInstance(a.getClass().componentType(), al + bl);
+                                System.arraycopy(a, 0, arr, 0, al);
+                                System.arraycopy(b, 0, arr, al, bl);
+                                return arr;
+                            }).orElseThrow();
+                        }
+                        default -> {
+                            throw new UnsupportedOperationException();
+                        }
                     }
+                } else {
+                    return getOptionValue(value.stream().map(OptionWithValue::value).toList(), optionSpec.mergePolicy()).getFirst();
                 }
             });
         }
@@ -463,7 +478,7 @@ final class JOptSimpleOptionsBuilder {
     private static <T> List<T> getOptionValue(List<T> values, OptionSpec.MergePolicy mergePolicy) {
         Objects.requireNonNull(mergePolicy);
         if(values.isEmpty()) {
-            return List.of();
+            throw new IllegalArgumentException();
         } else if (values.size() == 1) {
             return values;
         } else {
@@ -477,8 +492,10 @@ final class JOptSimpleOptionsBuilder {
                 case CONCATENATE -> {
                     return values;
                 }
+                default -> {
+                    throw new UnsupportedOperationException();
+                }
             }
-            throw new IllegalStateException();
         }
     }
 

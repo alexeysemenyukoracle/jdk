@@ -28,7 +28,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 record Validator<T, U extends Exception>(Optional<ValidatingPredicate<T>> predicate, Optional<ValidatingConsumer<T>> consumer,
-        String msgId, OptionValueExceptionFactory<? extends U> exceptionFactory) {
+        String formatString, OptionValueExceptionFactory<? extends U> exceptionFactory) {
 
     interface ValidatingMethod {
     }
@@ -62,7 +62,7 @@ record Validator<T, U extends Exception>(Optional<ValidatingPredicate<T>> predic
 
 
     /**
-     * Thrown to indicate an error in the normal execution of the validator.
+     * Thrown to indicate an error in the normal execution of a validator.
      */
     final static class ValidatorException extends RuntimeException {
 
@@ -90,7 +90,7 @@ record Validator<T, U extends Exception>(Optional<ValidatingPredicate<T>> predic
         if (predicate.isEmpty() == consumer.isEmpty()) {
             throw new IllegalArgumentException("Either consumer or predicate must be non-empty");
         }
-        Objects.requireNonNull(msgId);
+        Objects.requireNonNull(formatString);
         Objects.requireNonNull(exceptionFactory);
     }
 
@@ -103,7 +103,7 @@ record Validator<T, U extends Exception>(Optional<ValidatingPredicate<T>> predic
                 if (validator.test(optionValue.value())) {
                     return Optional.empty();
                 } else {
-                    return Optional.of((U)exceptionFactory.create(optionName, optionValue.sourceString(), msgId));
+                    return Optional.of((U)exceptionFactory.create(optionName, optionValue.sourceString(), formatString));
                 }
             }).or(() -> {
                 return consumer.flatMap(validator -> {
@@ -111,7 +111,7 @@ record Validator<T, U extends Exception>(Optional<ValidatingPredicate<T>> predic
                         validator.accept(optionValue.value());
                         return Optional.empty();
                     } catch (ValidatingConsumerException ex) {
-                        return Optional.of((U)exceptionFactory.create(optionName, optionValue.sourceString(), msgId, ex.getCause()));
+                        return Optional.of((U)exceptionFactory.create(optionName, optionValue.sourceString(), formatString, ex.getCause()));
                     }
                 });
             });
@@ -127,14 +127,14 @@ record Validator<T, U extends Exception>(Optional<ValidatingPredicate<T>> predic
     }
 
     static <T, U extends Exception> Builder<T, U> build(Class<T> valueType, OptionValueExceptionFactory<U> exceptionFactory) {
-        final Builder<T, U> builder = build(); 
+        final Builder<T, U> builder = build();
         return builder.exceptionFactory(exceptionFactory);
     }
 
     static final class Builder<T, U extends Exception> {
 
         Validator<T, U> create() {
-            return new Validator<>(Optional.ofNullable(predicate), Optional.ofNullable(consumer), msgId, exceptionFactory);
+            return new Validator<>(Optional.ofNullable(predicate), Optional.ofNullable(consumer), formatString, exceptionFactory);
         }
 
         Builder<T, U> predicate(ValidatingPredicate<T> v) {
@@ -149,8 +149,8 @@ record Validator<T, U extends Exception>(Optional<ValidatingPredicate<T>> predic
             return this;
         }
 
-        Builder<T, U> msgId(String v) {
-            msgId = v;
+        Builder<T, U> formatString(String v) {
+            formatString = v;
             return this;
         }
 
@@ -171,8 +171,8 @@ record Validator<T, U extends Exception>(Optional<ValidatingPredicate<T>> predic
             return predicate().map(ValidatingMethod.class::cast).or(this::consumer);
         }
 
-        Optional<String> msgId() {
-            return Optional.ofNullable(msgId);
+        Optional<String> formatString() {
+            return Optional.ofNullable(formatString);
         }
 
         Optional<OptionValueExceptionFactory<? extends U>> exceptionFactory() {
@@ -181,7 +181,7 @@ record Validator<T, U extends Exception>(Optional<ValidatingPredicate<T>> predic
 
         private ValidatingPredicate<T> predicate;
         private ValidatingConsumer<T> consumer;
-        private String msgId;
+        private String formatString;
         private OptionValueExceptionFactory<? extends U> exceptionFactory;
     }
 }

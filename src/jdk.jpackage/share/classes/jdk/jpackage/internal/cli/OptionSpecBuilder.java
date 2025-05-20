@@ -24,14 +24,12 @@
  */
 package jdk.jpackage.internal.cli;
 
+import static jdk.jpackage.internal.cli.OptionValueExceptionFactory.UNREACHABLE_EXCEPTION_FACTORY;
 import static jdk.jpackage.internal.cli.StandardValueConverter.identityConv;
 import static jdk.jpackage.internal.cli.StandardValueConverter.pathConv;
 import static jdk.jpackage.internal.cli.StandardValueConverter.regexpSplitter;
 import static jdk.jpackage.internal.cli.StandardValueConverter.stringArrayConv;
 
-import jdk.jpackage.internal.cli.Validator.ValidatingMethod;
-import jdk.jpackage.internal.cli.Validator.ValidatingPredicate;
-import jdk.jpackage.internal.cli.Validator.ValidatingConsumer;
 import java.io.File;
 import java.nio.file.Path;
 import java.util.Collection;
@@ -45,6 +43,9 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
+import jdk.jpackage.internal.cli.Validator.ValidatingConsumer;
+import jdk.jpackage.internal.cli.Validator.ValidatingMethod;
+import jdk.jpackage.internal.cli.Validator.ValidatingPredicate;
 
 final class OptionSpecBuilder<T> {
 
@@ -54,6 +55,13 @@ final class OptionSpecBuilder<T> {
 
     OptionSpecBuilder(Class<? extends T> valueType) {
         this.valueType = Objects.requireNonNull(valueType);
+
+        setConverterBuilder(String.class, () -> {
+            return OptionValueConverter.build(String.class).exceptionFactory(UNREACHABLE_EXCEPTION_FACTORY).formatString("");
+        });
+        setConverterBuilder(String[].class, () -> {
+            return OptionValueConverter.build(String[].class).exceptionFactory(UNREACHABLE_EXCEPTION_FACTORY).formatString("");
+        });
     }
 
     private <U> OptionSpecBuilder(Class<? extends T> valueType, OptionSpecBuilder<U> other) {
@@ -97,6 +105,10 @@ final class OptionSpecBuilder<T> {
             return new ArrayValueConverterBuilder(parentBuilder, splitter);
         }
 
+        ArrayValueConverterBuilder nosplit() {
+            return new ArrayValueConverterBuilder(parentBuilder, str -> new String[] { str });
+        }
+
         OptionSpecBuilder<Path> toPath() {
             return converter(pathConv());
         }
@@ -105,8 +117,8 @@ final class OptionSpecBuilder<T> {
             return parentBuilder.valueConverter(impl.convert(v));
         }
 
-        ScalarValueConverterBuilder msgId(String v) {
-            impl.msgId(v);
+        ScalarValueConverterBuilder formatString(String v) {
+            impl.formatString(v);
             return this;
         }
 
@@ -139,8 +151,8 @@ final class OptionSpecBuilder<T> {
             return parentBuilder.valueConverter(impl.convert(v));
         }
 
-        ArrayValueConverterBuilder msgId(String v) {
-            impl.msgId(v);
+        ArrayValueConverterBuilder formatString(String v) {
+            impl.formatString(v);
             return this;
         }
 
@@ -183,8 +195,8 @@ final class OptionSpecBuilder<T> {
             return commit();
         }
 
-        ValueValidatorBuilder msgId(String v) {
-            impl.msgId(v);
+        ValueValidatorBuilder formatString(String v) {
+            impl.formatString(v);
             return this;
         }
 
@@ -203,7 +215,7 @@ final class OptionSpecBuilder<T> {
             if (!newValueType.equals(valueType)) {
                 throw new IllegalStateException();
             }
-            impl.msgId().ifPresent(builder::msgId);
+            impl.formatString().ifPresent(builder::formatString);
             impl.exceptionFactory().ifPresent(builder::exceptionFactory);
             return ((OptionSpecBuilder<W>)OptionSpecBuilder.this).new ValueValidatorBuilder(builder);
         }
@@ -278,7 +290,7 @@ final class OptionSpecBuilder<T> {
         }).orElseGet(OptionValueConverter::build);
 
         v.converter().ifPresent(builder::converter);
-        v.msgId().ifPresent(builder::msgId);
+        v.formatString().ifPresent(builder::formatString);
         v.exceptionFactory().ifPresent(builder::exceptionFactory);
 
         return valueConverter(builder.create());
@@ -297,7 +309,7 @@ final class OptionSpecBuilder<T> {
 
         v.consumer().ifPresent(builder::consumer);
         v.predicate().ifPresent(builder::predicate);
-        v.msgId().ifPresent(builder::msgId);
+        v.formatString().ifPresent(builder::formatString);
         v.exceptionFactory().ifPresent(builder::exceptionFactory);
 
         return valueValidator(builder.create());
