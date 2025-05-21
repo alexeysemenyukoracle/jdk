@@ -141,7 +141,7 @@ public final class StandardOptionValue {
                     throw new IllegalAddLauncherSyntaxException();
                 }
                 return new AdditionalLauncher(components[0], StandardValueConverter.pathConv().convert(components[1]));
-            }).toOptionValueBuilder().to(List::of).defaultValue(List.of()).create();
+            }).toArray().defaultValue(new AdditionalLauncher[0]).create(toList());
 
     public final static OptionValue<Path> TEMP_ROOT = pathOption("temp")
             .validatorExceptionFactory(ERROR_WITH_VALUE)
