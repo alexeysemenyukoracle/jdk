@@ -22,6 +22,7 @@
  */
 package jdk.jpackage.internal.cli;
 
+import static jdk.jpackage.internal.cli.OptionSpecBuilder2.pathSeparator;
 import static jdk.jpackage.internal.cli.OptionSpecBuilder2.toList;
 import static jdk.jpackage.internal.cli.OptionValueExceptionFactory.UNREACHABLE_EXCEPTION_FACTORY;
 import static jdk.jpackage.internal.cli.StandardValueConverter.identityConv;
@@ -45,11 +46,11 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import jdk.jpackage.internal.cli.OptionValueExceptionFactory.StandardArgumentsMapper;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 public class JOptSimpleOptionsBuilderTest {
 
@@ -212,11 +213,19 @@ public class JOptSimpleOptionsBuilderTest {
         List.of(ParserMode.CONVERT, ParserMode.VALIDATE).forEach(spec::test);
     }
 
-    @Test
-    public void testConversionVsValidation(@TempDir Path tmpDir) {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testConversionVsValidation(boolean asArray, @TempDir Path tmpDir) {
         final var nonExistentDir = tmpDir.resolve("non-existent");
 
-        final var testSpec = build().addOptionValue(directoryOption("dir").create(), nonExistentDir).addArgs("--dir", nonExistentDir.toString()).create();
+        final TestSpec.Builder builder = build().addArgs("--dir", nonExistentDir.toString());
+        if (asArray) {
+            builder.addOptionValue(directoryOption("dir").toArray().create(), new Path[] { nonExistentDir });
+        } else {
+            builder.addOptionValue(directoryOption("dir").create(), nonExistentDir);
+        }
+
+        final var testSpec = builder.create();
 
         testSpec.test(ParserMode.CONVERT);
 
@@ -232,6 +241,11 @@ public class JOptSimpleOptionsBuilderTest {
                         directoryOption("input").shortName("i").create(),
                         pwd
                 ).addArgs("--input", "", "-i", pwd.toString()),
+
+                build().addOptionValue(
+                        directoryOption("dir").toArray(pathSeparator()).create(),
+                        new Path[] { pwd, Path.of(".") }
+                ).addArgs("--dir=" + pwd.toString() + pathSeparator() + "."),
 
                 build().addOptionValue(
                         stringOption("arguments").toArray("\\s+").create(toList()),
