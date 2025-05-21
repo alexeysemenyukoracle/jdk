@@ -25,6 +25,7 @@
 package jdk.jpackage.internal.cli;
 
 import java.io.File;
+import java.lang.reflect.Array;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -57,6 +58,167 @@ final class OptionSpecBuilder2<T> {
         this.valueType = Objects.requireNonNull(valueType);
     }
 
+
+    final class ArrayOptionSpecBuilder {
+
+        private ArrayOptionSpecBuilder(Function<String, String[]> splitter) {
+            this.splitter = Objects.requireNonNull(splitter);
+        }
+
+        OptionValue<T[]> create() {
+            return toOptionValueBuilder().create();
+        }
+
+        <U> OptionValue<U> create(Function<OptionValue.Builder<T[]>, OptionValue<U>> transformer) {
+            return transformer.apply(toOptionValueBuilder());
+        }
+
+        OptionValue.Builder<T[]> toOptionValueBuilder() {
+            final var builder = OptionValue.<T[]>build().spec(createOptionSpec());
+            defaultValue().ifPresent(builder::defaultValue);
+            return builder;
+        }
+
+        OptionSpec<T[]> createOptionSpec() {
+            final OptionSpec.MergePolicy mergePolicy = OptionSpec.MergePolicy.CONCATENATE;
+            return new OptionSpec<>(names(), createConverter(), scope, createValidator(), mergePolicy);
+        }
+
+        ArrayOptionSpecBuilder defaultValue(T[] v) {
+            arrayDefaultValue = v;
+            return this;
+        }
+
+        ArrayOptionSpecBuilder validatorExceptionFormatString(String v) {
+            OptionSpecBuilder2.this.validatorExceptionFormatString(v);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder converterExceptionFormatString(String v) {
+            OptionSpecBuilder2.this.converterExceptionFormatString(v);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder validatorExceptionFactory(OptionValueExceptionFactory<? extends Exception> v) {
+            OptionSpecBuilder2.this.validatorExceptionFactory(v);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder converterExceptionFactory(OptionValueExceptionFactory<? extends RuntimeException> v) {
+            OptionSpecBuilder2.this.converterExceptionFactory(v);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder exceptionFormatString(String v) {
+            OptionSpecBuilder2.this.exceptionFormatString(v);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder exceptionFactory(OptionValueExceptionFactory<? extends RuntimeException> v) {
+            OptionSpecBuilder2.this.exceptionFactory(v);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder converter(ValueConverter<T> v) {
+            OptionSpecBuilder2.this.converter(v);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder converter(Function<String, T> v) {
+            OptionSpecBuilder2.this.converter(v);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder validator(Predicate<T> v) {
+            OptionSpecBuilder2.this.validator(v);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder validator(Consumer<T> v) {
+            OptionSpecBuilder2.this.validator(v);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder validator(UnaryOperator<Validator.Builder<T, Exception>> modifier) {
+            OptionSpecBuilder2.this.validator(modifier);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder withoutConverter() {
+            OptionSpecBuilder2.this.withoutConverter();
+            return this;
+        }
+
+        ArrayOptionSpecBuilder withoutValidator() {
+            OptionSpecBuilder2.this.withoutValidator();
+            return this;
+        }
+
+        ArrayOptionSpecBuilder name(String v) {
+            OptionSpecBuilder2.this.name(v);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder shortName(String v) {
+            OptionSpecBuilder2.this.shortName(v);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder scope(OptionScope... v) {
+            OptionSpecBuilder2.this.scope(v);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder scope(Collection<? extends OptionScope> v) {
+            OptionSpecBuilder2.this.scope(v);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder scope(UnaryOperator<Set<OptionScope>> modifier) {
+            OptionSpecBuilder2.this.scope(modifier);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder enhanceScope(OptionScope... v) {
+            OptionSpecBuilder2.this.enhanceScope(v);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder enhanceScope(Collection<? extends OptionScope> v) {
+            OptionSpecBuilder2.this.enhanceScope(v);
+            return this;
+        }
+
+        private Optional<OptionValueConverter<T[]>> createConverter() {
+            return converterBuilder.converter().map(c -> {
+                return StandardValueConverter.toArray(c, splitter);
+            }).map(converterBuilder::convert).map(OptionValueConverter.Builder::create);
+        }
+
+        private Optional<Validator<T[], ? extends Exception>> createValidator() {
+            if (validatorBuilder.hasValidatingMethod()) {
+                return Optional.of(validatorBuilder.createArray());
+            } else {
+                return Optional.empty();
+            }
+        }
+
+        private Optional<T[]> defaultValue() {
+            return Optional.ofNullable(arrayDefaultValue).or(() -> {
+                return OptionSpecBuilder2.this.defaultValue().map(v -> {
+                    @SuppressWarnings("unchecked")
+                    final var arr = (T[])Array.newInstance(valueType, 1);
+                    arr[0] = v;
+                    return arr;
+                });
+            });
+        }
+
+        private T[] arrayDefaultValue;
+        private final Function<String, String[]> splitter;
+    }
+
+
     OptionValue<T> create() {
         return toOptionValueBuilder().create();
     }
@@ -72,46 +234,25 @@ final class OptionSpecBuilder2<T> {
     }
 
     OptionSpec<T> createOptionSpec() {
-        final OptionSpec.MergePolicy mergePolicy;
-        if (converterBuilder.converter().map(ValueConverter::valueType).map(Class::isArray).orElse(false)) {
-            mergePolicy = OptionSpec.MergePolicy.CONCATENATE;
-        } else {
-            mergePolicy = OptionSpec.MergePolicy.USE_LAST;
-        }
-
+        final OptionSpec.MergePolicy mergePolicy = OptionSpec.MergePolicy.USE_LAST;
         return new OptionSpec<>(names(), createConverter(), scope, createValidator(), mergePolicy);
     }
 
-    OptionSpecBuilder2<T[]> toArray(String splitRegexp) {
+    ArrayOptionSpecBuilder toArray(String splitRegexp) {
         Objects.requireNonNull(splitRegexp);
         return toArray(str -> {
             return str.split(splitRegexp);
         });
     }
 
-    OptionSpecBuilder2<T[]> toArray() {
+    ArrayOptionSpecBuilder toArray() {
         return toArray(str -> {
             return new String[] { str };
         });
     }
 
-    OptionSpecBuilder2<T[]> toArray(Function<String, String[]> conv) {
-        if (valueType.isArray()) {
-            // Multi-dimension arrays not supported.
-            throw new UnsupportedOperationException();
-        }
-
-        @SuppressWarnings("unchecked")
-        final OptionSpecBuilder2<T[]> copy = create((Class<? extends T[]>)valueType.arrayType());
-
-        copy.name = name;
-        copy.shortName = shortName;
-        copy.scope = scope;
-        copy.converterBuilder = converterBuilder.convert(converterBuilder.converter().map(v -> {
-            return StandardValueConverter.toArray(v, conv);
-        }).orElse(null));
-
-        return copy;
+    ArrayOptionSpecBuilder toArray(Function<String, String[]> conv) {
+        return new ArrayOptionSpecBuilder(conv);
     }
 
     OptionSpecBuilder2<T> validatorExceptionFormatString(String v) {

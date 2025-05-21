@@ -24,13 +24,18 @@
  */
 package jdk.jpackage.internal.cli;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+import java.util.stream.Stream;
 
-record Validator<T, U extends Exception>(Optional<Predicate<T>> predicate, Optional<Consumer<T>> consumer,
-        String formatString, OptionValueExceptionFactory<? extends U> exceptionFactory) {
+@FunctionalInterface
+interface Validator<T, U extends Exception> {
+
+    List<U> validate(OptionName optionName, ParsedValue<T> optionValue);
 
     /**
      * Thrown to indicate that the given value didn't pass validation.
@@ -72,44 +77,6 @@ record Validator<T, U extends Exception>(Optional<Predicate<T>> predicate, Optio
     }
 
 
-    Validator {
-        Objects.requireNonNull(predicate);
-        Objects.requireNonNull(consumer);
-        if (predicate.isEmpty() == consumer.isEmpty()) {
-            throw new IllegalArgumentException("Either consumer or predicate must be non-empty");
-        }
-        Objects.requireNonNull(formatString);
-        Objects.requireNonNull(exceptionFactory);
-    }
-
-    Optional<U> validate(OptionName optionName, ParsedValue<T> optionValue) {
-        Objects.requireNonNull(optionName);
-        Objects.requireNonNull(optionValue);
-
-        try {
-            return predicate.flatMap(validator -> {
-                if (validator.test(optionValue.value())) {
-                    return Optional.empty();
-                } else {
-                    return Optional.of((U)exceptionFactory.create(optionName, optionValue.sourceString(), formatString));
-                }
-            }).or(() -> {
-                return consumer.flatMap(validator -> {
-                    try {
-                        validator.accept(optionValue.value());
-                        return Optional.empty();
-                    } catch (ValidatingConsumerException ex) {
-                        return Optional.of((U)exceptionFactory.create(optionName, optionValue.sourceString(), formatString, ex.getCause()));
-                    }
-                });
-            });
-        } catch (ValidatorException ex) {
-            throw ex;
-        } catch (Exception ex) {
-            throw new ValidatorException(ex);
-        }
-    }
-
     static <T, U extends Exception> Builder<T, U> build() {
         return new Builder<>();
     }
@@ -119,10 +86,15 @@ record Validator<T, U extends Exception>(Optional<Predicate<T>> predicate, Optio
         return builder.exceptionFactory(exceptionFactory);
     }
 
+
     static final class Builder<T, U extends Exception> {
 
         Validator<T, U> create() {
-            return new Validator<>(Optional.ofNullable(predicate), Optional.ofNullable(consumer), formatString, exceptionFactory);
+            return new Details.ScalarValidator<>(Optional.ofNullable(predicate), Optional.ofNullable(consumer), formatString, exceptionFactory);
+        }
+
+        Validator<T[], U> createArray() {
+            return new Details.ArrayValidator<>(create());
         }
 
         Builder<T, U> predicate(Predicate<T> v) {
@@ -172,4 +144,77 @@ record Validator<T, U extends Exception>(Optional<Predicate<T>> predicate, Optio
         private String formatString;
         private OptionValueExceptionFactory<? extends U> exceptionFactory;
     }
+
+
+    final static class Details {
+        private record ScalarValidator<T, U extends Exception>(Optional<Predicate<T>> predicate, Optional<Consumer<T>> consumer,
+                String formatString, OptionValueExceptionFactory<? extends U> exceptionFactory) implements Validator<T, U> {
+
+            ScalarValidator {
+                Objects.requireNonNull(predicate);
+                Objects.requireNonNull(consumer);
+                if (predicate.isEmpty() == consumer.isEmpty()) {
+                    throw new IllegalArgumentException("Either consumer or predicate must be non-empty");
+                }
+                Objects.requireNonNull(formatString);
+                Objects.requireNonNull(exceptionFactory);
+            }
+
+            @Override
+            public List<U> validate(OptionName optionName, ParsedValue<T> optionValue) {
+                Objects.requireNonNull(optionName);
+                Objects.requireNonNull(optionValue);
+
+                try {
+                    return predicate.map(validator -> {
+                        if (validator.test(optionValue.value())) {
+                            return List.<U>of();
+                        } else {
+                            return List.of((U)exceptionFactory.create(optionName, optionValue.sourceString(), formatString));
+                        }
+                    }).or(() -> {
+                        return consumer.map(validator -> {
+                            try {
+                                validator.accept(optionValue.value());
+                                return List.of();
+                            } catch (ValidatingConsumerException ex) {
+                                return List.of((U)exceptionFactory.create(optionName, optionValue.sourceString(), formatString, ex.getCause()));
+                            }
+                        });
+                    }).orElseThrow();
+                } catch (ValidatorException ex) {
+                    throw ex;
+                } catch (Exception ex) {
+                    throw new ValidatorException(ex);
+                }
+            }
+        }
+
+
+        private record ArrayValidator<T, U extends Exception>(Validator<T, U> elementValidator) implements Validator<T[], U> {
+            ArrayValidator {
+                Objects.requireNonNull(elementValidator);
+            }
+
+            @Override
+            public List<U> validate(OptionName optionName, ParsedValue<T[]> optionValue) {
+                return Stream.of(optionValue.value()).map(v -> {
+                    return elementValidator.validate(optionName, new ParsedValue<>() {
+
+                        @Override
+                        public String sourceString() {
+                            return optionValue.sourceString();
+                        }
+
+                        @Override
+                        public T value() {
+                            return v;
+                        }
+
+                    });
+                }).flatMap(Collection::stream).toList();
+            }
+        }
+    }
 }
+

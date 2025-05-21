@@ -358,12 +358,12 @@ final class JOptSimpleOptionsBuilder {
             Objects.requireNonNull(sourceString);
         }
 
-        <U extends Exception> Optional<U> validate(Validator<T, U> validator) {
+        <U extends Exception> List<U> validate(Validator<T, U> validator) {
             return validator.validate(name, this);
         }
 
         @SuppressWarnings("unchecked")
-        <U extends Exception> Optional<U> validateCastUnchecked(Validator<?, U> validator) {
+        <U extends Exception> List<U> validateCastUnchecked(Validator<?, U> validator) {
             return validate((Validator<T, U>)validator);
         }
     }
@@ -393,11 +393,11 @@ final class JOptSimpleOptionsBuilder {
             for (final var e : values.entrySet()) {
                 final var option = e.getKey();
                 final var mainSpec = option.getSpec();
-                mainSpec.valueValidator().map(validator -> {
-                    return e.getValue().stream().map(optionWithValue -> {
+                mainSpec.valueValidator().ifPresent(validator -> {
+                    e.getValue().stream().map(optionWithValue -> {
                         return optionWithValue.validateCastUnchecked(validator);
-                    }).filter(Optional::isPresent).map(Optional::orElseThrow).toList();
-                }).ifPresent(errors::addAll);
+                    }).forEach(errors::addAll);
+                });
             }
 
             if (errors.isEmpty()) {
