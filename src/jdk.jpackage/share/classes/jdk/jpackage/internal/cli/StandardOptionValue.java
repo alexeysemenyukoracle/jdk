@@ -25,6 +25,9 @@
 package jdk.jpackage.internal.cli;
 
 import static java.util.stream.Collectors.toSet;
+import static jdk.jpackage.internal.cli.OptionSpecBuilder2.pathSeparator;
+import static jdk.jpackage.internal.cli.OptionSpecBuilder2.toList;
+import static jdk.jpackage.internal.cli.OptionValueExceptionFactory.UNREACHABLE_EXCEPTION_FACTORY;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.CREATE_APP_IMAGE;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.CREATE_BUNDLE;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.CREATE_MAC_PKG;
@@ -32,6 +35,9 @@ import static jdk.jpackage.internal.cli.StandardBundlingOperation.CREATE_NATIVE;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.MAC_SIGNING;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.SIGN_MAC_APP_IMAGE;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.fromOptionName;
+import static jdk.jpackage.internal.cli.StandardValidator.isDirectoryEmptyOrNonExistant;
+import static jdk.jpackage.internal.cli.StandardValueConverter.identityConv;
+import static jdk.jpackage.internal.cli.StandardValueConverter.pathConv;
 import static jdk.jpackage.internal.util.function.ThrowingFunction.toFunction;
 
 import java.lang.reflect.Modifier;
@@ -42,6 +48,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -60,50 +67,50 @@ public final class StandardOptionValue {
     private static final OptionValueExceptionFactory<ConfigException> ERROR_WITH_OPTION_NAME_AND_VALUE =
             OptionValueExceptionFactory.build(ConfigException::new).formatArgumentsTransformer(StandardArgumentsMapper.NAME_AND_VALUE).create();
 
-    public final static OptionValue<PackageType> TYPE = build("type").shortName("t")
-            .convert().exceptionFactory(ERROR_WITH_VALUE).formatString("ERR_InvalidInstallerType")
-            .converter(ValueConverter.create(value -> {
+    public final static OptionValue<PackageType> TYPE = option("type", PackageType.class).shortName("t")
+            .converterExceptionFactory(ERROR_WITH_VALUE).converterExceptionFormatString("ERR_InvalidInstallerType")
+            .converter(value -> {
                 Objects.requireNonNull(value);
                 return Stream.of(StandardBundlingOperation.values()).filter(bundlingOperation -> {
                     return bundlingOperation.packageTypeValue().equals(value);
                 }).map(StandardBundlingOperation::packageType).findFirst().orElseThrow(IllegalArgumentException::new);
-            }, PackageType.class)).createOptionValue();
+            }).create();
 
-    public final static OptionValue<Path> INPUT = build("input", CREATE_APP_IMAGE).shortName("i").ofDirectory();
+    public final static OptionValue<Path> INPUT = directoryOption("input").scope(CREATE_APP_IMAGE).shortName("i").create();
 
-    public final static OptionValue<Path> DEST = build("dest").shortName("d").ofDirectory();
+    public final static OptionValue<Path> DEST = directoryOption("dest").shortName("d").create();
 
-    public final static OptionValue<String> DESCRIPTION = build("description").ofString();
+    public final static OptionValue<String> DESCRIPTION = stringOption("description").create();
 
-    public final static OptionValue<String> VENDOR = build("vendor").ofString();
+    public final static OptionValue<String> VENDOR = stringOption("vendor").create();
 
-    public final static OptionValue<String> APPCLASS = build("main-class").ofString();
+    public final static OptionValue<String> APPCLASS = stringOption("main-class").create();
 
-    public final static OptionValue<String> NAME = build("name").shortName("n").ofString();
+    public final static OptionValue<String> NAME = stringOption("name").shortName("n").create();
 
-    public final static OptionValue<Boolean> VERBOSE = build("verbose").noValue();
+    public final static OptionValue<Boolean> VERBOSE = booleanOption("verbose").create();
 
-    public final static OptionValue<Path> RESOURCE_DIR = build("resource-dir").enhanceScope(CREATE_BUNDLE).enhanceScope(MAC_SIGNING).ofDirectory();
+    public final static OptionValue<Path> RESOURCE_DIR = directoryOption("resource-dir").enhanceScope(CREATE_BUNDLE).enhanceScope(MAC_SIGNING).create();
 
-    public final static OptionValue<List<String>> ARGUMENTS = build("arguments").convert().split(stringListTokenizer()).toStringArray().toOptionValueBuilder().to(List::of).create();
+    public final static OptionValue<List<String>> ARGUMENTS = stringOption("arguments").toArray(stringListTokenizer()).create(toList());
 
-    public final static OptionValue<List<String>> JLINK_OPTIONS = build("jlink-options").convert().split(stringListTokenizer()).toStringArray().toOptionValueBuilder().to(List::of).create();
+    public final static OptionValue<List<String>> JLINK_OPTIONS = stringOption("jlink-options").toArray(stringListTokenizer()).create(toList());
 
-    public final static OptionValue<Path> ICON = build("icon").ofPath();
+    public final static OptionValue<Path> ICON = pathOption("icon").create();
 
-    public final static OptionValue<String> COPYRIGHT = build("copyright").ofString();
+    public final static OptionValue<String> COPYRIGHT = stringOption("copyright").create();
 
-    public final static OptionValue<Path> LICENSE_FILE = build("license-file").ofPath();
+    public final static OptionValue<Path> LICENSE_FILE = pathOption("license-file").create();
 
-    public final static OptionValue<String> VERSION = build("app-version").ofString();
+    public final static OptionValue<String> VERSION = stringOption("app-version").create();
 
-    public final static OptionValue<String> ABOUT_URL = build("about-url").validate().isUrl().ofString();
+    public final static OptionValue<String> ABOUT_URL = urlOption("about-url").create();
 
-    public final static OptionValue<List<String>> JAVA_OPTIONS = build("java-options").convert().split(stringListTokenizer()).toStringArray().toOptionValueBuilder().to(List::of).create();
+    public final static OptionValue<List<String>> JAVA_OPTIONS = stringOption("java-options").toArray(stringListTokenizer()).create(toList());
 
-    public final static OptionValue<List<Path>> APP_CONTENT = build("app-content").ofPathList();
+    public final static OptionValue<List<Path>> APP_CONTENT = pathOption("app-content").toArray(pathSeparator()).create(toList());
 
-    public final static OptionValue<List<Path>> FILE_ASSOCIATIONS = build("file-associations").ofPathList();
+    public final static OptionValue<List<Path>> FILE_ASSOCIATIONS = pathOption("file-associations").toArray(pathSeparator()).create(toList());
 
     private final static class IllegalAddLauncherSyntaxException extends IllegalArgumentException {
 
@@ -113,9 +120,8 @@ public final class StandardOptionValue {
         private static final long serialVersionUID = 1L;
     }
 
-    public final static OptionValue<List<AdditionalLauncher>> ADD_LAUNCHER = build("add-launcher")
-            .convert().formatString("")
-            .exceptionFactory(new OptionValueExceptionFactory<>() {
+    public final static OptionValue<List<AdditionalLauncher>> ADD_LAUNCHER = option("add-launcher", AdditionalLauncher.class)
+            .converterExceptionFactory(new OptionValueExceptionFactory<>() {
                 @Override
                 public ConfigException create(OptionName optionName, String optionValue, String formatString) {
                     throw new UnsupportedOperationException();
@@ -129,103 +135,107 @@ public final class StandardOptionValue {
                         return ERROR_WITH_VALUE_AND_OPTION_NAME.create(optionName, optionValue, "error.paramater-add-launcher-not-path", cause);
                     }
                 }
-            }).converter(ValueConverter.create(value -> {
+            }).converter(value -> {
                 var components = value.split("=", 2);
                 if (components.length != 2) {
                     throw new IllegalAddLauncherSyntaxException();
                 }
-                return new AdditionalLauncher[] { new AdditionalLauncher(components[0], StandardValueConverter.pathConv().convert(components[1])) };
-            }, AdditionalLauncher[].class)).toOptionValueBuilder().to(List::of).defaultValue(List.of()).create();
+                return new AdditionalLauncher(components[0], StandardValueConverter.pathConv().convert(components[1]));
+            }).toOptionValueBuilder().to(List::of).defaultValue(List.of()).create();
 
-    public final static OptionValue<Path> TEMP_ROOT = build("temp").convert().toPath().validate().exceptionFactory(ERROR_WITH_VALUE).formatString("ERR_BuildRootInvalid").isDirectoryEmptyOrNonExistant().createOptionValue();
+    public final static OptionValue<Path> TEMP_ROOT = pathOption("temp")
+            .validatorExceptionFactory(ERROR_WITH_VALUE)
+            .validatorExceptionFormatString("ERR_BuildRootInvalid")
+            .validator(isDirectoryEmptyOrNonExistant())
+            .create();
 
-    public final static OptionValue<Path> INSTALL_DIR = build("install-dir").ofPath();
+    public final static OptionValue<Path> INSTALL_DIR = pathOption("install-dir").create();
 
-    public final static OptionValue<Path> PREDEFINED_APP_IMAGE = build("app-image").enhanceScope(CREATE_NATIVE).enhanceScope(SIGN_MAC_APP_IMAGE).ofDirectory();
+    public final static OptionValue<Path> PREDEFINED_APP_IMAGE = directoryOption("app-image").enhanceScope(CREATE_NATIVE).enhanceScope(SIGN_MAC_APP_IMAGE).create();
 
-    public final static OptionValue<Path> PREDEFINED_RUNTIME_IMAGE = build("runtime-image").ofDirectory();
+    public final static OptionValue<Path> PREDEFINED_RUNTIME_IMAGE = directoryOption("runtime-image").create();
 
-    public final static OptionValue<Path> MAIN_JAR = build("main-jar").ofPath();
+    public final static OptionValue<Path> MAIN_JAR = pathOption("main-jar").create();
 
-    public final static OptionValue<String> MODULE = build("module").shortName("m").ofString();
+    public final static OptionValue<String> MODULE = stringOption("module").shortName("m").create();
 
-    public final static OptionValue<List<String>> ADD_MODULES = build("add-modules").convert().split(",").toStringArray().toOptionValueBuilder().to(List::of).create();
+    public final static OptionValue<List<String>> ADD_MODULES = stringOption("add-modules").toArray(",").create(toList());
 
-    public final static OptionValue<List<Path>> MODULE_PATH = build("module-path").ofPathList();
+    public final static OptionValue<List<Path>> MODULE_PATH = pathOption("module-path").toArray(pathSeparator()).create(toList());
 
-    public final static OptionValue<Boolean> LAUNCHER_AS_SERVICE = build("launcher-as-service").noValue();
+    public final static OptionValue<Boolean> LAUNCHER_AS_SERVICE = booleanOption("launcher-as-service").create();
 
     //
     // Linux-specific
     //
 
-    public final static OptionValue<String> LINUX_RELEASE = build("linux-app-release", CREATE_NATIVE).ofString();
+    public final static OptionValue<String> LINUX_RELEASE = stringOption("linux-app-release").scope(limitScope(CREATE_NATIVE)).create();
 
-    public final static OptionValue<String> LINUX_BUNDLE_NAME = build("linux-package-name", CREATE_NATIVE).ofString();
+    public final static OptionValue<String> LINUX_BUNDLE_NAME = stringOption("linux-package-name").scope(limitScope(CREATE_NATIVE)).create();
 
-    public final static OptionValue<String> LINUX_DEB_MAINTAINER = build("linux-deb-maintainer", CREATE_NATIVE).ofString();
+    public final static OptionValue<String> LINUX_DEB_MAINTAINER = stringOption("linux-deb-maintainer").create();
 
-    public final static OptionValue<String> LINUX_CATEGORY = build("linux-app-category", CREATE_NATIVE).ofString();
+    public final static OptionValue<String> LINUX_CATEGORY = stringOption("linux-app-category").scope(limitScope(CREATE_NATIVE)).create();
 
-    public final static OptionValue<String> LINUX_RPM_LICENSE_TYPE = build("linux-rpm-license-type", CREATE_NATIVE).ofString();
+    public final static OptionValue<String> LINUX_RPM_LICENSE_TYPE = stringOption("linux-rpm-license-type").scope(limitScope(CREATE_NATIVE)).create();
 
-    public final static OptionValue<String> LINUX_PACKAGE_DEPENDENCIES = build("linux-package-deps", CREATE_NATIVE).ofString();
+    public final static OptionValue<String> LINUX_PACKAGE_DEPENDENCIES = stringOption("linux-package-deps").scope(limitScope(CREATE_NATIVE)).create();
 
-    public final static OptionValue<Boolean> LINUX_SHORTCUT_HINT = build("linux-shortcut", CREATE_NATIVE).noValue();
+    public final static OptionValue<Boolean> LINUX_SHORTCUT_HINT = booleanOption("linux-shortcut").scope(limitScope(CREATE_NATIVE)).create();
 
-    public final static OptionValue<String> LINUX_MENU_GROUP = build("linux-menu-group", CREATE_NATIVE).ofString();
+    public final static OptionValue<String> LINUX_MENU_GROUP = stringOption("linux-menu-group").scope(limitScope(CREATE_NATIVE)).create();
 
     //
     // MacOS-specific
     //
 
-    public final static OptionValue<List<Path>> MAC_DMG_CONTENT = build("mac-dmg-content").ofPathArray().to(List::of).defaultValue(List.of()).create();
+    public final static OptionValue<List<Path>> MAC_DMG_CONTENT = pathOption("mac-dmg-content").toArray(pathSeparator()).create(toList());
 
-    public final static OptionValue<Boolean> MAC_SIGN = build("mac-sign").scope(MAC_SIGNING).shortName("s").noValue();
+    public final static OptionValue<Boolean> MAC_SIGN = booleanOption("mac-sign").scope(MAC_SIGNING).shortName("s").create();
 
-    public final static OptionValue<Boolean> MAC_APP_STORE = build("mac-app-store").scope(MAC_SIGNING).noValue();
+    public final static OptionValue<Boolean> MAC_APP_STORE = booleanOption("mac-app-store").scope(MAC_SIGNING).create();
 
-    public final static OptionValue<String> MAC_CATEGORY = build("mac-app-category").ofString();
+    public final static OptionValue<String> MAC_CATEGORY = stringOption("mac-app-category").create();
 
-    public final static OptionValue<String> MAC_BUNDLE_NAME = build("mac-package-name").ofString();
+    public final static OptionValue<String> MAC_BUNDLE_NAME = stringOption("mac-package-name").create();
 
-    public final static OptionValue<String> MAC_BUNDLE_IDENTIFIER = build("mac-package-identifier").ofString();
+    public final static OptionValue<String> MAC_BUNDLE_IDENTIFIER = stringOption("mac-package-identifier").create();
 
-    public final static OptionValue<String> MAC_BUNDLE_SIGNING_PREFIX = build("mac-package-signing-prefix").scope(MAC_SIGNING).ofString();
+    public final static OptionValue<String> MAC_BUNDLE_SIGNING_PREFIX = stringOption("mac-package-signing-prefix").scope(MAC_SIGNING).create();
 
-    public final static OptionValue<String> MAC_SIGNING_KEY_NAME = build("mac-signing-key-user-name").scope(MAC_SIGNING).ofString();
+    public final static OptionValue<String> MAC_SIGNING_KEY_NAME = stringOption("mac-signing-key-user-name").scope(MAC_SIGNING).create();
 
-    public final static OptionValue<String> MAC_APP_IMAGE_SIGN_IDENTITY = build("mac-app-image-sign-identity").scope(MAC_SIGNING).ofString();
+    public final static OptionValue<String> MAC_APP_IMAGE_SIGN_IDENTITY = stringOption("mac-app-image-sign-identity").scope(MAC_SIGNING).create();
 
-    public final static OptionValue<String> MAC_INSTALLER_SIGN_IDENTITY = build("mac-installer-sign-identity").scope(CREATE_MAC_PKG).ofString();
+    public final static OptionValue<String> MAC_INSTALLER_SIGN_IDENTITY = stringOption("mac-installer-sign-identity").scope(CREATE_MAC_PKG).create();
 
-    public final static OptionValue<Path> MAC_SIGNING_KEYCHAIN = build("mac-signing-keychain").scope(MAC_SIGNING).ofPath();
+    public final static OptionValue<Path> MAC_SIGNING_KEYCHAIN = pathOption("mac-signing-keychain").scope(MAC_SIGNING).create();
 
-    public final static OptionValue<Path> MAC_ENTITLEMENTS = build("mac-entitlements").scope(MAC_SIGNING).ofPath();
+    public final static OptionValue<Path> MAC_ENTITLEMENTS = pathOption("mac-entitlements").scope(MAC_SIGNING).create();
 
     //
     // Windows-specific
     //
 
-    public final static OptionValue<String> WIN_HELP_URL = build("win-help-url", CREATE_NATIVE).validate().isUrl().ofString();
+    public final static OptionValue<String> WIN_HELP_URL = stringOption("win-help-url").scope(limitScope(CREATE_NATIVE)).create();
 
-    public final static OptionValue<String> WIN_UPDATE_URL = build("win-update-url", CREATE_NATIVE).validate().isUrl().ofString();
+    public final static OptionValue<String> WIN_UPDATE_URL = stringOption("win-update-url").scope(limitScope(CREATE_NATIVE)).create();
 
-    public final static OptionValue<Boolean> WIN_MENU_HINT = build("win-menu", CREATE_NATIVE).noValue();
+    public final static OptionValue<Boolean> WIN_MENU_HINT = booleanOption("win-menu").scope(limitScope(CREATE_NATIVE)).create();
 
-    public final static OptionValue<String> WIN_MENU_GROUP = build("win-menu-group", CREATE_NATIVE).ofString();
+    public final static OptionValue<String> WIN_MENU_GROUP = stringOption("win-menu-group").scope(limitScope(CREATE_NATIVE)).create();
 
-    public final static OptionValue<Boolean> WIN_SHORTCUT_HINT = build("win-shortcut", CREATE_NATIVE).noValue();
+    public final static OptionValue<Boolean> WIN_SHORTCUT_HINT = booleanOption("win-shortcut").scope(limitScope(CREATE_NATIVE)).create();
 
-    public final static OptionValue<Boolean> WIN_SHORTCUT_PROMPT = build("win-shortcut-prompt", CREATE_NATIVE).noValue();
+    public final static OptionValue<Boolean> WIN_SHORTCUT_PROMPT = booleanOption("win-shortcut-prompt").scope(limitScope(CREATE_NATIVE)).create();
 
-    public final static OptionValue<Boolean> WIN_PER_USER_INSTALLATION = build("win-per-user-install", CREATE_NATIVE).noValue();
+    public final static OptionValue<Boolean> WIN_PER_USER_INSTALLATION = booleanOption("win-per-user-install").scope(limitScope(CREATE_NATIVE)).create();
 
-    public final static OptionValue<Boolean> WIN_DIR_CHOOSER = build("win-dir-chooser", CREATE_NATIVE).noValue();
+    public final static OptionValue<Boolean> WIN_DIR_CHOOSER = booleanOption("win-dir-chooser").scope(limitScope(CREATE_NATIVE)).create();
 
-    public final static OptionValue<String> WIN_UPGRADE_UUID = build("win-upgrade-uuid", CREATE_NATIVE).ofString();
+    public final static OptionValue<String> WIN_UPGRADE_UUID = stringOption("win-upgrade-uuid").scope(limitScope(CREATE_NATIVE)).create();
 
-    public final static OptionValue<Boolean> WIN_CONSOLE_HINT = build("win-console").noValue();
+    public final static OptionValue<Boolean> WIN_CONSOLE_HINT = booleanOption("win-console").create();
 
     /**
      * Options in additional launcher .propertiy files.
@@ -257,35 +267,50 @@ public final class StandardOptionValue {
                 .collect(toSet());
     }
 
-    private static OptionSpecBuilder<String> build(String name) {
-        final OptionSpecBuilder<String> builder = OptionSpecBuilder.create();
-
-        builder.setConverterBuilder(Path.class, () -> {
-            return OptionValueConverter.build(Path.class).formatString("error.paramater-not-path").exceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME);
-        });
-        builder.setConverterBuilder(Path[].class, () -> {
-            return OptionValueConverter.build(Path[].class).formatString("error.paramater-not-path").exceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME);
-        });
-
-        builder.setValidatorBuilder(StandardValidator.IS_DIRECTORY, () -> {
-            return Validator.build(Path.class, ERROR_WITH_VALUE_AND_OPTION_NAME).formatString("error.paramater-not-directory");
-        });
-        builder.setValidatorBuilder(StandardValidator.IS_URL, () -> {
-            return Validator.build(String.class, ERROR_WITH_VALUE_AND_OPTION_NAME).formatString("error.paramater-not-url");
-        });
-
-        return builder.name(name).scope(fromOptionName(name));
+    private static <T> OptionSpecBuilder2<T> option(String name, Class<? extends T> valueType) {
+        return OptionSpecBuilder2.<T>create(valueType)
+                .name(Objects.requireNonNull(name))
+                .scope(fromOptionName(name))
+                .exceptionFactory(UNREACHABLE_EXCEPTION_FACTORY)
+                .exceptionFormatString("");
     }
 
-    private static OptionSpecBuilder<String> build(String name, Collection<? extends OptionScope> baselineScope) {
-        final var builder = build(name);
-        builder.scope().map(scope -> {
-            return scope.stream().filter(baselineScope::contains).collect(toSet());
-        }).ifPresent(builder::scope);
-        return builder;
+    private static OptionSpecBuilder2<String> stringOption(String name) {
+        return option(name, String.class).converter(identityConv());
     }
 
-    private static Function<String, String[]> stringListTokenizer() {
+    private static OptionSpecBuilder2<Path> pathOption(String name) {
+        return option(name, Path.class)
+                .converter(pathConv())
+                .converterExceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME)
+                .converterExceptionFormatString("error.paramater-not-path");
+    }
+
+    private static OptionSpecBuilder2<Path> directoryOption(String name) {
+        return pathOption(name)
+                .validator(StandardValidator.isDirectory())
+                .validatorExceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME)
+                .validatorExceptionFormatString("error.paramater-not-directory");
+    }
+
+    private static OptionSpecBuilder2<String> urlOption(String name) {
+        return stringOption(name)
+                .validator(StandardValidator.isUrl())
+                .validatorExceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME)
+                .validatorExceptionFormatString("error.paramater-not-url");
+    }
+
+    private static OptionSpecBuilder2<Boolean> booleanOption(String name) {
+        return option(name, Boolean.class).defaultValue(Boolean.FALSE);
+    }
+
+    private static UnaryOperator<Set<OptionScope>> limitScope(Collection<? extends OptionScope> maxScope) {
+        return scope -> {
+            return scope.stream().filter(maxScope::contains).collect(toSet());
+        };
+    }
+
+    static Function<String, String[]> stringListTokenizer() {
         return str -> {
             return Arguments.getArgumentList(str).toArray(String[]::new);
         };

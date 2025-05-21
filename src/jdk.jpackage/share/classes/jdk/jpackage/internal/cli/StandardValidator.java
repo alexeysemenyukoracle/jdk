@@ -30,14 +30,33 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import jdk.jpackage.internal.cli.Validator.ValidatingConsumer;
-import jdk.jpackage.internal.cli.Validator.ValidatingPredicate;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
+import java.util.function.UnaryOperator;
 
 final class StandardValidator {
 
-    static final ValidatingPredicate<Path> IS_DIRECTORY = Files::isDirectory;
+    static <U extends Exception> UnaryOperator<Validator.Builder<Path, U>> isDirectory() {
+        return builder -> {
+            return builder.predicate(IS_DIRECTORY);
+        };
+    }
 
-    static final ValidatingPredicate<Path> IS_DIRECTORY_EMPTY_OR_NON_EXISTANT = path -> {
+    static <U extends Exception> UnaryOperator<Validator.Builder<Path, U>> isDirectoryEmptyOrNonExistant() {
+        return builder -> {
+            return builder.predicate(IS_DIRECTORY_EMPTY_OR_NON_EXISTANT);
+        };
+    }
+
+    static <U extends Exception> UnaryOperator<Validator.Builder<String, U>> isUrl() {
+        return builder -> {
+            return builder.consumer(IS_URL);
+        };
+    }
+
+    private static final Predicate<Path> IS_DIRECTORY = Files::isDirectory;
+
+    private static final Predicate<Path> IS_DIRECTORY_EMPTY_OR_NON_EXISTANT = path -> {
         if (!Files.exists(path)) {
             return true;
         } else if (Files.isDirectory(path)) {
@@ -51,23 +70,11 @@ final class StandardValidator {
         }
     };
 
-    static final ValidatingConsumer<String> IS_URL = url -> {
+    private static final Consumer<String> IS_URL = url -> {
         try {
             new URI(url);
         } catch (URISyntaxException ex) {
             throw new Validator.ValidatingConsumerException(ex);
         }
     };
-
-    static <U extends Exception> Validator.Builder<Path, U> isDirectory(Validator.Builder<Path, U> builder) {
-        return builder.predicate(IS_DIRECTORY);
-    }
-
-    static <U extends Exception> Validator.Builder<Path, U> isDirectoryEmptyOrNonExistant(Validator.Builder<Path, U> builder) {
-        return builder.predicate(IS_DIRECTORY_EMPTY_OR_NON_EXISTANT);
-    }
-
-    static <U extends Exception> Validator.Builder<String, U> isUrl(Validator.Builder<String, U> builder) {
-        return builder.consumer(IS_URL);
-    }
 }

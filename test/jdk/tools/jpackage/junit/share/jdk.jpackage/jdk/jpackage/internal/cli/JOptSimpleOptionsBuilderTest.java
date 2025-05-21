@@ -22,6 +22,10 @@
  */
 package jdk.jpackage.internal.cli;
 
+import static jdk.jpackage.internal.cli.OptionSpecBuilder2.toList;
+import static jdk.jpackage.internal.cli.OptionValueExceptionFactory.UNREACHABLE_EXCEPTION_FACTORY;
+import static jdk.jpackage.internal.cli.StandardValueConverter.identityConv;
+import static jdk.jpackage.internal.cli.StandardValueConverter.pathConv;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
@@ -35,7 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
@@ -104,26 +108,27 @@ public class JOptSimpleOptionsBuilderTest {
     }
 
     enum ShortNameTestCase {
-        LONG(hasLongOption().and(hasShortOption().negate()), addLongValue()),
-        SHORT(hasLongOption().negate().and(hasShortOption()), addShortValue()),
-        LONG_AND_SHORT(hasLongOption().and(hasShortOption()), addLongValue(), addShortValue()),
-        SHORT_AND_LONG(hasLongOption().and(hasShortOption()), addShortValue(), addLongValue()),
-        NONE(hasLongOption().negate().and(hasShortOption().negate()));
+        LONG(hasLongOption().and(hasShortOption().negate()), addLongOption()),
+        SHORT(hasLongOption().negate().and(hasShortOption()), addShortOption()),
+        LONG_AND_SHORT(hasLongOption().and(hasShortOption()), addLongOption(), addShortOption()),
+        SHORT_AND_LONG(hasLongOption().and(hasShortOption()), addShortOption(), addLongOption()),
+        NONE(hasLongOption().negate().and(hasShortOption().negate()))
+        ;
 
         @SafeVarargs
-        ShortNameTestCase(Predicate<Options> validator, Consumer<List<String>>... optionInitializers) {
-            this.optionInitializer = args -> {
+        ShortNameTestCase(Predicate<Options> validator, BiConsumer<Type, List<String>>... optionInitializers) {
+            this.optionInitializer = (type, args) -> {
                 for (final var optionInitializer : optionInitializers) {
-                    optionInitializer.accept(args);
+                    optionInitializer.accept(type, args);
                 }
             };
             this.validator = validator;
         }
 
-        void run(ParserMode parserMode) {
-            final var parser = createParser(parserMode, OV);
+        void run(Type type, ParserMode parserMode) {
+            final var parser = createParser(parserMode, type.optionValue);
             final List<String> args = new ArrayList<>();
-            optionInitializer.accept(args);
+            optionInitializer.accept(type, args);
             assertTrue(validator.test(parser.apply(args)));
         }
 
@@ -139,25 +144,41 @@ public class JOptSimpleOptionsBuilderTest {
             };
         }
 
-        private static Consumer<List<String>> addLongValue() {
-            return args -> {
-                args.addAll(List.of(LONG_NAME.formatForCommandLine(), FOO));
+        private static BiConsumer<Type, List<String>> addLongOption() {
+            return (type, args) -> {
+                args.add(LONG_NAME.formatForCommandLine());
+                type.valueInitializer.accept(FOO, args);
             };
         }
 
-        private static Consumer<List<String>> addShortValue() {
-            return args -> {
-                args.addAll(List.of(SHORT_NAME.formatForCommandLine(), BAR));
+        private static BiConsumer<Type, List<String>> addShortOption() {
+            return (type, args) -> {
+                args.add(SHORT_NAME.formatForCommandLine());
+                type.valueInitializer.accept(BAR, args);
             };
         }
 
-        private final Consumer<List<String>> optionInitializer;
+        private enum Type {
+            STRING(stringOption(LONG_NAME.name()).shortName(SHORT_NAME.name()).create(), (optionValue, args) -> {
+                args.add(optionValue);
+            }),
+            BOOLEAN(booleanOption(LONG_NAME.name()).shortName(SHORT_NAME.name()).create(), (optionValue, args) -> {}),
+            ;
+
+            Type(OptionValue<?> optionValue, BiConsumer<String, List<String>> valueInitializer) {
+                this.optionValue = Objects.requireNonNull(optionValue);
+                this.valueInitializer = Objects.requireNonNull(valueInitializer);
+            }
+
+            final OptionValue<?> optionValue;
+            final BiConsumer<String, List<String>> valueInitializer;
+        }
+
+        private final BiConsumer<Type, List<String>> optionInitializer;
         private final Predicate<Options> validator;
 
         private final static OptionName LONG_NAME = OptionName.of("input");
         private final static OptionName SHORT_NAME = OptionName.of("i");
-
-        private final static OptionValue<String> OV = build(LONG_NAME.name()).shortName(SHORT_NAME.name()).ofString();
 
         private final static String FOO = "foo";
         private final static String BAR = "bar";
@@ -165,8 +186,18 @@ public class JOptSimpleOptionsBuilderTest {
 
     @ParameterizedTest
     @EnumSource(ShortNameTestCase.class)
-    public void testShortName(ShortNameTestCase testCase) {
-        List.of(ParserMode.values()).forEach(testCase::run);
+    public void testShortNameString(ShortNameTestCase testCase) {
+        for (final var parserMode : ParserMode.values()) {
+            testCase.run(ShortNameTestCase.Type.STRING, parserMode);
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(ShortNameTestCase.class)
+    public void testShortNameBoolean(ShortNameTestCase testCase) {
+        for (final var parserMode : List.of(ParserMode.CONVERT)) {
+            testCase.run(ShortNameTestCase.Type.BOOLEAN, parserMode);
+        }
     }
 
     @ParameterizedTest
@@ -185,7 +216,7 @@ public class JOptSimpleOptionsBuilderTest {
     public void testConversionVsValidation(@TempDir Path tmpDir) {
         final var nonExistentDir = tmpDir.resolve("non-existent");
 
-        final var testSpec = build().addOptionValue(build("dir").ofDirectory(), nonExistentDir).addArgs("--dir", nonExistentDir.toString()).create();
+        final var testSpec = build().addOptionValue(directoryOption("dir").create(), nonExistentDir).addArgs("--dir", nonExistentDir.toString()).create();
 
         testSpec.test(ParserMode.CONVERT);
 
@@ -198,29 +229,25 @@ public class JOptSimpleOptionsBuilderTest {
         final var pwd = Path.of("").toAbsolutePath();
         return Stream.of(
                 build().addOptionValue(
-                        build("input").shortName("i").ofDirectory(),
+                        directoryOption("input").shortName("i").create(),
                         pwd
-                ).addArgs(
-                        "--input", "", "-i", pwd.toString()
-                ),
+                ).addArgs("--input", "", "-i", pwd.toString()),
 
                 build().addOptionValue(
-                        build("arguments").convert().split("\\s+").toStringArray().toOptionValueBuilder().to(List::of).create(),
+                        stringOption("arguments").toArray("\\s+").create(toList()),
                         List.of("", "a", "b", "c", "", "de")
-                ).addArgs(
-                        "--arguments", " a b  c", "--arguments", " de"
-                ),
+                ).addArgs("--arguments", " a b  c", "--arguments", " de"),
 
                 build().addOptionValue(
-                        build("arguments").convert().split(";+").toStringArray().toOptionValueBuilder().to(List::of).create(),
+                        stringOption("arguments").toArray(";+").create(toList()),
                         List.of("a b", "c", "de")
-                ).addArgs(
-                        "--arguments", "a b;;c", "--arguments", "de;"
-                ),
+                ).addArgs("--arguments", "a b;;c", "--arguments", "de;"),
 
-                build().addOptionValue(build("foo").ofString(), "--foo").addArgs("--foo", "--foo"),
+                build().addOptionValue(stringOption("foo").create(), "--foo").addArgs("--foo", "--foo"),
 
-                build().addOptionValue(build("foo").noValue(), true).addOptionValue(build("bar").noValue(), false).addArgs("--foo")
+                build().addArgs("--foo")
+                        .addOptionValue(booleanOption("foo").create(), true)
+                        .addOptionValue(booleanOption("bar").create(), false)
         ).map(TestSpec.Builder::create).toList();
     }
 
@@ -228,45 +255,62 @@ public class JOptSimpleOptionsBuilderTest {
         final var args = List.of("--foo", "1 22 333", "--foo", "44 44");
         return Stream.of(
                 build().addOptionValue(
-                        build("foo").convert().nosplit().toStringArray().createOptionValue(),
+                        stringOption("foo").toArray().create(),
                         new String[] { "1 22 333", "44 44" }
                 ).addArgs(args),
 
                 build().addOptionValue(
-                        build("foo").convert().nosplit().toStringArray().toOptionValueBuilder().to(List::of).create(),
+                        stringOption("foo").toArray().create(toList()),
                         List.of("1 22 333", "44 44")
                 ).addArgs(args),
 
                 build().addOptionValue(
-                        build("foo").convert().split("\\s+").toStringArray().createOptionValue(),
+                        stringOption("foo").toArray("\\s+").create(),
                         new String[] { "1", "22", "333", "44", "44" }
                 ).addArgs(args),
 
                 build().addOptionValue(
-                        build("foo").convert().split("\\s+").toStringArray().toOptionValueBuilder().to(List::of).create(),
+                        stringOption("foo").toArray("\\s+").create(toList()),
                         List.of("1", "22", "333", "44", "44")
                 ).addArgs(args)
         ).map(TestSpec.Builder::create).toList();
     }
 
-    private static OptionSpecBuilder<String> build(String optionName) {
-        final var builder = OptionSpecBuilder.create().name(optionName).scope(new BundlingOperationOptionScope() {});
+    private static <T> OptionSpecBuilder2<T> option(String name, Class<? extends T> valueType) {
+        return OptionSpecBuilder2.<T>create(valueType)
+                .name(Objects.requireNonNull(name))
+                .scope(new BundlingOperationOptionScope() {})
+                .exceptionFactory(UNREACHABLE_EXCEPTION_FACTORY)
+                .exceptionFormatString("");
+    }
 
-        builder.setConverterBuilder(Path.class, () -> {
-            return exceptionsForPathValues(OptionValueConverter.build(Path.class));
-        });
-        builder.setConverterBuilder(Path[].class, () -> {
-            return exceptionsForPathValues(OptionValueConverter.build(Path[].class));
-        });
+    private static OptionSpecBuilder2<String> stringOption(String name) {
+        return option(name, String.class).converter(identityConv());
+    }
 
-        builder.setValidatorBuilder(StandardValidator.IS_DIRECTORY, () -> {
-            return Validator.build(Path.class, ERROR_WITH_VALUE_AND_OPTION_NAME).formatString(FORMAT_STRING_NOT_DIRECTORY);
-        });
-        builder.setValidatorBuilder(StandardValidator.IS_URL, () -> {
-            return Validator.build(String.class, ERROR_WITH_VALUE_AND_OPTION_NAME).formatString(FORMAT_STRING_NOT_URL);
-        });
+    private static OptionSpecBuilder2<Path> pathOption(String name) {
+        return option(name, Path.class)
+                .converter(pathConv())
+                .converterExceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME)
+                .converterExceptionFormatString(FORMAT_STRING_ILLEGAL_PATH);
+    }
 
-        return builder;
+    private static OptionSpecBuilder2<Path> directoryOption(String name) {
+        return pathOption(name)
+                .validator(StandardValidator.isDirectory())
+                .validatorExceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME)
+                .validatorExceptionFormatString(FORMAT_STRING_NOT_DIRECTORY);
+    }
+
+    private static OptionSpecBuilder2<String> urlOption(String name) {
+        return stringOption(name)
+                .validator(StandardValidator.isUrl())
+                .validatorExceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME)
+                .validatorExceptionFormatString(FORMAT_STRING_NOT_URL);
+    }
+
+    private static OptionSpecBuilder2<Boolean> booleanOption(String name) {
+        return option(name, Boolean.class).defaultValue(Boolean.FALSE);
     }
 
     @SafeVarargs
@@ -301,10 +345,6 @@ public class JOptSimpleOptionsBuilderTest {
         return new TestSpec.Builder();
     }
 
-    private static <T> OptionValueConverter.Builder<T> exceptionsForPathValues(OptionValueConverter.Builder<T> builder) {
-        return builder.formatString(FORMAT_STRING_ILLEGAL_PATH).exceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME);
-    }
-
 
     final static class TestException extends RuntimeException {
 
@@ -314,7 +354,6 @@ public class JOptSimpleOptionsBuilderTest {
 
         private static final long serialVersionUID = 1L;
     }
-
 
 
     private final static String FORMAT_STRING_ILLEGAL_PATH = "The value '%s' provided for parameter %s is not a valid path";

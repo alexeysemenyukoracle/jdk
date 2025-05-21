@@ -32,7 +32,9 @@ import static java.util.stream.Collectors.toSet;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -235,8 +237,13 @@ final class JOptSimpleOptionsBuilder {
 
         UntypedOptions(OptionSet optionSet, Map<Option, List<? extends OptionSpec<?>>> optionMap) {
             this.optionSet = Objects.requireNonNull(optionSet);
-            this.optionMap = Objects.requireNonNull(optionMap);
-            optionNames = toOptionNameSet(optionMap.keySet());
+            optionNames = optionMap.keySet().stream().map(Option::getSpec).map(OptionSpec::names).flatMap(Collection::stream).filter(optionName -> {
+                return optionSet.has(optionName.name());
+            }).collect(toSet());
+            this.optionMap = optionMap.entrySet().stream().filter(e -> {
+                return !Collections.disjoint(optionNames, e.getKey().getSpec().names());
+            }).collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+            assertNoUnexpectedOptionNames(optionMap, optionNames);
         }
 
         UntypedOptions(UntypedOptions other, Collection<Option> excludes) {
@@ -262,13 +269,13 @@ final class JOptSimpleOptionsBuilder {
                         value.put(option, v);
                     });
                     result.errors().ifPresent(errors::addAll);
-                } else if (optionSet.has(mainSpec.name().name())) {
+                } else {
                     value.put(option, List.of());
                 }
             }
 
             if (errors.isEmpty()) {
-                return Result.ofValue(new TypedOptions(value));
+                return Result.ofValue(new TypedOptions(value, optionNames));
             } else {
                 return Result.ofErrors(errors);
             }
@@ -289,26 +296,29 @@ final class JOptSimpleOptionsBuilder {
 
         @Override
         public boolean contains(OptionName optionName) {
-            return optionNames.contains(optionName) && optionSet.has(optionName.name());
+            return optionNames.contains(optionName);
         }
 
-        public Optional<List<String>> findValues(OptionIdentifier id) {
+        private Optional<List<String>> findValues(OptionIdentifier id) {
             Objects.requireNonNull(id);
             final var optionSpecs = optionMap.get(id);
             if (optionSpecs == null) {
                 return Optional.empty();
             }
 
-            final var mainOptionSpec = ((Option)id).getSpec();
+            final var mainSpec = ((Option)id).getSpec();
 
-            final var values = mainOptionSpec.names().stream().map(OptionName::name).map(optionSet::valuesOf).filter(Predicate.not(List::isEmpty)).map(v -> {
+            final var values = mainSpec.names().stream().map(OptionName::name).map(optionSet::valuesOf).filter(Predicate.not(List::isEmpty)).map(v -> {
                 return v.stream().map(String.class::cast);
             }).flatMap(x -> x).toList();
 
             if (!values.isEmpty()) {
-                return Optional.of(getOptionValue(values, mainOptionSpec.mergePolicy()));
+                return Optional.of(getOptionValue(values, mainSpec.mergePolicy()));
+            } else if (mainSpec.names().stream().anyMatch(this::contains)) {
+                // "id" references an option without a value and it was recognized on the command line.
+                return Optional.of(List.of());
             } else {
-                return mainOptionSpec.names().stream().map(OptionName::name).filter(optionSet::has).findFirst().map(_ -> List.of());
+                return Optional.empty();
             }
         }
 
@@ -361,15 +371,16 @@ final class JOptSimpleOptionsBuilder {
 
     private final static class TypedOptions implements Options {
 
-        TypedOptions(Map<Option, List<? extends OptionWithValue<?>>> values) {
+        TypedOptions(Map<Option, List<? extends OptionWithValue<?>>> values, Set<OptionName> optionNames) {
             this.values = Objects.requireNonNull(values);
-            optionNames = toOptionNameSet(values.keySet());
+            this.optionNames = Objects.requireNonNull(optionNames);
+            assertNoUnexpectedOptionNames(values, optionNames);
         }
 
         TypedOptions(TypedOptions other, Collection<Option> excludes) {
             this(other.values.entrySet().stream().filter(e -> {
                 return !excludes.contains(e.getKey());
-            }).collect(toMap(Map.Entry::getKey, Map.Entry::getValue)));
+            }).collect(toMap(Map.Entry::getKey, Map.Entry::getValue)), applyExcludes(other.optionNames, excludes));
         }
 
         TypedOptions excludeOptions(Collection<Option> excludes) {
@@ -392,7 +403,7 @@ final class JOptSimpleOptionsBuilder {
             if (errors.isEmpty()) {
                 return Result.ofValue(new ValidatedOptions(values.keySet().stream().collect(toMap(x -> x, option -> {
                     return find(option).orElseThrow();
-                }))));
+                })), optionNames));
             } else {
                 return Result.ofErrors(errors);
             }
@@ -445,15 +456,16 @@ final class JOptSimpleOptionsBuilder {
 
     private final static class ValidatedOptions implements Options {
 
-        ValidatedOptions(Map<Option, Object> values) {
+        ValidatedOptions(Map<Option, Object> values, Set<OptionName> optionNames) {
             this.values = Objects.requireNonNull(values);
-            optionNames = toOptionNameSet(values.keySet());
+            this.optionNames = Objects.requireNonNull(optionNames);
+            assertNoUnexpectedOptionNames(values, optionNames);
         }
 
         ValidatedOptions(ValidatedOptions other, Collection<Option> excludes) {
             this(other.values.entrySet().stream().filter(e -> {
                 return !excludes.contains(e.getKey());
-            }).collect(toMap(Map.Entry::getKey, Map.Entry::getValue)));
+            }).collect(toMap(Map.Entry::getKey, Map.Entry::getValue)), applyExcludes(other.optionNames, excludes));
         }
 
         ValidatedOptions excludeOptions(Collection<Option> excludes) {
@@ -474,6 +486,21 @@ final class JOptSimpleOptionsBuilder {
         private final Set<OptionName> optionNames;
     }
 
+
+    private static Set<OptionName> applyExcludes(Collection<OptionName> optionNames, Collection<Option> excludes) {
+        final Set<OptionName> newOptionNames = new HashSet<>(optionNames);
+        excludes.stream().map(Option::getSpec).map(OptionSpec::names).flatMap(Collection::stream).forEach(newOptionNames::remove);
+        return newOptionNames;
+    }
+
+    private static void assertNoUnexpectedOptionNames(Map<Option, ?> optionMap, Collection<OptionName> optionName) {
+        final var allowedOptionNames = optionMap.keySet().stream().map(Option::getSpec).map(OptionSpec::names).flatMap(Collection::stream).toList();
+        if (!allowedOptionNames.containsAll(optionName)) {
+            final var diff = new HashSet<>(optionName);
+            diff.removeAll(allowedOptionNames);
+            throw new AssertionError(String.format("Unexpected option names: %s", diff.stream().map(OptionName::name).sorted().toList()));
+        }
+    }
 
     private static <T> List<T> getOptionValue(List<T> values, OptionSpec.MergePolicy mergePolicy) {
         Objects.requireNonNull(mergePolicy);
@@ -497,10 +524,6 @@ final class JOptSimpleOptionsBuilder {
                 }
             }
         }
-    }
-
-    private static Set<OptionName> toOptionNameSet(Iterable<Option> options) {
-        return StreamSupport.stream(options.spliterator(), false).map(Option::getSpec).map(OptionSpec::names).flatMap(List::stream).collect(toSet());
     }
 
     private Collection<Option> options;

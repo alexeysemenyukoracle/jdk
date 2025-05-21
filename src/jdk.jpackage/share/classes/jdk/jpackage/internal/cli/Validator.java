@@ -26,23 +26,11 @@ package jdk.jpackage.internal.cli;
 
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
-record Validator<T, U extends Exception>(Optional<ValidatingPredicate<T>> predicate, Optional<ValidatingConsumer<T>> consumer,
+record Validator<T, U extends Exception>(Optional<Predicate<T>> predicate, Optional<Consumer<T>> consumer,
         String formatString, OptionValueExceptionFactory<? extends U> exceptionFactory) {
-
-    interface ValidatingMethod {
-    }
-
-    @FunctionalInterface
-    interface ValidatingConsumer<T> extends ValidatingMethod {
-        void accept(T v) throws ValidatingConsumerException;
-    }
-
-    @FunctionalInterface
-    interface ValidatingPredicate<T> extends ValidatingMethod {
-        boolean test(T v);
-    }
-
 
     /**
      * Thrown to indicate that the given value didn't pass validation.
@@ -137,13 +125,13 @@ record Validator<T, U extends Exception>(Optional<ValidatingPredicate<T>> predic
             return new Validator<>(Optional.ofNullable(predicate), Optional.ofNullable(consumer), formatString, exceptionFactory);
         }
 
-        Builder<T, U> predicate(ValidatingPredicate<T> v) {
+        Builder<T, U> predicate(Predicate<T> v) {
             consumer = null;
             predicate = v;
             return this;
         }
 
-        Builder<T, U> consumer(ValidatingConsumer<T> v) {
+        Builder<T, U> consumer(Consumer<T> v) {
             predicate = null;
             consumer = v;
             return this;
@@ -159,16 +147,16 @@ record Validator<T, U extends Exception>(Optional<ValidatingPredicate<T>> predic
             return this;
         }
 
-        Optional<ValidatingPredicate<T>> predicate() {
+        Optional<Predicate<T>> predicate() {
             return Optional.ofNullable(predicate);
         }
 
-        Optional<ValidatingConsumer<T>> consumer() {
+        Optional<Consumer<T>> consumer() {
             return Optional.ofNullable(consumer);
         }
 
-        Optional<ValidatingMethod> method() {
-            return predicate().map(ValidatingMethod.class::cast).or(this::consumer);
+        boolean hasValidatingMethod() {
+            return predicate().isPresent() || consumer().isPresent();
         }
 
         Optional<String> formatString() {
@@ -179,8 +167,8 @@ record Validator<T, U extends Exception>(Optional<ValidatingPredicate<T>> predic
             return Optional.ofNullable(exceptionFactory);
         }
 
-        private ValidatingPredicate<T> predicate;
-        private ValidatingConsumer<T> consumer;
+        private Predicate<T> predicate;
+        private Consumer<T> consumer;
         private String formatString;
         private OptionValueExceptionFactory<? extends U> exceptionFactory;
     }
