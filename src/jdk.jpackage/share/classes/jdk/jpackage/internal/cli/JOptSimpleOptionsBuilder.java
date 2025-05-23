@@ -318,6 +318,9 @@ final class JOptSimpleOptionsBuilder {
                 return values.stream().map(value -> {
                     try {
                         return Result.ofValue(List.of(new OptionWithValue<>(optionName, converter.convert(optionName, value), value)));
+                    } catch (OptionValueConverter.ConverterException ex) {
+                        // Converter internal error, bail out
+                        throw ex;
                     } catch (RuntimeException ex) {
                         return Result.<List<OptionWithValue<T>>>ofError(new OptionException(optionName, ex));
                     }
