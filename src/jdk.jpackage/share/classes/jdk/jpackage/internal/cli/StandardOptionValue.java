@@ -125,7 +125,7 @@ public final class StandardOptionValue {
     public final static OptionValue<Path> LICENSE_FILE = pathOption("license-file")
             .validator(StandardValidator.IS_EXISTENT_NOT_DIRECTORY)
             .validatorExceptionFormatString("ERR_LicenseFileNotExit")
-            .validatorExceptionFactory(ERROR_WITH_OPTION_NAME_AND_VALUE)
+            .validatorExceptionFactory(ERROR_WITHOUT_CONTEXT)
             .create();
 
     public final static OptionValue<String> VERSION = stringOption("app-version").create();
