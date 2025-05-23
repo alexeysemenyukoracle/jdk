@@ -27,6 +27,7 @@ package jdk.jpackage.internal.cli;
 
 import java.lang.reflect.Array;
 import java.nio.file.Path;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -45,7 +46,13 @@ final class StandardValueConverter {
     static final <T> ValueConverter<T[]> toArray(ValueConverter<T> from, Function<String, String[]> conv) {
         final var stringArrayConv = stringArrayConv(conv);
         return ValueConverter.create(value -> {
-            return Stream.of(stringArrayConv.convert(value)).map(from::convert).toArray(length -> {
+            return Stream.of(stringArrayConv.convert(value)).map(token -> {
+                try {
+                    return from.convert(token);
+                } catch (IllegalArgumentException ex) {
+                    throw new StashedIllegalStringArgumentException(token, ex);
+                }
+            }).toArray(length -> {
                 return (T[])Array.newInstance(from.valueType(), length);
             });
         }, (Class<? extends T[]>)from.valueType().arrayType());
@@ -54,6 +61,24 @@ final class StandardValueConverter {
     static ValueConverter<String[]> stringArrayConv(Function<String, String[]> conv) {
         return ValueConverter.create(conv, String[].class);
     }
+
+
+    final static class StashedIllegalStringArgumentException extends IllegalArgumentException {
+
+        StashedIllegalStringArgumentException(String illegalArgumentValue, Throwable cause) {
+            super(cause);
+            this.illegalArgumentValue = Objects.requireNonNull(illegalArgumentValue);
+        }
+
+        String illegalArgumentValue() {
+            return illegalArgumentValue;
+        }
+
+        private final String illegalArgumentValue;
+
+        private static final long serialVersionUID = 1L;
+    }
+
 
     private static final ValueConverter<String> IDENTITY_CONV = ValueConverter.create(x -> x, String.class);
     private static final ValueConverter<Path> PATH_CONV = ValueConverter.create(Path::of, Path.class);
