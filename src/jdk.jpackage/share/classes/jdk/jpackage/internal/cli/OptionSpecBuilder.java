@@ -337,6 +337,9 @@ final class OptionSpecBuilder<T> {
     }
 
     OptionSpecBuilder<T> shortName(String v) {
+        if (v != null && v.length() != 1) {
+            throw new IllegalArgumentException();
+        }
         shortName = v;
         return this;
     }
@@ -403,7 +406,7 @@ final class OptionSpecBuilder<T> {
         return Stream.of(
                 Optional.of(name().orElseThrow()),
                 shortName()
-        ).filter(Optional::isPresent).map(Optional::orElseThrow).map(OptionName::new).toList();
+        ).filter(Optional::isPresent).map(Optional::orElseThrow).map(OptionName::new).distinct().toList();
     }
 
     private Optional<OptionValueConverter<T>> createConverter() {
