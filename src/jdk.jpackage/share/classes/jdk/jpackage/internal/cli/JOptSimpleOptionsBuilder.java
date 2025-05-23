@@ -316,13 +316,14 @@ final class JOptSimpleOptionsBuilder {
                 @SuppressWarnings("unchecked")
                 final var values = (List<String>)optionSet.valuesOf(optionName.name());
                 return values.stream().map(value -> {
+                    final var token = StringToken.of(value);
                     try {
-                        return Result.ofValue(List.of(new OptionWithValue<>(optionName, converter.convert(optionName, value), value)));
+                        return Result.ofValue(List.of(new OptionWithValue<>(optionName, converter.convert(optionName, token), token)));
                     } catch (OptionValueConverter.ConverterException ex) {
                         // Converter internal error, bail out
                         throw ex;
                     } catch (RuntimeException ex) {
-                        return Result.<List<OptionWithValue<T>>>ofError(new OptionException(optionName, ex));
+                        return Result.<List<OptionWithValue<T>>>ofError(ex);
                     }
                 });
             }).flatMap(x -> x).reduce((a, b) -> {
@@ -342,17 +343,15 @@ final class JOptSimpleOptionsBuilder {
     }
 
 
-    private record OptionWithValue<T>(OptionName name, T value, String sourceString) implements ParsedValue<T> {
+    private record OptionWithValue<T>(OptionName name, T value, StringToken sourceToken) implements ParsedValue<T> {
         OptionWithValue {
             Objects.requireNonNull(name);
             Objects.requireNonNull(value);
-            Objects.requireNonNull(sourceString);
+            Objects.requireNonNull(sourceToken);
         }
 
-        List<OptionException> validate(Validator<T, ? extends Exception> validator) {
-            return validator.validate(name, this).stream().map(ex -> {
-                return new OptionException(name, ex);
-            }).toList();
+        List<? extends Exception> validate(Validator<T, ? extends Exception> validator) {
+            return validator.validate(name, this).stream().toList();
         }
 
         @SuppressWarnings("unchecked")

@@ -147,7 +147,7 @@ final class OptionsAnalyzer {
             if (obj instanceof PackageType packageType) {
                 return packageType;
             } else {
-                return typeOption.getSpec().valueConverter().orElseThrow().convert(typeOption.getSpec().name(), (String)obj);
+                return typeOption.getSpec().valueConverter().orElseThrow().convert(typeOption.getSpec().name(), StringToken.of((String)obj));
             }
         }).flatMap(packageType -> {
             // Filter bundling operations supported on the given OS.

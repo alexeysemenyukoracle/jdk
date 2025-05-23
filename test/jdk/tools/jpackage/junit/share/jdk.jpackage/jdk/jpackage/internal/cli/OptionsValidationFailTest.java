@@ -122,9 +122,6 @@ public class OptionsValidationFailTest {
                                 StandardBundlingOperation.ofPlatform(OperatingSystem.current()).collect(Collectors.toSet());
 
                     }).validate().firstError().map((Exception ex) -> {
-                        if (ex instanceof OptionException optionEx) {
-                            ex = (Exception)optionEx.getCause();
-                        }
                         out.append(ex.getMessage());
                         ex.printStackTrace(err);
                         return 1;

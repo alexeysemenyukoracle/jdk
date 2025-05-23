@@ -152,20 +152,14 @@ public final class StandardOptionValue {
 
     public final static OptionValue<List<AdditionalLauncher>> ADD_LAUNCHER = option("add-launcher", AdditionalLauncher.class)
             .outOfScope(BundlingOperationModifier.values())
-            .converterExceptionFactory(new OptionValueExceptionFactory<>() {
-                @Override
-                public ConfigException create(OptionName optionName, String optionValue, String formatString) {
-                    throw new UnsupportedOperationException();
+            .converterExceptionFactory((optionName, optionValue, formatString, cause) -> {
+                final String msgId;
+                if (cause.orElseThrow() instanceof IllegalAddLauncherSyntaxException) {
+                    msgId = "error.paramater-add-launcher-malformed";
+                } else {
+                    msgId = "error.paramater-add-launcher-not-path";
                 }
-
-                @Override
-                public ConfigException create(OptionName optionName, String optionValue, String formatString, Throwable cause) {
-                    if (cause instanceof IllegalAddLauncherSyntaxException) {
-                        return ERROR_WITH_VALUE_AND_OPTION_NAME.create(optionName, optionValue, "error.paramater-add-launcher-malformed");
-                    } else {
-                        return ERROR_WITH_VALUE_AND_OPTION_NAME.create(optionName, optionValue, "error.paramater-add-launcher-not-path", cause);
-                    }
-                }
+                return ERROR_WITH_VALUE_AND_OPTION_NAME.create(optionName, optionValue, msgId, cause);
             }).converter(value -> {
                 var components = value.split("=", 2);
                 if (components.length != 2) {

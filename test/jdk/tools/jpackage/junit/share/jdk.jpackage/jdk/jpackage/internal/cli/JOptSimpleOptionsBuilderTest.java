@@ -30,7 +30,6 @@ import static jdk.jpackage.internal.cli.StandardValueConverter.pathConv;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -237,11 +236,9 @@ public class JOptSimpleOptionsBuilderTest {
 
         testSpec.test(ParserMode.CONVERT);
 
-        final var ex = assertThrowsExactly(OptionException.class, () -> testSpec.test(ParserMode.VALIDATE));
+        final var ex = assertThrowsExactly(TestException.class, () -> testSpec.test(ParserMode.VALIDATE));
 
-        assertSame(TestException.class, ex.getCause().getClass());
-
-        assertEquals(String.format(FORMAT_STRING_NOT_DIRECTORY, nonExistentDir, "--dir"), ex.getCause().getMessage());
+        assertEquals(String.format(FORMAT_STRING_NOT_DIRECTORY, nonExistentDir, "--dir"), ex.getMessage());
     }
 
     @Test
@@ -460,15 +457,23 @@ public class JOptSimpleOptionsBuilderTest {
     }
 
 
-    private record OptionFailure(OptionName optionName, String optionValue, Optional<Exception> exception) {
+    private record OptionFailure(OptionName optionName, StringToken optionValue, Optional<Exception> exception) {
         OptionFailure {
             Objects.requireNonNull(optionName);
             Objects.requireNonNull(optionValue);
             Objects.requireNonNull(exception);
         }
 
-        OptionFailure(OptionName optionName, String optionValue) {
+        OptionFailure(OptionName optionName, StringToken optionValue) {
             this(optionName, optionValue, Optional.empty());
+        }
+
+        OptionFailure(String optionName, StringToken optionValue) {
+            this(OptionName. of(optionName), optionValue);
+        }
+
+        OptionFailure(OptionName optionName, String optionValue) {
+            this(optionName, StringToken.of(optionValue));
         }
 
         OptionFailure(String optionName, String optionValue) {
@@ -480,7 +485,11 @@ public class JOptSimpleOptionsBuilderTest {
         }
 
         static Comparator<OptionFailure> compareNameAndValue() {
-            return Comparator.comparing(OptionFailure::optionName).thenComparing(OptionFailure::optionValue);
+            return Comparator.comparing(OptionFailure::optionName).thenComparing(v -> {
+                return v.optionValue().value();
+            }).thenComparing(v -> {
+                return v.optionValue().tokenizedString();
+            });
         }
     }
 
@@ -494,16 +503,8 @@ public class JOptSimpleOptionsBuilderTest {
         }
 
         @Override
-        public RuntimeException create(OptionName optionName, String optionValue, String formatString) {
-            return recordFailure(optionName, optionValue, factory.create(optionName, optionValue, formatString));
-        }
-
-        @Override
-        public RuntimeException create(OptionName optionName, String optionValue, String formatString, Throwable cause) {
-            return recordFailure(optionName, optionValue, factory.create(optionName, optionValue, formatString, cause));
-        }
-
-        private RuntimeException recordFailure(OptionName optionName, String optionValue, RuntimeException ex) {
+        public RuntimeException create(OptionName optionName, StringToken optionValue, String formatString, Optional<Throwable> cause) {
+            final var ex = factory.create(optionName, optionValue, formatString, cause);
             sink.accept(new OptionFailure(optionName, optionValue, Optional.of(ex)));
             return ex;
         }
