@@ -120,6 +120,9 @@ interface OptionValueConverter<T> {
                 Objects.requireNonNull(optionName);
                 try {
                     return converter.convert(optionValue.value());
+                } catch (StandardValueConverter.StashedIllegalStringArgumentException ex) {
+                    throw exceptionFactory.create(optionName, StringToken.of(optionValue.tokenizedString(),
+                            ex.illegalArgumentValue()), formatString, Optional.of(ex.getCause()));
                 } catch (IllegalArgumentException ex) {
                     throw exceptionFactory.create(optionName, optionValue, formatString, Optional.of(ex));
                 } catch (Exception ex) {

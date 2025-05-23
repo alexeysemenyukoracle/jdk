@@ -283,8 +283,8 @@ public class JOptSimpleOptionsBuilderTest {
         assertFalse(cmdline.hasValue());
 
         final var expectedConversionErrors = Stream.of(
-                new OptionFailure("dir", "*,foo,,bar"),
-                new OptionFailure("r", "file,*"),
+                new OptionFailure("dir", StringToken.of("*,foo,,bar", "*")),
+                new OptionFailure("r", StringToken.of("file,*", "*")),
                 new OptionFailure("url", ":foo"),
                 new OptionFailure("lru", ":bar")
         ).sorted(OptionFailure.compareNameAndValue()).toList();
