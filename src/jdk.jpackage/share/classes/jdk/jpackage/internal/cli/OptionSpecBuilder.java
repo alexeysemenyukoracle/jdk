@@ -89,6 +89,11 @@ final class OptionSpecBuilder<T> {
             return this;
         }
 
+        ArrayOptionSpecBuilder mutate(Consumer<OptionSpecBuilder<?>.ArrayOptionSpecBuilder> mutator) {
+            mutator.accept(this);
+            return this;
+        }
+
         ArrayOptionSpecBuilder validatorExceptionFormatString(String v) {
             OptionSpecBuilder.this.validatorExceptionFormatString(v);
             return this;
@@ -99,13 +104,23 @@ final class OptionSpecBuilder<T> {
             return this;
         }
 
-        ArrayOptionSpecBuilder validatorExceptionFactory(OptionValueExceptionFactory<? extends Exception> v) {
+        ArrayOptionSpecBuilder validatorExceptionFactory(OptionValueExceptionFactory<? extends RuntimeException> v) {
             OptionSpecBuilder.this.validatorExceptionFactory(v);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder validatorExceptionFactory(UnaryOperator<OptionValueExceptionFactory<? extends RuntimeException>> mutator) {
+            OptionSpecBuilder.this.validatorExceptionFactory(mutator);
             return this;
         }
 
         ArrayOptionSpecBuilder converterExceptionFactory(OptionValueExceptionFactory<? extends RuntimeException> v) {
             OptionSpecBuilder.this.converterExceptionFactory(v);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder converterExceptionFactory(UnaryOperator<OptionValueExceptionFactory<? extends RuntimeException>> mutator) {
+            OptionSpecBuilder.this.converterExceptionFactory(mutator);
             return this;
         }
 
@@ -116,6 +131,11 @@ final class OptionSpecBuilder<T> {
 
         ArrayOptionSpecBuilder exceptionFactory(OptionValueExceptionFactory<? extends RuntimeException> v) {
             OptionSpecBuilder.this.exceptionFactory(v);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder exceptionFactory(UnaryOperator<OptionValueExceptionFactory<? extends RuntimeException>> mutator) {
+            OptionSpecBuilder.this.exceptionFactory(mutator);
             return this;
         }
 
@@ -141,8 +161,8 @@ final class OptionSpecBuilder<T> {
         }
 
         @SuppressWarnings("overloads")
-        ArrayOptionSpecBuilder validator(UnaryOperator<Validator.Builder<T, Exception>> modifier) {
-            OptionSpecBuilder.this.validator(modifier);
+        ArrayOptionSpecBuilder validator(UnaryOperator<Validator.Builder<T, RuntimeException>> mutator) {
+            OptionSpecBuilder.this.validator(mutator);
             return this;
         }
 
@@ -176,8 +196,8 @@ final class OptionSpecBuilder<T> {
             return this;
         }
 
-        ArrayOptionSpecBuilder scope(UnaryOperator<Set<OptionScope>> modifier) {
-            OptionSpecBuilder.this.scope(modifier);
+        ArrayOptionSpecBuilder scope(UnaryOperator<Set<OptionScope>> mutator) {
+            OptionSpecBuilder.this.scope(mutator);
             return this;
         }
 
@@ -267,6 +287,11 @@ final class OptionSpecBuilder<T> {
         return new ArrayOptionSpecBuilder(conv);
     }
 
+    OptionSpecBuilder<T> mutate(Consumer<OptionSpecBuilder<?>> mutator) {
+        mutator.accept(this);
+        return this;
+    }
+
     OptionSpecBuilder<T> validatorExceptionFormatString(String v) {
         validatorBuilder.formatString(v);
         return this;
@@ -277,14 +302,22 @@ final class OptionSpecBuilder<T> {
         return this;
     }
 
-    OptionSpecBuilder<T> validatorExceptionFactory(OptionValueExceptionFactory<? extends Exception> v) {
+    OptionSpecBuilder<T> validatorExceptionFactory(OptionValueExceptionFactory<? extends RuntimeException> v) {
         validatorBuilder.exceptionFactory(v);
         return this;
+    }
+
+    OptionSpecBuilder<T> validatorExceptionFactory(UnaryOperator<OptionValueExceptionFactory<? extends RuntimeException>> mutator) {
+        return validatorExceptionFactory(mutator.apply(validatorBuilder.exceptionFactory().orElse(null)));
     }
 
     OptionSpecBuilder<T> converterExceptionFactory(OptionValueExceptionFactory<? extends RuntimeException> v) {
         converterBuilder.exceptionFactory(v);
         return this;
+    }
+
+    OptionSpecBuilder<T> converterExceptionFactory(UnaryOperator<OptionValueExceptionFactory<? extends RuntimeException>> mutator) {
+        return converterExceptionFactory(mutator.apply(converterBuilder.exceptionFactory().orElse(null)));
     }
 
     OptionSpecBuilder<T> exceptionFormatString(String v) {
@@ -293,6 +326,10 @@ final class OptionSpecBuilder<T> {
 
     OptionSpecBuilder<T> exceptionFactory(OptionValueExceptionFactory<? extends RuntimeException> v) {
         return validatorExceptionFactory(v).converterExceptionFactory(v);
+    }
+
+    OptionSpecBuilder<T> exceptionFactory(UnaryOperator<OptionValueExceptionFactory<? extends RuntimeException>> mutator) {
+        return validatorExceptionFactory(mutator).converterExceptionFactory(mutator);
     }
 
     OptionSpecBuilder<T> converter(ValueConverter<T> v) {
@@ -316,8 +353,8 @@ final class OptionSpecBuilder<T> {
     }
 
     @SuppressWarnings("overloads")
-    OptionSpecBuilder<T> validator(UnaryOperator<Validator.Builder<T, Exception>> modifier) {
-        validatorBuilder = modifier.apply(validatorBuilder);
+    OptionSpecBuilder<T> validator(UnaryOperator<Validator.Builder<T, RuntimeException>> mutator) {
+        validatorBuilder = mutator.apply(validatorBuilder);
         return this;
     }
 
@@ -353,8 +390,8 @@ final class OptionSpecBuilder<T> {
         return this;
     }
 
-    OptionSpecBuilder<T> scope(UnaryOperator<Set<OptionScope>> modifier) {
-        return scope(modifier.apply(scope().orElseGet(Set::of)));
+    OptionSpecBuilder<T> scope(UnaryOperator<Set<OptionScope>> mutator) {
+        return scope(mutator.apply(scope().orElseGet(Set::of)));
     }
 
     OptionSpecBuilder<T> inScope(OptionScope... v) {
@@ -431,5 +468,5 @@ final class OptionSpecBuilder<T> {
     private Set<OptionScope> scope;
     private T defaultValue;
     private OptionValueConverter.Builder<T> converterBuilder = OptionValueConverter.build();
-    private Validator.Builder<T, Exception> validatorBuilder = Validator.build();
+    private Validator.Builder<T, RuntimeException> validatorBuilder = Validator.build();
 }

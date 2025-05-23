@@ -26,7 +26,7 @@ package jdk.jpackage.internal.cli;
 
 import java.util.Objects;
 
-record OptionName(String name) {
+record OptionName(String name) implements Comparable<OptionName> {
 
     OptionName(String name) {
         Objects.requireNonNull(name);
@@ -59,5 +59,10 @@ record OptionName(String name) {
 
     String formatForCommandLine() {
         return (isShort() ? "-" : "--") + name;
+    }
+
+    @Override
+    public int compareTo(OptionName other) {
+        return name.compareTo(other.name);
     }
 }

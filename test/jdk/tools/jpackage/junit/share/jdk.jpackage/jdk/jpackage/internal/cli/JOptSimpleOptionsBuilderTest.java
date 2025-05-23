@@ -29,24 +29,31 @@ import static jdk.jpackage.internal.cli.StandardValueConverter.identityConv;
 import static jdk.jpackage.internal.cli.StandardValueConverter.pathConv;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import jdk.jpackage.internal.cli.OptionValueExceptionFactory.StandardArgumentsMapper;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -237,6 +244,57 @@ public class JOptSimpleOptionsBuilderTest {
         assertEquals(String.format(FORMAT_STRING_NOT_DIRECTORY, nonExistentDir, "--dir"), ex.getCause().getMessage());
     }
 
+    @Test
+    public void testConversionErrors(@TempDir Path tmpDir) {
+
+        final Collection<OptionFailure> actualConversionErrors = new ArrayList<>();
+
+        final Consumer<OptionSpecBuilder<?>> mutator = builder -> {
+            builder.exceptionFormatString("Option value [%s] of option %s");
+            builder.exceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME);
+            builder.exceptionFactory(recordExceptions(actualConversionErrors));
+        };
+
+        final var dirOption = directoryOption("dir").shortName("r").mutate(mutator).toArray(",").create();
+
+        final var urlOption = stringOption("url").converter(str -> {
+            try {
+                new URI(str);
+                return str;
+            } catch (URISyntaxException ex) {
+                throw new IllegalArgumentException(ex);
+            }
+        }).mutate(mutator).create();
+
+        final var lruOption = option("lru", URI.class).converter(str -> {
+            try {
+                return new URI(str);
+            } catch (URISyntaxException ex) {
+                throw new IllegalArgumentException(ex);
+            }
+        }).mutate(mutator).create();
+
+        final List<String> args = new ArrayList<>();
+        args.addAll(List.of("--dir=*,foo,,bar", "-r", "file", "-r", "file,*"));
+        args.addAll(List.of("--url=http://foo", "--url=:foo"));
+        args.addAll(List.of("--lru=:bar", "--lru=http://bar"));
+
+        final var parser = new JOptSimpleOptionsBuilder().optionValues(dirOption, urlOption, lruOption).create();
+
+        final var cmdline = parser.apply(args.toArray(String[]::new)).flatMap(JOptSimpleOptionsBuilder.OptionsBuilder::convertedOptions);
+
+        assertFalse(cmdline.hasValue());
+
+        final var expectedConversionErrors = Stream.of(
+                new OptionFailure("dir", "*,foo,,bar"),
+                new OptionFailure("r", "file,*"),
+                new OptionFailure("url", ":foo"),
+                new OptionFailure("lru", ":bar")
+        ).sorted(OptionFailure.compareNameAndValue()).toList();
+
+        assertEquals(expectedConversionErrors, actualConversionErrors.stream().map(OptionFailure::withoutException).sorted(OptionFailure.compareNameAndValue()).toList());
+    }
+
     @ParameterizedTest
     @MethodSource
     public void testUnrecognizedOptionMapping(String expectedUnrecognizedOption, String[] args) {
@@ -395,8 +453,64 @@ public class JOptSimpleOptionsBuilderTest {
         return new TestSpec.Builder();
     }
 
+    private static UnaryOperator<OptionValueExceptionFactory<? extends RuntimeException>> recordExceptions(Collection<OptionFailure> sink) {
+        return exceptionFactory -> {
+            return new RecordingExceptionFactory(exceptionFactory, sink::add);
+        };
+    }
 
-    final static class TestException extends RuntimeException {
+
+    private record OptionFailure(OptionName optionName, String optionValue, Optional<Exception> exception) {
+        OptionFailure {
+            Objects.requireNonNull(optionName);
+            Objects.requireNonNull(optionValue);
+            Objects.requireNonNull(exception);
+        }
+
+        OptionFailure(OptionName optionName, String optionValue) {
+            this(optionName, optionValue, Optional.empty());
+        }
+
+        OptionFailure(String optionName, String optionValue) {
+            this(OptionName. of(optionName), optionValue);
+        }
+
+        OptionFailure withoutException() {
+            return new OptionFailure(optionName, optionValue, Optional.empty());
+        }
+
+        static Comparator<OptionFailure> compareNameAndValue() {
+            return Comparator.comparing(OptionFailure::optionName).thenComparing(OptionFailure::optionValue);
+        }
+    }
+
+
+    private record RecordingExceptionFactory(OptionValueExceptionFactory<? extends RuntimeException> factory,
+            Consumer<OptionFailure> sink) implements OptionValueExceptionFactory<RuntimeException> {
+
+        RecordingExceptionFactory {
+            Objects.requireNonNull(factory);
+            Objects.requireNonNull(sink);
+        }
+
+        @Override
+        public RuntimeException create(OptionName optionName, String optionValue, String formatString) {
+            return recordFailure(optionName, optionValue, factory.create(optionName, optionValue, formatString));
+        }
+
+        @Override
+        public RuntimeException create(OptionName optionName, String optionValue, String formatString, Throwable cause) {
+            return recordFailure(optionName, optionValue, factory.create(optionName, optionValue, formatString, cause));
+        }
+
+        private RuntimeException recordFailure(OptionName optionName, String optionValue, RuntimeException ex) {
+            sink.accept(new OptionFailure(optionName, optionValue, Optional.of(ex)));
+            return ex;
+        }
+    }
+
+
+    private final static class TestException extends RuntimeException {
 
         TestException(String msg) {
             super(msg);
