@@ -65,6 +65,21 @@ final class JOptSimpleOptionsBuilder {
         return this;
     }
 
+    JOptSimpleOptionsBuilder options(Option... v) {
+        return options(List.of(v));
+    }
+
+    JOptSimpleOptionsBuilder optionValues(Collection<OptionValue<?>> v) {
+        if (v != null) {
+            options(v.stream().map(OptionValue::asOption).map(Optional::orElseThrow).toList());
+        }
+        return this;
+    }
+
+    JOptSimpleOptionsBuilder optionValues(OptionValue<?>... v) {
+        return optionValues(List.of(v));
+    }
+
     JOptSimpleOptionsBuilder unrecognizedOptionHandler(Function<String, ? extends Exception> v) {
         unrecognizedOptionHandler = v;
         return this;
