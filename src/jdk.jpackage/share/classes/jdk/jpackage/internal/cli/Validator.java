@@ -72,7 +72,7 @@ interface Validator<T, U extends Exception> {
 
 
     interface ParsedValue<T> {
-        String sourceString();
+        StringToken sourceToken();
         T value();
     }
 
@@ -170,7 +170,7 @@ interface Validator<T, U extends Exception> {
                         if (validator.test(optionValue.value())) {
                             return List.<U>of();
                         } else {
-                            return List.of((U)exceptionFactory.create(optionName, optionValue.sourceString(), formatString));
+                            return List.of((U)exceptionFactory.create(optionName, optionValue.sourceToken(), formatString, Optional.empty()));
                         }
                     }).or(() -> {
                         return consumer.map(validator -> {
@@ -178,7 +178,7 @@ interface Validator<T, U extends Exception> {
                                 validator.accept(optionValue.value());
                                 return List.of();
                             } catch (ValidatingConsumerException ex) {
-                                return List.of((U)exceptionFactory.create(optionName, optionValue.sourceString(), formatString, ex.getCause()));
+                                return List.of((U)exceptionFactory.create(optionName, optionValue.sourceToken(), formatString, Optional.of(ex.getCause())));
                             }
                         });
                     }).orElseThrow();
@@ -202,15 +202,14 @@ interface Validator<T, U extends Exception> {
                     return elementValidator.validate(optionName, new ParsedValue<>() {
 
                         @Override
-                        public String sourceString() {
-                            return optionValue.sourceString();
+                        public StringToken sourceToken() {
+                            return optionValue.sourceToken();
                         }
 
                         @Override
                         public T value() {
                             return v;
                         }
-
                     });
                 }).flatMap(Collection::stream).toList();
             }

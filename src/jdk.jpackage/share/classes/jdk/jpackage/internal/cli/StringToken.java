@@ -22,25 +22,36 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-
 package jdk.jpackage.internal.cli;
 
 import java.util.Objects;
 
+/**
+ * A token of a tokenized string.
+ *
+ * @param tokenizedString the tokenized string from which this token was extracted
+ * @param value           the value of this token
+ */
+record StringToken(String tokenizedString, String value) {
+    StringToken {
+        Objects.requireNonNull(tokenizedString);
+        Objects.requireNonNull(value);
 
-final class OptionException extends RuntimeException {
-
-    OptionException(OptionName option, Throwable cause) {
-        super(cause);
-        this.option = Objects.requireNonNull(option);
+        if (!tokenizedString.contains(value)) {
+            throw new IllegalArgumentException(String.format(
+                    "String token [%s] must be a substring of the tokenized string [%s]", value, tokenizedString));
+        }
     }
 
-    OptionName getOption() {
-        return option;
+    StringToken(String value) {
+        this(value, value);
     }
 
-    @SuppressWarnings("serial")
-    private final OptionName option;
+    static StringToken of(String value) {
+        return new StringToken(value);
+    }
 
-    private static final long serialVersionUID = 1L;
+    static StringToken of(String tokenizedString, String value) {
+        return new StringToken(tokenizedString, value);
+    }
 }
