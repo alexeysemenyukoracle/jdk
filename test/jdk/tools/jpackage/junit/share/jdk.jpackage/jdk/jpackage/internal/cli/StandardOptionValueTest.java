@@ -37,6 +37,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import jdk.jpackage.test.Comm;
 import org.junit.jupiter.api.Test;
@@ -68,21 +69,22 @@ public class StandardOptionValueTest {
     }
 
     private final static class OptionSpecFormatter {
-        static void print(BiConsumer<Consumer<String>, Collection<OptionSpec<Object>>> printer) {
-            printer.accept(System.out::println, StandardOptionValue.options().stream().map(Option::getSpec).map(OptionSpecFormatter::cast).toList());
+        static void print(BiConsumer<Consumer<String>, Collection<? extends OptionSpec<?>>> printer) {
+            printer.accept(System.out::println, StandardOptionValue.options().stream().map(Option::getSpec).toList());
         }
 
-        static void groupByOption(Consumer<String>sink, Collection<OptionSpec<Object>> specs) {
-            sink.accept("| Option | Scope |");
-            sink.accept("| --- | --- |");
+        static void groupByOption(Consumer<String>sink, Collection<? extends OptionSpec<?>> specs) {
+            sink.accept("| Option | Scope | With runtime installer | With predefined app image |");
+            sink.accept("| --- | --- | :---: | :---: |");
             for (final var spec : specs.stream().sorted(Comparator.comparing(v -> { return v.name().name(); })).toList()) {
-                sink.accept(String.format("| %s | %s |", formatOptionNames(spec), format(spec.scope())));
+                final var mods = filterByType(spec.scope(), BundlingOperationModifier.class);
+                sink.accept(String.format("| %s | %s | %s | %s |",
+                        formatOptionNames(spec),
+                        format(filterByType(spec.scope(), BundlingOperationOptionScope.class)),
+                        (mods.contains(BundlingOperationModifier.BUNDLE_RUNTIME) ? "x" : ""),
+                        (mods.contains(BundlingOperationModifier.BUNDLE_PREDEFINED_APP_IMAGE) ? "x" : "")
+                ));
             }
-        }
-
-        @SuppressWarnings("unchecked")
-        private static OptionSpec<Object> cast(OptionSpec<?> v) {
-            return (OptionSpec<Object>)v;
         }
 
         private static String formatOptionNames(OptionSpec<?> spec) {
@@ -117,7 +119,11 @@ public class StandardOptionValueTest {
             return Stream.concat(
                     knownScopeLabels.stream(),
                     ops.stream().map(OptionSpecFormatter::format)
-            ).sorted().collect(joining(","));
+            ).sorted().collect(joining(", "));
+        }
+
+        private static Set<OptionScope> filterByType(Collection<OptionScope> ops, Class<? extends OptionScope> filterType) {
+            return ops.stream().filter(filterType::isInstance).collect(Collectors.toSet());
         }
 
         private final static Map<OptionScope, String> KNOWN_BUNDLING_OPERATIONS = Map.of(
