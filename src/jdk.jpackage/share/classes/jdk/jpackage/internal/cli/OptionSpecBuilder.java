@@ -134,11 +134,13 @@ final class OptionSpecBuilder<T> {
             return this;
         }
 
+        @SuppressWarnings("overloads")
         ArrayOptionSpecBuilder validator(Consumer<T> v) {
             OptionSpecBuilder.this.validator(v);
             return this;
         }
 
+        @SuppressWarnings("overloads")
         ArrayOptionSpecBuilder validator(UnaryOperator<Validator.Builder<T, Exception>> modifier) {
             OptionSpecBuilder.this.validator(modifier);
             return this;
@@ -307,11 +309,13 @@ final class OptionSpecBuilder<T> {
         return this;
     }
 
+    @SuppressWarnings("overloads")
     OptionSpecBuilder<T> validator(Consumer<T> v) {
         validatorBuilder.consumer(v::accept);
         return this;
     }
 
+    @SuppressWarnings("overloads")
     OptionSpecBuilder<T> validator(UnaryOperator<Validator.Builder<T, Exception>> modifier) {
         validatorBuilder = modifier.apply(validatorBuilder);
         return this;

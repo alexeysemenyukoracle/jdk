@@ -39,6 +39,7 @@ final class OptionException extends RuntimeException {
         return option;
     }
 
+    @SuppressWarnings("serial")
     private final OptionName option;
 
     private static final long serialVersionUID = 1L;

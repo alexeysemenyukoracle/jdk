@@ -308,7 +308,7 @@ public final class StandardOptionValue {
             return toFunction(f::get).apply(null);
         }).filter(OptionValue.class::isInstance)
                 .map(OptionValue.class::cast)
-                .map(OptionValue::id)
+                .map(OptionValue<?>::id)
                 .map(Option.class::cast)
                 .collect(toSet());
     }

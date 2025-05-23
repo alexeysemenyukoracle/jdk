@@ -185,7 +185,7 @@ final class OptionsAnalyzer {
     }
 
     private static Optional<OptionSpec<?>> asOptionSpec(Object v) {
-        if (v instanceof OptionSpec optionSpec) {
+        if (v instanceof OptionSpec<?> optionSpec) {
             return Optional.of(optionSpec);
         } else if (v instanceof OptionValue<?> ov) {
             return asOptionSpec(ov.asOption().orElseThrow().getSpec());
