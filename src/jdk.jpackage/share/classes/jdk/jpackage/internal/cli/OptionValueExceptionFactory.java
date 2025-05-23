@@ -30,11 +30,30 @@ import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.stream.Stream;
 
+/**
+ * Factory producing exception objects for option value processing failures.
+ * <p>
+ * Errors in converting option string values into objects or validating objects
+ * created from option string values are typical option value processing
+ * failures.
+ *
+ * @param T type of produced exceptions
+ */
+@FunctionalInterface
 interface OptionValueExceptionFactory<T extends Exception> {
 
-    T create(OptionName optionName, String optionValue, String formatString);
-
-    T create(OptionName optionName, String optionValue, String formatString, Throwable cause);
+    /**
+     * Create an exception object for the specified option name, value and optional
+     * cause.
+     *
+     * @param optionName   the name of the option
+     * @param optionValue  the value of the option
+     * @param formatString the format string for formatting the exception message
+     * @param cause        the cause if any, an empty {@ @link Optional} instance
+     *                     otherwise
+     * @return exception object
+     */
+    T create(OptionName optionName, StringToken optionValue, String formatString, Optional<Throwable> cause);
 
     static <U extends Exception> OptionValueExceptionFactory<U> create(BiFunction<String, Throwable, U> ctor) {
         return build(ctor).create();
@@ -42,7 +61,7 @@ interface OptionValueExceptionFactory<T extends Exception> {
 
     @FunctionalInterface
     interface ArgumentsMapper {
-        String[] apply(String optionName, String optionValue);
+        String[] apply(String formattedOptionName, StringToken optionValue);
     }
 
     enum StandardArgumentsMapper implements ArgumentsMapper {
@@ -52,16 +71,16 @@ interface OptionValueExceptionFactory<T extends Exception> {
         NONE;
 
         @Override
-        public String[] apply(String optionName, String optionValue) {
+        public String[] apply(String formattedOptionName, StringToken optionValue) {
             switch (this) {
                 case NAME_AND_VALUE -> {
-                    return new String[] { optionName, optionValue };
+                    return new String[] { formattedOptionName, optionValue.tokenizedString() };
                 }
                 case VALUE_AND_NAME -> {
-                    return new String[] { optionValue, optionName };
+                    return new String[] { optionValue.tokenizedString(), formattedOptionName };
                 }
                 case VALUE -> {
-                    return new String[] { optionValue };
+                    return new String[] { optionValue.tokenizedString() };
                 }
                 case NONE -> {
                     return new String[] {};
@@ -121,21 +140,18 @@ interface OptionValueExceptionFactory<T extends Exception> {
         return new OptionValueExceptionFactory<>() {
 
             @Override
-            public T create(OptionName optionName, String optionValue, String formatString) {
-                return ctor.apply(createMessage(optionName, optionValue, formatString), null);
+            public T create(OptionName optionName, StringToken optionValue, String formatString, Optional<Throwable> cause) {
+                return ctor.apply(createMessage(optionName, optionValue, formatString), cause.orElse(null));
             }
 
-            @Override
-            public T create(OptionName optionName, String optionValue, String formatString, Throwable cause) {
-                return ctor.apply(createMessage(optionName, optionValue, formatString), cause);
-            }
-
-            private String createMessage(OptionName optionName, String optionValue, String formatString) {
+            private String createMessage(OptionName optionName, StringToken optionValue, String formatString) {
                 Objects.requireNonNull(optionName);
                 Objects.requireNonNull(optionValue);
                 Objects.requireNonNull(formatString);
 
-                final var args = Stream.of(formatArgumentsTransformer.apply(optionName.formatForCommandLine(), optionValue)).toArray();
+                final var formattedOptionName = Objects.requireNonNull(optionName.formatForCommandLine());
+
+                final var args = Stream.of(formatArgumentsTransformer.apply(formattedOptionName, optionValue)).toArray();
                 return messageFormatter.apply(formatString, args);
             }
         };
@@ -143,12 +159,7 @@ interface OptionValueExceptionFactory<T extends Exception> {
 
     static final OptionValueExceptionFactory<RuntimeException> UNREACHABLE_EXCEPTION_FACTORY = new OptionValueExceptionFactory<>() {
         @Override
-        public RuntimeException create(OptionName optionName, String optionValue, String formatString) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public RuntimeException create(OptionName optionName, String optionValue, String formatString, Throwable cause) {
+        public RuntimeException create(OptionName optionName, StringToken optionValue, String formatString, Optional<Throwable> cause) {
             throw new UnsupportedOperationException();
         }
     };

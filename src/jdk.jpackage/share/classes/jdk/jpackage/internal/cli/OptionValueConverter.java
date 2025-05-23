@@ -37,7 +37,7 @@ interface OptionValueConverter<T> {
      * @param optionValue the string value of the option to convert
      * @return the converted value
      */
-    T convert(OptionName optionName, String optionValue);
+    T convert(OptionName optionName, StringToken optionValue);
 
     /**
      * Gives the class of the type of values this converter converts to.
@@ -116,12 +116,12 @@ interface OptionValueConverter<T> {
             }
 
             @Override
-            public T convert(OptionName optionName, String optionValue) {
+            public T convert(OptionName optionName, StringToken optionValue) {
                 Objects.requireNonNull(optionName);
                 try {
-                    return converter.convert(optionValue);
+                    return converter.convert(optionValue.value());
                 } catch (IllegalArgumentException ex) {
-                    throw exceptionFactory.create(optionName, optionValue, formatString, ex);
+                    throw exceptionFactory.create(optionName, optionValue, formatString, Optional.of(ex));
                 } catch (Exception ex) {
                     throw new ConverterException(ex);
                 }
