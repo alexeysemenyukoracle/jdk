@@ -24,8 +24,12 @@
  */
 package jdk.jpackage.internal.cli;
 
+import java.lang.reflect.Array;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.stream.Stream;
 
 interface OptionValueConverter<T> {
 
@@ -51,11 +55,7 @@ interface OptionValueConverter<T> {
      */
     final static class ConverterException extends RuntimeException {
 
-        ConverterException(String msg, Throwable cause) {
-            super(msg, cause);
-        }
-
-        ConverterException(Throwable cause) {
+        private ConverterException(Throwable cause) {
             super(cause);
         }
 
@@ -72,6 +72,10 @@ interface OptionValueConverter<T> {
             return new DefaultOptionValueConverter<>(converter, formatString, exceptionFactory);
         }
 
+        OptionArrayValueConverter<T> createArray() {
+            return new DefaultOptionArrayValueConverter<>(create(), tokenizer);
+        }
+
         Builder<T> converter(ValueConverter<T> v) {
             converter = v;
             return this;
@@ -81,7 +85,13 @@ interface OptionValueConverter<T> {
             final Builder<U> newBuilder = build();
             formatString().ifPresent(newBuilder::formatString);
             exceptionFactory().ifPresent(newBuilder::exceptionFactory);
+            tokenizer().ifPresent(newBuilder::tokenizer);
             return newBuilder.converter(v);
+        }
+
+        Builder<T> tokenizer(Function<String, String[]> v) {
+            tokenizer = v;
+            return this;
         }
 
         Builder<T> formatString(String v) {
@@ -94,8 +104,17 @@ interface OptionValueConverter<T> {
             return this;
         }
 
+        Builder<T> mutate(Consumer<Builder<T>> mutator) {
+            mutator.accept(this);
+            return this;
+        }
+
         Optional<ValueConverter<T>> converter() {
             return Optional.ofNullable(converter);
+        }
+
+        Optional<Function<String, String[]>> tokenizer() {
+            return Optional.ofNullable(tokenizer);
         }
 
         Optional<String> formatString() {
@@ -105,6 +124,7 @@ interface OptionValueConverter<T> {
         Optional<OptionValueExceptionFactory<? extends RuntimeException>> exceptionFactory() {
             return Optional.ofNullable(exceptionFactory);
         }
+
 
         private record DefaultOptionValueConverter<T>(ValueConverter<T> converter, String formatString,
                 OptionValueExceptionFactory<? extends RuntimeException> exceptionFactory) implements OptionValueConverter<T> {
@@ -120,9 +140,6 @@ interface OptionValueConverter<T> {
                 Objects.requireNonNull(optionName);
                 try {
                     return converter.convert(optionValue.value());
-                } catch (StandardValueConverter.StashedIllegalStringArgumentException ex) {
-                    throw exceptionFactory.create(optionName, StringToken.of(optionValue.tokenizedString(),
-                            ex.illegalArgumentValue()), formatString, Optional.of(ex.getCause()));
                 } catch (IllegalArgumentException ex) {
                     throw exceptionFactory.create(optionName, optionValue, formatString, Optional.of(ex));
                 } catch (Exception ex) {
@@ -136,7 +153,39 @@ interface OptionValueConverter<T> {
             }
         }
 
+
+        private record DefaultOptionArrayValueConverter<T>(OptionValueConverter<T> elementConverter,
+                Function<String, String[]> tokenizer) implements OptionArrayValueConverter<T> {
+
+            DefaultOptionArrayValueConverter {
+                Objects.requireNonNull(elementConverter);
+                Objects.requireNonNull(tokenizer);
+            }
+
+            @SuppressWarnings("unchecked")
+            @Override
+            public T[] convert(OptionName optionName, StringToken optionValue) {
+                return Stream.of(tokenize(optionValue.value())).map(token -> {
+                    return elementConverter.convert(optionName, StringToken.of(optionValue.value(), token));
+                }).toArray(length -> {
+                    return (T[])Array.newInstance(elementConverter.valueType(), length);
+                });
+            }
+
+            @SuppressWarnings("unchecked")
+            @Override
+            public Class<? extends T[]> valueType() {
+                return (Class<? extends T[]>)elementConverter.valueType().arrayType();
+            }
+
+            @Override
+            public String[] tokenize(String str) {
+                return tokenizer.apply(Objects.requireNonNull(str));
+            }
+        }
+
         private ValueConverter<T> converter;
+        private Function<String, String[]> tokenizer;
         private String formatString;
         private OptionValueExceptionFactory<? extends RuntimeException> exceptionFactory;
     }

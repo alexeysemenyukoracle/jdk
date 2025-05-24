@@ -61,8 +61,11 @@ final class OptionSpecBuilder<T> {
 
     final class ArrayOptionSpecBuilder {
 
-        private ArrayOptionSpecBuilder(Function<String, String[]> splitter) {
-            this.splitter = Objects.requireNonNull(splitter);
+        private ArrayOptionSpecBuilder() {
+        }
+
+        OptionSpecBuilder<T> outer() {
+            return OptionSpecBuilder.this;
         }
 
         OptionValue<T[]> create() {
@@ -81,7 +84,7 @@ final class OptionSpecBuilder<T> {
 
         OptionSpec<T[]> createOptionSpec() {
             final OptionSpec.MergePolicy mergePolicy = OptionSpec.MergePolicy.CONCATENATE;
-            return new OptionSpec<>(names(), createConverter(), scope, createValidator(), mergePolicy);
+            return new OptionSpec<>(names(), Optional.of(createConverter()), scope, createValidator(), mergePolicy);
         }
 
         ArrayOptionSpecBuilder defaultValue(T[] v) {
@@ -99,8 +102,18 @@ final class OptionSpecBuilder<T> {
             return this;
         }
 
+        ArrayOptionSpecBuilder validatorExceptionFormatString(UnaryOperator<String> mutator) {
+            OptionSpecBuilder.this.validatorExceptionFormatString(mutator);
+            return this;
+        }
+
         ArrayOptionSpecBuilder converterExceptionFormatString(String v) {
             OptionSpecBuilder.this.converterExceptionFormatString(v);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder converterExceptionFormatString(UnaryOperator<String> mutator) {
+            OptionSpecBuilder.this.converterExceptionFormatString(mutator);
             return this;
         }
 
@@ -126,6 +139,11 @@ final class OptionSpecBuilder<T> {
 
         ArrayOptionSpecBuilder exceptionFormatString(String v) {
             OptionSpecBuilder.this.exceptionFormatString(v);
+            return this;
+        }
+
+        ArrayOptionSpecBuilder exceptionFormatString(UnaryOperator<String> mutator) {
+            OptionSpecBuilder.this.exceptionFormatString(mutator);
             return this;
         }
 
@@ -221,10 +239,8 @@ final class OptionSpecBuilder<T> {
             return this;
         }
 
-        private Optional<OptionValueConverter<T[]>> createConverter() {
-            return converterBuilder.converter().map(c -> {
-                return StandardValueConverter.toArray(c, splitter);
-            }).map(converterBuilder::convert).map(OptionValueConverter.Builder::create);
+        private OptionValueConverter<T[]> createConverter() {
+            return converterBuilder.createArray();
         }
 
         private Optional<Validator<T[], ? extends Exception>> createValidator() {
@@ -247,7 +263,6 @@ final class OptionSpecBuilder<T> {
         }
 
         private T[] arrayDefaultValue;
-        private final Function<String, String[]> splitter;
     }
 
 
@@ -283,8 +298,9 @@ final class OptionSpecBuilder<T> {
         });
     }
 
-    ArrayOptionSpecBuilder toArray(Function<String, String[]> conv) {
-        return new ArrayOptionSpecBuilder(conv);
+    ArrayOptionSpecBuilder toArray(Function<String, String[]> tokenizer) {
+        converterBuilder.tokenizer(Objects.requireNonNull(tokenizer));
+        return new ArrayOptionSpecBuilder();
     }
 
     OptionSpecBuilder<T> mutate(Consumer<OptionSpecBuilder<?>> mutator) {
@@ -297,8 +313,18 @@ final class OptionSpecBuilder<T> {
         return this;
     }
 
+    OptionSpecBuilder<T> validatorExceptionFormatString(UnaryOperator<String> mutator) {
+        validatorBuilder.formatString(mutator.apply(validatorBuilder.formatString().orElse(null)));
+        return this;
+    }
+
     OptionSpecBuilder<T> converterExceptionFormatString(String v) {
         converterBuilder.formatString(v);
+        return this;
+    }
+
+    OptionSpecBuilder<T> converterExceptionFormatString(UnaryOperator<String> mutator) {
+        converterBuilder.formatString(mutator.apply(converterBuilder.formatString().orElse(null)));
         return this;
     }
 
@@ -322,6 +348,10 @@ final class OptionSpecBuilder<T> {
 
     OptionSpecBuilder<T> exceptionFormatString(String v) {
         return validatorExceptionFormatString(v).converterExceptionFormatString(v);
+    }
+
+    OptionSpecBuilder<T> exceptionFormatString(UnaryOperator<String> mutator) {
+        return validatorExceptionFormatString(mutator).converterExceptionFormatString(mutator);
     }
 
     OptionSpecBuilder<T> exceptionFactory(OptionValueExceptionFactory<? extends RuntimeException> v) {

@@ -61,8 +61,8 @@ record OptionSpec<T>(List<OptionName> names, Optional<OptionValueConverter<T>> v
 
         final var typeMustBeArray = mergePolicy.equals(MergePolicy.CONCATENATE);
         final var type = valueType(valueConverter);
-        if (typeMustBeArray != type.isArray()) {
-            throw new IllegalArgumentException(String.format("Invalid merge policy [%s] for type [%s]", mergePolicy, type));
+        if (typeMustBeArray != type.map(Class::isArray).orElse(false)) {
+            throw new IllegalArgumentException(String.format("Invalid merge policy [%s] for type [%s]", mergePolicy, type.map(Class::getName).orElse("")));
         }
     }
 
@@ -84,20 +84,15 @@ record OptionSpec<T>(List<OptionName> names, Optional<OptionValueConverter<T>> v
         return names().stream().filter(cmdline::contains).toList();
     }
 
-    String formatNameForErrorMessage(Options cmdline) {
-        return findNamesIn(cmdline).getFirst().formatForCommandLine();
-    }
-
     boolean hasValue() {
         return valueConverter.isPresent();
     }
 
     Class<? extends T> valueType() {
-        return valueType(valueConverter);
+        return valueType(valueConverter).orElseThrow();
     }
 
-    @SuppressWarnings("unchecked")
-    private static <T> Class<T> valueType(Optional<OptionValueConverter<T>> valueConverter) {
-        return valueConverter.map(OptionValueConverter::valueType).map(x -> (Class<T>)x).orElse((Class<T>)String.class);
+    private static <T> Optional<Class<T>> valueType(Optional<OptionValueConverter<T>> valueConverter) {
+        return valueConverter.map(OptionValueConverter::valueType).map(x -> (Class<T>)x);
     }
 }
