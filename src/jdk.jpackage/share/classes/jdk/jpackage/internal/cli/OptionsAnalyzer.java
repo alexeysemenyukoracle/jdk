@@ -199,13 +199,17 @@ final class OptionsAnalyzer {
     private static Object[] mapFormatArguments(Options cmdline, Object... args) {
         return Stream.of(args).map(arg -> {
             return asOptionSpec(arg).map(optionSpec -> {
-                return (Object)optionSpec.formatNameForErrorMessage(cmdline);
+                return (Object)formatOptionNameForErrorMessage(cmdline, optionSpec);
             }).orElse(arg);
         }).toArray();
     }
 
     private static List<Option> asOptionList(OptionValue<?>... optionValues) {
         return Stream.of(optionValues).map(OptionValue::asOption).map(Optional::orElseThrow).toList();
+    }
+
+    private static String formatOptionNameForErrorMessage(Options cmdline, OptionSpec<?> optionSpec) {
+        return optionSpec.findNamesIn(cmdline).getFirst().formatForCommandLine();
     }
 
     private record MutualExclusiveOptions(List<Option> options, Function<Object[], ConfigException> createException) {
@@ -221,7 +225,7 @@ final class OptionsAnalyzer {
             final var detectedOptions = options.stream().filter(cmdline::contains).toList();
             if (detectedOptions.size() > 1) {
                 final var errMesageformatArgs = detectedOptions.stream().map(Option::getSpec).map(optionSpec -> {
-                    return optionSpec.formatNameForErrorMessage(cmdline);
+                    return formatOptionNameForErrorMessage(cmdline, optionSpec);
                 }).toArray();
                 return Optional.of(createException.apply(errMesageformatArgs));
             } else {

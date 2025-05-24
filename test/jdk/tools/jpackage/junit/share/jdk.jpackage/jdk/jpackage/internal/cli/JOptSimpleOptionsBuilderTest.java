@@ -38,20 +38,20 @@ import java.net.URISyntaxException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import jdk.jpackage.internal.cli.OptionValueExceptionFactory.StandardArgumentsMapper;
+import jdk.jpackage.internal.cli.TestUtils.OptionFailure;
+import jdk.jpackage.internal.cli.TestUtils.TestException;
+import jdk.jpackage.internal.util.Result;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -244,15 +244,7 @@ public class JOptSimpleOptionsBuilderTest {
     @Test
     public void testConversionErrors(@TempDir Path tmpDir) {
 
-        final Collection<OptionFailure> actualConversionErrors = new ArrayList<>();
-
-        final Consumer<OptionSpecBuilder<?>> mutator = builder -> {
-            builder.exceptionFormatString("Option value [%s] of option %s");
-            builder.exceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME);
-            builder.exceptionFactory(recordExceptions(actualConversionErrors));
-        };
-
-        final var dirOption = directoryOption("dir").shortName("r").mutate(mutator).toArray(",").create();
+        final var dirOption = directoryOption("dir").shortName("r").toArray(",");
 
         final var urlOption = stringOption("url").converter(str -> {
             try {
@@ -261,7 +253,7 @@ public class JOptSimpleOptionsBuilderTest {
             } catch (URISyntaxException ex) {
                 throw new IllegalArgumentException(ex);
             }
-        }).mutate(mutator).create();
+        });
 
         final var lruOption = option("lru", URI.class).converter(str -> {
             try {
@@ -269,27 +261,38 @@ public class JOptSimpleOptionsBuilderTest {
             } catch (URISyntaxException ex) {
                 throw new IllegalArgumentException(ex);
             }
-        }).mutate(mutator).create();
+        });
 
-        final List<String> args = new ArrayList<>();
-        args.addAll(List.of("--dir=*,foo,,bar", "-r", "file", "-r", "file,*"));
-        args.addAll(List.of("--url=http://foo", "--url=:foo"));
-        args.addAll(List.of("--lru=:bar", "--lru=http://bar"));
+        new FaultyParserArgsConfig()
+                .options(urlOption, lruOption)
+                .arrayOptions(dirOption)
+                .args("--dir=*,foo,,bar", "-r", "file", "-r", "file,*")
+                .args("--url=http://foo", "--url=:foo")
+                .args("--lru=:bar", "--lru=http://bar")
+                .expectError("dir", StringToken.of("*,foo,,bar", "*"))
+                .expectError("r", StringToken.of("file,*", "*"))
+                .expectError("url", ":foo")
+                .expectError("lru", ":bar")
+                .test(ParserMode.CONVERT);
+    }
 
-        final var parser = new JOptSimpleOptionsBuilder().optionValues(dirOption, urlOption, lruOption).create();
+    @Test
+    public void testValidationErrors() {
 
-        final var cmdline = parser.apply(args.toArray(String[]::new)).flatMap(JOptSimpleOptionsBuilder.OptionsBuilder::convertedOptions);
+        final var numberArrayOption = option("number", Integer.class)
+                .shortName("n")
+                .validator((Predicate<Integer>)(v -> v > 0))
+                .toArray(",")
+                .converter(Integer::valueOf);
 
-        assertFalse(cmdline.hasValue());
-
-        final var expectedConversionErrors = Stream.of(
-                new OptionFailure("dir", StringToken.of("*,foo,,bar", "*")),
-                new OptionFailure("r", StringToken.of("file,*", "*")),
-                new OptionFailure("url", ":foo"),
-                new OptionFailure("lru", ":bar")
-        ).sorted(OptionFailure.compareNameAndValue()).toList();
-
-        assertEquals(expectedConversionErrors, actualConversionErrors.stream().map(OptionFailure::withoutException).sorted(OptionFailure.compareNameAndValue()).toList());
+        new FaultyParserArgsConfig()
+                .arrayOptions(numberArrayOption)
+                .args("--number=56,23", "--number=2,-34,-45", "-n", "2,-17,0,56")
+                .expectError("number", StringToken.of("2,-34,-45", "-34"))
+                .expectError("number", StringToken.of("2,-34,-45", "-45"))
+                .expectError("n", StringToken.of("2,-17,0,56", "-17"))
+                .expectError("n", StringToken.of("2,-17,0,56", "0"))
+                .test(ParserMode.VALIDATE);
     }
 
     @ParameterizedTest
@@ -407,13 +410,6 @@ public class JOptSimpleOptionsBuilderTest {
                 .validatorExceptionFormatString(FORMAT_STRING_NOT_DIRECTORY);
     }
 
-    private static OptionSpecBuilder<String> urlOption(String name) {
-        return stringOption(name)
-                .validator(StandardValidator.IS_URL)
-                .validatorExceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME)
-                .validatorExceptionFormatString(FORMAT_STRING_NOT_URL);
-    }
-
     private static OptionSpecBuilder<Boolean> booleanOption(String name) {
         return option(name, Boolean.class).defaultValue(Boolean.FALSE);
     }
@@ -450,86 +446,111 @@ public class JOptSimpleOptionsBuilderTest {
         return new TestSpec.Builder();
     }
 
-    private static UnaryOperator<OptionValueExceptionFactory<? extends RuntimeException>> recordExceptions(Collection<OptionFailure> sink) {
-        return exceptionFactory -> {
-            return new RecordingExceptionFactory(exceptionFactory, sink::add);
-        };
-    }
 
+    private static final class FaultyParserArgsConfig {
 
-    private record OptionFailure(OptionName optionName, StringToken optionValue, Optional<Exception> exception) {
-        OptionFailure {
-            Objects.requireNonNull(optionName);
-            Objects.requireNonNull(optionValue);
-            Objects.requireNonNull(exception);
+        void test(ParserMode parserMode) {
+
+            final Collection<OptionFailure> actualErrors = new ArrayList<>();
+
+            final List<OptionValue<?>> optionValues = new ArrayList<>();
+
+            optionSpecBuilders.stream().map(builder -> {
+                configureExceptions(builder);
+                return builder.exceptionFactory(TestUtils.recordExceptions(actualErrors));
+            }).map(OptionSpecBuilder::create).forEach(optionValues::add);
+
+            arrayOptionSpecBuilders.stream().map(builder -> {
+                configureExceptions(builder.outer());
+                return builder.exceptionFactory(TestUtils.recordExceptions(actualErrors));
+            }).map(OptionSpecBuilder<?>.ArrayOptionSpecBuilder::create).forEach(optionValues::add);
+
+            final var parser = new JOptSimpleOptionsBuilder().optionValues(optionValues).create();
+
+            final Result<?> cmdline;
+            switch (parserMode) {
+                case CONVERT -> {
+                    cmdline = parser.apply(args.toArray(String[]::new)).orElseThrow().convertedOptions();
+                }
+                case VALIDATE -> {
+                    cmdline = parser.apply(args.toArray(String[]::new))
+                            .orElseThrow().convertedOptions().orElseThrow().validatedOptions();
+                }
+                default -> {
+                    throw new UnsupportedOperationException();
+                }
+            }
+
+            assertFalse(cmdline.hasValue());
+
+            TestUtils.assertOptionFailuresEquals(expectedErrors,
+                    actualErrors.stream().map(OptionFailure::withoutException).toList());
         }
 
-        OptionFailure(OptionName optionName, StringToken optionValue) {
-            this(optionName, optionValue, Optional.empty());
+        FaultyParserArgsConfig args(Collection<String> v) {
+            args.addAll(v);
+            return this;
         }
 
-        OptionFailure(String optionName, StringToken optionValue) {
-            this(OptionName. of(optionName), optionValue);
+        FaultyParserArgsConfig args(String... v) {
+            return args(List.of(v));
         }
 
-        OptionFailure(OptionName optionName, String optionValue) {
-            this(optionName, StringToken.of(optionValue));
+        FaultyParserArgsConfig options(Collection<OptionSpecBuilder<?>> v) {
+            optionSpecBuilders.addAll(v);
+            return this;
         }
 
-        OptionFailure(String optionName, String optionValue) {
-            this(OptionName. of(optionName), optionValue);
+        FaultyParserArgsConfig options(OptionSpecBuilder<?>... v) {
+            return options(List.of(v));
         }
 
-        OptionFailure withoutException() {
-            return new OptionFailure(optionName, optionValue, Optional.empty());
+        FaultyParserArgsConfig arrayOptions(Collection<OptionSpecBuilder<?>.ArrayOptionSpecBuilder> v) {
+            arrayOptionSpecBuilders.addAll(v);
+            return this;
         }
 
-        static Comparator<OptionFailure> compareNameAndValue() {
-            return Comparator.comparing(OptionFailure::optionName).thenComparing(v -> {
-                return v.optionValue().value();
-            }).thenComparing(v -> {
-                return v.optionValue().tokenizedString();
+        FaultyParserArgsConfig arrayOptions(OptionSpecBuilder<?>.ArrayOptionSpecBuilder... v) {
+            return arrayOptions(List.of(v));
+        }
+
+        FaultyParserArgsConfig expectErrors(Collection<OptionFailure> v) {
+            expectedErrors.addAll(v);
+            return this;
+        }
+
+        FaultyParserArgsConfig expectErrors(OptionFailure... v) {
+            return expectErrors(List.of(v));
+        }
+
+        FaultyParserArgsConfig expectError(String optionName, String optionValue) {
+            return expectError(optionName, StringToken.of(optionValue));
+        }
+
+        FaultyParserArgsConfig expectError(String optionName, StringToken optionValue) {
+            return expectErrors(new OptionFailure(optionName, optionValue));
+        }
+
+        private static void configureExceptions(OptionSpecBuilder<?> builder) {
+            builder.exceptionFactory(factory -> {
+                if (factory == null || factory == UNREACHABLE_EXCEPTION_FACTORY) {
+                    builder.exceptionFormatString("Option value [%s] of option %s");
+                    factory = ERROR_WITH_VALUE_AND_OPTION_NAME;
+                }
+                return factory;
             });
         }
-    }
 
-
-    private record RecordingExceptionFactory(OptionValueExceptionFactory<? extends RuntimeException> factory,
-            Consumer<OptionFailure> sink) implements OptionValueExceptionFactory<RuntimeException> {
-
-        RecordingExceptionFactory {
-            Objects.requireNonNull(factory);
-            Objects.requireNonNull(sink);
-        }
-
-        @Override
-        public RuntimeException create(OptionName optionName, StringToken optionValue, String formatString, Optional<Throwable> cause) {
-            final var ex = factory.create(optionName, optionValue, formatString, cause);
-            sink.accept(new OptionFailure(optionName, optionValue, Optional.of(ex)));
-            return ex;
-        }
-    }
-
-
-    private final static class TestException extends RuntimeException {
-
-        TestException(String msg) {
-            super(msg);
-        }
-
-        TestException(String msg, Throwable cause) {
-            super(msg, cause);
-        }
-
-        private static final long serialVersionUID = 1L;
+        private final List<String> args = new ArrayList<>();
+        private final Collection<OptionSpecBuilder<?>> optionSpecBuilders = new ArrayList<>();
+        private final Collection<OptionSpecBuilder<?>.ArrayOptionSpecBuilder> arrayOptionSpecBuilders = new ArrayList<>();
+        private final Collection<OptionFailure> expectedErrors = new ArrayList<>();
     }
 
 
     private final static String FORMAT_STRING_ILLEGAL_PATH = "The value '%s' provided for parameter %s is not a valid path";
 
     private final static String FORMAT_STRING_NOT_DIRECTORY = "The value '%s' provided for parameter %s is not a directory path";
-
-    private final static String FORMAT_STRING_NOT_URL = "The value '%s' provided for parameter %s is not a URL";
 
     private static final OptionValueExceptionFactory<? extends RuntimeException> ERROR_WITH_VALUE_AND_OPTION_NAME = OptionValueExceptionFactory.build(TestException::new)
             .formatArgumentsTransformer(StandardArgumentsMapper.VALUE_AND_NAME)
