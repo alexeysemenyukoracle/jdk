@@ -42,6 +42,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import jdk.internal.joptsimple.OptionParser;
@@ -316,9 +317,20 @@ final class JOptSimpleOptionsBuilder {
                 @SuppressWarnings("unchecked")
                 final var values = (List<String>)optionSet.valuesOf(optionName.name());
                 return values.stream().map(value -> {
-                    final var token = StringToken.of(value);
                     try {
-                        return Result.ofValue(List.of(new OptionWithValue<>(optionName, converter.convert(optionName, token), token)));
+                        final var token = StringToken.of(value);
+                        final var convertedValue = converter.convert(optionName, token);
+
+                        final OptionWithValue<T> optionWithValue;
+
+                        if (converter instanceof OptionArrayValueConverter<?> arrConverter) {
+                            final var tokens = arrConverter.tokenize(value);
+                            optionWithValue = new ArrayOptionWithValue<>(optionName, convertedValue, token.value(), tokens);
+                        } else {
+                            optionWithValue = new ScalarOptionWithValue<>(optionName, convertedValue, token);
+                        }
+
+                        return Result.ofValue(List.of(optionWithValue));
                     } catch (OptionValueConverter.ConverterException ex) {
                         // Converter internal error, bail out
                         throw ex;
@@ -343,20 +355,53 @@ final class JOptSimpleOptionsBuilder {
     }
 
 
-    private record OptionWithValue<T>(OptionName name, T value, StringToken sourceToken) implements ParsedValue<T> {
-        OptionWithValue {
+    private interface OptionWithValue<T> {
+        OptionName name();
+        T value();
+        List<? extends Exception> validate(Validator<T, ? extends Exception> validator);
+
+        @SuppressWarnings("unchecked")
+        default List<? extends Exception> validateCastUnchecked(Validator<?, ? extends Exception> validator) {
+            return validate((Validator<T, ? extends Exception>)validator);
+        }
+    }
+
+
+    private record ScalarOptionWithValue<T>(OptionName name, T value, StringToken sourceToken) implements OptionWithValue<T>, ParsedValue<T> {
+        ScalarOptionWithValue {
             Objects.requireNonNull(name);
             Objects.requireNonNull(value);
             Objects.requireNonNull(sourceToken);
         }
 
-        List<? extends Exception> validate(Validator<T, ? extends Exception> validator) {
+        @Override
+        public List<? extends Exception> validate(Validator<T, ? extends Exception> validator) {
             return validator.validate(name, this).stream().toList();
         }
+    }
 
-        @SuppressWarnings("unchecked")
-        List<? extends Exception> validateCastUnchecked(Validator<?, ? extends Exception> validator) {
-            return validate((Validator<T, ? extends Exception>)validator);
+
+    private record ArrayOptionWithValue<T>(OptionName name, T value, String tokenizedString, String[] tokens) implements OptionWithValue<T> {
+        ArrayOptionWithValue {
+            Objects.requireNonNull(name);
+            Objects.requireNonNull(value);
+            Objects.requireNonNull(tokenizedString);
+            Objects.requireNonNull(tokens);
+        }
+
+        @Override
+        public List<? extends Exception> validate(Validator<T, ? extends Exception> validator) {
+            Objects.requireNonNull(validator);
+
+            @SuppressWarnings("unchecked")
+            final var buf = (T)Array.newInstance(Array.get(value, 0).getClass(), 1);
+
+            return IntStream.range(0, Array.getLength(value)).mapToObj(i -> {
+                Array.set(buf, 0, Array.get(value, i));
+                return ParsedValue.create(buf, StringToken.of(tokenizedString, tokens[i]));
+            }).map(parsedValue -> {
+                return validator.validate(name, parsedValue);
+            }).flatMap(Collection::stream).toList();
         }
     }
 

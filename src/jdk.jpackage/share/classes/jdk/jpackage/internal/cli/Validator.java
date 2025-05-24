@@ -40,14 +40,14 @@ interface Validator<T, U extends Exception> {
     /**
      * Thrown to indicate that the given value didn't pass validation.
      */
-    final static class ValidatingConsumerException extends RuntimeException {
+    final static class ValidatingConsumerException extends RuntimeException{
 
         ValidatingConsumerException(String msg, Throwable cause) {
-            super(msg, cause);
+            super(msg, Objects.requireNonNull(cause));
         }
 
         ValidatingConsumerException(Throwable cause) {
-            super(cause);
+            super(Objects.requireNonNull(cause));
         }
 
         private static final long serialVersionUID = 1L;
@@ -59,11 +59,7 @@ interface Validator<T, U extends Exception> {
      */
     final static class ValidatorException extends RuntimeException {
 
-        ValidatorException(String msg, Throwable cause) {
-            super(msg, cause);
-        }
-
-        ValidatorException(Throwable cause) {
+        private ValidatorException(Throwable cause) {
             super(cause);
         }
 
@@ -74,16 +70,15 @@ interface Validator<T, U extends Exception> {
     interface ParsedValue<T> {
         StringToken sourceToken();
         T value();
+
+        static <T> ParsedValue<T> create(T value, StringToken sourceToken) {
+            return new Details.DefaultParsedValue<>(value, sourceToken);
+        }
     }
 
 
     static <T, U extends Exception> Builder<T, U> build() {
         return new Builder<>();
-    }
-
-    static <T, U extends Exception> Builder<T, U> build(Class<T> valueType, OptionValueExceptionFactory<U> exceptionFactory) {
-        final Builder<T, U> builder = build();
-        return builder.exceptionFactory(exceptionFactory);
     }
 
 
@@ -116,6 +111,11 @@ interface Validator<T, U extends Exception> {
 
         Builder<T, U> exceptionFactory(OptionValueExceptionFactory<? extends U> v) {
             exceptionFactory = v;
+            return this;
+        }
+
+        Builder<T, U> mutate(Consumer<Builder<T, U>> mutator) {
+            mutator.accept(this);
             return this;
         }
 
@@ -179,11 +179,11 @@ interface Validator<T, U extends Exception> {
                                 return List.of();
                             } catch (ValidatingConsumerException ex) {
                                 return List.of((U)exceptionFactory.create(optionName, optionValue.sourceToken(), formatString, Optional.of(ex.getCause())));
+                            } catch (IllegalArgumentException ex) {
+                                return List.of((U)exceptionFactory.create(optionName, optionValue.sourceToken(), formatString, Optional.of(ex)));
                             }
                         });
                     }).orElseThrow();
-                } catch (ValidatorException ex) {
-                    throw ex;
                 } catch (Exception ex) {
                     throw new ValidatorException(ex);
                 }
@@ -214,6 +214,13 @@ interface Validator<T, U extends Exception> {
                 }).flatMap(Collection::stream).toList();
             }
         }
+
+
+        private record DefaultParsedValue<T>(T value, StringToken sourceToken) implements ParsedValue<T> {
+            DefaultParsedValue {
+                Objects.requireNonNull(sourceToken);
+                Objects.requireNonNull(value);
+            }
+        }
     }
 }
-

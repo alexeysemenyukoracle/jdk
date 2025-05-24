@@ -22,29 +22,9 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-
 package jdk.jpackage.internal.cli;
 
-import java.nio.file.InvalidPathException;
-import java.nio.file.Path;
+interface OptionArrayValueConverter<T> extends OptionValueConverter<T[]> {
 
-
-final class StandardValueConverter {
-
-    static ValueConverter<String> identityConv() {
-        return IDENTITY_CONV;
-    }
-
-    static ValueConverter<Path> pathConv() {
-        return PATH_CONV;
-    }
-
-    private static final ValueConverter<String> IDENTITY_CONV = ValueConverter.create(x -> x, String.class);
-    private static final ValueConverter<Path> PATH_CONV = ValueConverter.create(str -> {
-        try {
-            return Path.of(str);
-        } catch (InvalidPathException ex) {
-            throw new IllegalArgumentException(ex);
-        }
-    }, Path.class);
+    String[] tokenize(String str);
 }
