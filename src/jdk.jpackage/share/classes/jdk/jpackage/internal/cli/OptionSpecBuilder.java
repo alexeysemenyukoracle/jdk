@@ -93,7 +93,7 @@ final class OptionSpecBuilder<T> {
             return this;
         }
 
-        ArrayOptionSpecBuilder mutate(Consumer<OptionSpecBuilder<?>.ArrayOptionSpecBuilder> mutator) {
+        ArrayOptionSpecBuilder mutate(Consumer<OptionSpecBuilder<T>.ArrayOptionSpecBuilder> mutator) {
             mutator.accept(this);
             return this;
         }
@@ -309,7 +309,7 @@ final class OptionSpecBuilder<T> {
         return new ArrayOptionSpecBuilder();
     }
 
-    OptionSpecBuilder<T> mutate(Consumer<OptionSpecBuilder<?>> mutator) {
+    OptionSpecBuilder<T> mutate(Consumer<OptionSpecBuilder<T>> mutator) {
         mutator.accept(this);
         return this;
     }
