@@ -395,7 +395,7 @@ final class OptionSpecBuilder<T> {
     }
 
     OptionSpecBuilder<T> withoutConverter() {
-        converterBuilder.convert(null);
+        converterBuilder.converter(null);
         return this;
     }
 

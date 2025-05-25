@@ -40,7 +40,7 @@ public class OptionValueConverterTest {
     @ValueSource(booleans = {true, false})
     public void test(boolean positive) {
 
-        final var converter = OptionValueConverter.build().convert(ValueConverter.create(str -> {
+        final var converter = OptionValueConverter.build().converter(ValueConverter.create(str -> {
             return Integer.valueOf(str);
         }, Integer.class)).mutate(configureConverter()).create();
 
@@ -62,7 +62,7 @@ public class OptionValueConverterTest {
 
         final var exception = new RuntimeException("Always fail");
 
-        final var converter = OptionValueConverter.build().convert(ValueConverter.create(str -> {
+        final var converter = OptionValueConverter.build().converter(ValueConverter.create(str -> {
             throw exception;
         }, Integer.class)).mutate(configureConverter()).create();
 

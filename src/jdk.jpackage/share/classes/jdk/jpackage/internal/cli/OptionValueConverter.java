@@ -81,14 +81,6 @@ interface OptionValueConverter<T> {
             return this;
         }
 
-        <U> Builder<U> convert(ValueConverter<U> v) {
-            final Builder<U> newBuilder = build();
-            formatString().ifPresent(newBuilder::formatString);
-            exceptionFactory().ifPresent(newBuilder::exceptionFactory);
-            tokenizer().ifPresent(newBuilder::tokenizer);
-            return newBuilder.converter(v);
-        }
-
         Builder<T> tokenizer(Function<String, String[]> v) {
             tokenizer = v;
             return this;
