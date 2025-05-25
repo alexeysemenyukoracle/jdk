@@ -188,7 +188,7 @@ public class ValidatorTest {
         final var validator = Validator.<Integer, Exception>build().predicate(v -> {
             return v > 0;
         }).mutate(configureValidator()).createArray();
-        
+
         final String tokenizedString;
         if (positive) {
             tokenizedString = "3,5,77,9";
@@ -210,13 +210,13 @@ public class ValidatorTest {
             expectedExceptions = List.of(expectedExcepion, expectedExcepion);
         }
 
-        final var actualExceptions = validator.validate(OptionName.of("foo"), 
+        final var actualExceptions = validator.validate(OptionName.of("foo"),
                 ParsedValue.create(intArray, StringToken.of(tokenizedString)));
 
         assertExceptionListEquals(expectedExceptions, actualExceptions);
     }
 
-    
+
     final static class FooException extends Exception {
 
         FooException(String msg) {

@@ -33,6 +33,7 @@ import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -41,12 +42,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import jdk.internal.joptsimple.OptionParser;
 import jdk.internal.joptsimple.OptionSet;
+import jdk.jpackage.internal.cli.OptionSpec.MergePolicy;
 import jdk.jpackage.internal.cli.Validator.ParsedValue;
 import jdk.jpackage.internal.util.Result;
 
@@ -164,8 +165,42 @@ final class JOptSimpleOptionsBuilder {
         }
 
         Result<OptionsBuilder> parse(String... args) {
+            return applyParser(parser, args).map(optionSet -> {
+                final OptionSet mergerOptionSet;
+                if (optionMap.values().stream().allMatch(list -> list.size() == 1)) {
+                    // No specs with multiple names, merger not needed.
+                    mergerOptionSet = optionSet;
+                } else {
+                    final var parser = createOptionParser();
+                    final var optionSpecApplier = new OptionSpecApplier();
+                    for (final var option : optionMap.keySet()) {
+                        optionSpecApplier.applyToParser(parser, option.getSpec());
+                    }
+
+                    mergerOptionSet = parser.parse(args);
+                }
+                return new OptionsBuilder(new UntypedOptions(optionSet, mergerOptionSet, optionMap));
+            });
+        }
+
+        static JOptSimpleParser create(Iterable<Option> options, Optional<Function<String, ? extends Exception>> unrecognizedOptionHandler) {
+            final var parser = createOptionParser();
+
+            // Create joptsimple option specs for distinct option names,
+            // i.e., individual joptsimple option spec for every name of jpackage option spec.
+            // This is needed to accurately detect whan options names was passed.
+            final var optionSpecApplier = new OptionSpecApplier().generateForEveryName(true);
+
+            final Map<Option, List<? extends OptionSpec<?>>> optionMap = StreamSupport.stream(options.spliterator(), false).collect(toMap(x -> x, option -> {
+                return optionSpecApplier.applyToParser(parser, option.getSpec());
+            }));
+
+            return new JOptSimpleParser(parser, optionMap, unrecognizedOptionHandler);
+        }
+
+        private Result<OptionSet> applyParser(OptionParser parser, String[] args) {
             try {
-                return Result.ofValue(new OptionsBuilder(new UntypedOptions(parser.parse(args), optionMap)));
+                return Result.ofValue(parser.parse(args));
             } catch (jdk.internal.joptsimple.OptionException ex) {
                 if (isUnrecognizedOptionException(ex)) {
                     final var unrecognizedOptionName = ex.options().getFirst();
@@ -180,18 +215,10 @@ final class JOptSimpleOptionsBuilder {
             }
         }
 
-        static JOptSimpleParser create(Iterable<Option> options, Optional<Function<String, ? extends Exception>> unrecognizedOptionHandler) {
+        private static OptionParser createOptionParser() {
             // No abbreviations!
             // Otherwise for the configured option "foo" it will recognize "f" as its abbreviation.
-            final var parser = new OptionParser(false);
-
-            final var optionSpecApplier = new OptionSpecApplier().generateForEveryName(true);
-
-            final Map<Option, List<? extends OptionSpec<?>>> optionMap = StreamSupport.stream(options.spliterator(), false).collect(toMap(x -> x, option -> {
-                return optionSpecApplier.applyToParser(parser, option.getSpec());
-            }));
-
-            return new JOptSimpleParser(parser, optionMap, unrecognizedOptionHandler);
+            return new OptionParser(false);
         }
     }
 
@@ -224,8 +251,9 @@ final class JOptSimpleOptionsBuilder {
 
     private final static class UntypedOptions implements Options {
 
-        UntypedOptions(OptionSet optionSet, Map<Option, List<? extends OptionSpec<?>>> optionMap) {
+        UntypedOptions(OptionSet optionSet, OptionSet mergerOptionSet, Map<Option, List<? extends OptionSpec<?>>> optionMap) {
             this.optionSet = Objects.requireNonNull(optionSet);
+            this.mergerOptionSet = Objects.requireNonNull(mergerOptionSet);
             optionNames = optionMap.keySet().stream().map(Option::getSpec).map(OptionSpec::names).flatMap(Collection::stream).filter(optionName -> {
                 return optionSet.has(optionName.name());
             }).collect(toSet());
@@ -236,7 +264,7 @@ final class JOptSimpleOptionsBuilder {
         }
 
         UntypedOptions(UntypedOptions other, Collection<Option> excludes) {
-            this(other.optionSet, other.optionMap.entrySet().stream().filter(e -> {
+            this(other.optionSet, other.mergerOptionSet, other.optionMap.entrySet().stream().filter(e -> {
                 return !excludes.contains(e.getKey());
             }).collect(toMap(Map.Entry::getKey, Map.Entry::getValue)));
         }
@@ -253,7 +281,7 @@ final class JOptSimpleOptionsBuilder {
                 final var option = e.getKey();
                 final var mainSpec = option.getSpec();
                 if (mainSpec.hasValue()) {
-                    final var result = convertValues(mainSpec, optionSet);
+                    final var result = convertValues(mainSpec, optionSet, getValues(mainSpec).orElseThrow());
                     result.value().ifPresent(v -> {
                         value.put(option, v);
                     });
@@ -290,16 +318,17 @@ final class JOptSimpleOptionsBuilder {
 
         private Optional<List<String>> findValues(OptionIdentifier id) {
             Objects.requireNonNull(id);
-            final var optionSpecs = optionMap.get(id);
-            if (optionSpecs == null) {
+            if (optionMap.containsKey(id)) {
+                return getValues(((Option)id).getSpec());
+            } else {
                 return Optional.empty();
             }
+        }
 
-            final var mainSpec = ((Option)id).getSpec();
+        private Optional<List<String>> getValues(OptionSpec<?> mainSpec) {
+            Objects.requireNonNull(mainSpec);
 
-            final var values = mainSpec.names().stream().map(OptionName::name).map(optionSet::valuesOf).filter(Predicate.not(List::isEmpty)).map(v -> {
-                return v.stream().map(String.class::cast);
-            }).flatMap(x -> x).toList();
+            final var values = optionValues(mergerOptionSet, mainSpec.name());
 
             if (!values.isEmpty()) {
                 return Optional.of(getOptionValue(values, mainSpec.mergePolicy()));
@@ -311,34 +340,63 @@ final class JOptSimpleOptionsBuilder {
             }
         }
 
-        private static <T> Result<List<OptionWithValue<T>>> convertValues(OptionSpec<T> optionSpec, OptionSet optionSet) {
-            final var converter = optionSpec.valueConverter().orElseThrow();
-            return optionSpec.names().stream().map(optionName -> {
-                @SuppressWarnings("unchecked")
-                final var values = (List<String>)optionSet.valuesOf(optionName.name());
+        private static <T> Result<List<OptionWithValue<T>>> convertValues(OptionSpec<T> optionSpec,
+                OptionSet optionSet, List<String> orderedStringValues) {
+            Objects.requireNonNull(optionSet);
+            Objects.requireNonNull(orderedStringValues);
+
+            final var orderedOptionValues = optionSpec.names().stream().map(optionName -> {
+                final var values = optionValues(optionSet, optionName);
                 return values.stream().map(value -> {
-                    try {
-                        final var token = StringToken.of(value);
-                        final var convertedValue = converter.convert(optionName, token);
-
-                        final OptionWithValue<T> optionWithValue;
-
-                        if (converter instanceof OptionArrayValueConverter<?> arrConverter) {
-                            final var tokens = arrConverter.tokenize(value);
-                            optionWithValue = new ArrayOptionWithValue<>(optionName, convertedValue, token.value(), tokens);
-                        } else {
-                            optionWithValue = new ScalarOptionWithValue<>(optionName, convertedValue, token);
-                        }
-
-                        return Result.ofValue(List.of(optionWithValue));
-                    } catch (OptionValueConverter.ConverterException ex) {
-                        // Converter internal error, bail out
-                        throw ex;
-                    } catch (RuntimeException ex) {
-                        return Result.<List<OptionWithValue<T>>>ofError(ex);
-                    }
+                    return new IndexedStringOptionValue(optionName, value, orderedStringValues.indexOf(value));
                 });
-            }).flatMap(x -> x).reduce((a, b) -> {
+            }).flatMap(x -> x).filter(indexedValue -> {
+                return indexedValue.index() >= 0;
+            }).sorted(Comparator.comparingInt(IndexedStringOptionValue::index));
+
+            final var converter = optionSpec.valueConverter().orElseThrow();
+            final OptionArrayValueConverter<?> arrConverter;
+            if (converter instanceof OptionArrayValueConverter<?> c) {
+                arrConverter = c;
+            } else {
+                arrConverter = null;
+            }
+
+            return orderedOptionValues.map(indexedValue -> {
+                final var optionName = indexedValue.optionName();
+
+                final var conversionResult = applyConverter(converter, optionName, indexedValue.optionValue());
+
+                if (conversionResult.hasErrors()) {
+                    if (arrConverter != null && optionSpec.mergePolicy() != MergePolicy.CONCATENATE) {
+                        // Maybe recoverable array conversion error
+                        final var tokens = arrConverter.tokenize(indexedValue.optionValue());
+                        final String str = getOptionValue(List.of(tokens), optionSpec.mergePolicy()).getFirst();
+                        final String[] token = arrConverter.tokenize(str);
+                        if (token.length == 1 && str.equals(token[0])) {
+                            final var singleTokenConversionResult = applyConverter(converter, optionName, str);
+                            if (singleTokenConversionResult.hasValue()) {
+                                final OptionWithValue<T> optionWithValue = new ArrayOptionWithValue<>(
+                                        optionName, singleTokenConversionResult.orElseThrow(), indexedValue.optionValue(), token);
+                                return Result.ofValue(optionWithValue);
+                            }
+                        }
+                    }
+                    return conversionResult.<OptionWithValue<T>>mapErrors();
+                }
+
+                final OptionWithValue<T> optionWithValue;
+
+                if (arrConverter != null) {
+                    final var tokens = arrConverter.tokenize(indexedValue.optionValue());
+                    optionWithValue = new ArrayOptionWithValue<>(optionName, conversionResult.orElseThrow(),
+                            indexedValue.optionValue(), tokens);
+                } else {
+                    optionWithValue = new ScalarOptionWithValue<>(optionName, conversionResult.orElseThrow(),
+                            StringToken.of(indexedValue.optionValue()));
+                }
+                return Result.ofValue(optionWithValue);
+            }).map(r -> r.map(List::of)).reduce((a, b) -> {
                 if (a.hasValue() && b.hasValue()) {
                     // Merge values as they both present.
                     return Result.ofValue(Stream.of(a, b).map(Result::orElseThrow).flatMap(List::stream).toList());
@@ -349,9 +407,34 @@ final class JOptSimpleOptionsBuilder {
             }).orElseThrow();
         }
 
+        private static <T> Result<T> applyConverter(OptionValueConverter<T> converter, OptionName optionName, String str) {
+            try {
+                return Result.ofValue(converter.convert(optionName, StringToken.of(str)));
+            } catch (OptionValueConverter.ConverterException ex) {
+                // Converter internal error, bail out
+                throw ex;
+            } catch (RuntimeException ex) {
+                return Result.ofError(ex);
+            }
+        }
+
+        @SuppressWarnings("unchecked")
+        private static List<String> optionValues(OptionSet optionSet, OptionName optionName) {
+            return (List<String>)optionSet.valuesOf(optionName.name());
+        }
+
         private final OptionSet optionSet;
+        private final OptionSet mergerOptionSet;
         private final Map<Option, List<? extends OptionSpec<?>>> optionMap;
         private final Set<OptionName> optionNames;
+    }
+
+
+    private record IndexedStringOptionValue(OptionName optionName, String optionValue, int index) {
+        IndexedStringOptionValue {
+            Objects.requireNonNull(optionName);
+            Objects.requireNonNull(optionValue);
+        }
     }
 
 
@@ -367,7 +450,8 @@ final class JOptSimpleOptionsBuilder {
     }
 
 
-    private record ScalarOptionWithValue<T>(OptionName name, T value, StringToken sourceToken) implements OptionWithValue<T>, ParsedValue<T> {
+    private record ScalarOptionWithValue<T>(OptionName name, T value,
+            StringToken sourceToken) implements OptionWithValue<T>, ParsedValue<T> {
         ScalarOptionWithValue {
             Objects.requireNonNull(name);
             Objects.requireNonNull(value);
@@ -381,7 +465,8 @@ final class JOptSimpleOptionsBuilder {
     }
 
 
-    private record ArrayOptionWithValue<T>(OptionName name, T value, String tokenizedString, String[] tokens) implements OptionWithValue<T> {
+    private record ArrayOptionWithValue<T>(OptionName name, T value, String tokenizedString,
+            String[] tokens) implements OptionWithValue<T> {
         ArrayOptionWithValue {
             Objects.requireNonNull(name);
             Objects.requireNonNull(value);
@@ -531,7 +616,11 @@ final class JOptSimpleOptionsBuilder {
     }
 
     private static void assertNoUnexpectedOptionNames(Map<Option, ?> optionMap, Collection<OptionName> optionName) {
-        final var allowedOptionNames = optionMap.keySet().stream().map(Option::getSpec).map(OptionSpec::names).flatMap(Collection::stream).toList();
+        final var allowedOptionNames = optionMap.keySet().stream()
+                .map(Option::getSpec)
+                .map(OptionSpec::names)
+                .flatMap(Collection::stream)
+                .toList();
         if (!allowedOptionNames.containsAll(optionName)) {
             final var diff = new HashSet<>(optionName);
             diff.removeAll(allowedOptionNames);
