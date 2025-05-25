@@ -46,8 +46,11 @@ import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+import jdk.jpackage.internal.cli.OptionSpec.MergePolicy;
 import jdk.jpackage.internal.cli.OptionValueExceptionFactory.StandardArgumentsMapper;
 import jdk.jpackage.internal.cli.TestUtils.OptionFailure;
 import jdk.jpackage.internal.cli.TestUtils.TestException;
@@ -81,7 +84,12 @@ public class JOptSimpleOptionsBuilderTest {
             for (final var e : options.entrySet()) {
                 final var optionValue = e.getKey();
                 final var expectedValue = e.getValue();
-                final var actualValue = optionValue.getFrom(cmdline);
+                final Object actualValue;
+                if (parserMode.equals(ParserMode.PARSE)) {
+                    actualValue = cmdline.find(optionValue.asOption().orElseThrow()).orElseThrow();
+                } else {
+                    actualValue = optionValue.getFrom(cmdline);
+                }
                 if (expectedValue.getClass().isArray()) {
                     assertArrayEquals((Object[])expectedValue, (Object[])actualValue);
                 } else {
@@ -96,16 +104,16 @@ public class JOptSimpleOptionsBuilderTest {
                 return new TestSpec(options, args);
             }
 
-            Builder addOptionValue(OptionValue<?> option, Object expectedValue) {
+            Builder optionValue(OptionValue<?> option, Object expectedValue) {
                 options.put(option, expectedValue);
                 return this;
             }
 
-            Builder addArgs(String...v) {
-                return addArgs(List.of(v));
+            Builder args(String...v) {
+                return args(List.of(v));
             }
 
-            Builder addArgs(Collection<String> v) {
+            Builder args(Collection<String> v) {
                 args.addAll(v);
                 return this;
             }
@@ -225,11 +233,11 @@ public class JOptSimpleOptionsBuilderTest {
     public void testConversionVsValidation(boolean asArray, @TempDir Path tmpDir) {
         final var nonExistentDir = tmpDir.resolve("non-existent");
 
-        final TestSpec.Builder builder = build().addArgs("--dir", nonExistentDir.toString());
+        final TestSpec.Builder builder = build().args("--dir", nonExistentDir.toString());
         if (asArray) {
-            builder.addOptionValue(directoryOption("dir").toArray().create(), new Path[] { nonExistentDir });
+            builder.optionValue(directoryOption("dir").toArray().create(), new Path[] { nonExistentDir });
         } else {
-            builder.addOptionValue(directoryOption("dir").create(), nonExistentDir);
+            builder.optionValue(directoryOption("dir").create(), nonExistentDir);
         }
 
         final var testSpec = builder.create();
@@ -261,7 +269,7 @@ public class JOptSimpleOptionsBuilderTest {
             } catch (URISyntaxException ex) {
                 throw new IllegalArgumentException(ex);
             }
-        });
+        }).mergePolicy(MergePolicy.USE_FIRST);
 
         new FaultyParserArgsConfig()
                 .options(urlOption, lruOption)
@@ -293,6 +301,137 @@ public class JOptSimpleOptionsBuilderTest {
                 .expectError("n", StringToken.of("2,-17,0,56", "-17"))
                 .expectError("n", StringToken.of("2,-17,0,56", "0"))
                 .test(ParserMode.VALIDATE);
+    }
+
+    @ParameterizedTest
+    @MethodSource("testMergePolicy")
+    public void testMergePolicyScalar(MergePolicy mergePolicy, ParserMode parserMode) {
+
+        if (mergePolicy == MergePolicy.CONCATENATE) {
+            assertThrowsExactly(IllegalArgumentException.class, option("foo", Object.class).mergePolicy(mergePolicy)::create);
+            return;
+        }
+
+        final var strOption = stringOption("str").mergePolicy(mergePolicy).create();
+
+        final var monthOption = stringOption("month").shortName("m").mergePolicy(mergePolicy).create();
+
+        final var intOption = option("int", Integer.class).shortName("i").converter(Integer::valueOf).mergePolicy(mergePolicy).create();
+
+        final var floatOption = option("d", Double.class).converter(Double::valueOf).mergePolicy(mergePolicy).create();
+
+        final var builder = build()
+                .args("-d", "1000", "--month=June", "--int=10", "-m", "July", "-i", "45", "-m", "August")
+                .args("--str=", "--str=A");
+
+        if (parserMode.equals(ParserMode.PARSE)) {
+            builder.optionValue(strOption, mergeStringValues(List.of("", "A"), mergePolicy));
+            builder.optionValue(monthOption, mergeStringValues(List.of("June", "July", "August"), mergePolicy));
+            builder.optionValue(intOption, mergeStringValues(List.of("10", "45"), mergePolicy));
+            builder.optionValue(floatOption, "1000");
+        } else {
+            builder.optionValue(strOption, mergeScalarValues(List.of("", "A"), mergePolicy));
+            builder.optionValue(monthOption, mergeScalarValues(List.of("June", "July", "August"), mergePolicy));
+            builder.optionValue(intOption, mergeScalarValues(List.of(10, 45), mergePolicy));
+            builder.optionValue(floatOption, Double.valueOf(1000));
+        }
+
+        builder.create().test(parserMode);
+    }
+
+    @ParameterizedTest
+    @MethodSource("testMergePolicy")
+    public void testMergePolicyArray(MergePolicy mergePolicy, ParserMode parserMode) {
+
+        final var monthOption = stringOption("month").shortName("m").mergePolicy(mergePolicy).toArray(Pattern.quote("+")).create();
+
+        final var intOption = option("int", Integer.class).shortName("i").converter(Integer::valueOf).mergePolicy(mergePolicy).toArray(str -> {
+            if (str.isEmpty()) {
+                return new String[0];
+            } else {
+                return str.split(":");
+            }
+        }).create();
+
+        final var floatOption = option("d", Double.class).converter(Double::valueOf).mergePolicy(mergePolicy).toArray(Pattern.quote("|")).create();
+
+        final var builder = build().args("-d", "1000", "--month=June", "--int=10:333", "-m", "July+July", "-i", "45", "-m", "August", "--int=");
+
+        if (parserMode.equals(ParserMode.PARSE)) {
+            builder.optionValue(monthOption, mergeStringValues(List.of("June", "July+July", "August"), mergePolicy));
+            builder.optionValue(intOption, mergeStringValues(List.of("10:333", "45", ""), mergePolicy));
+            builder.optionValue(floatOption, "1000");
+        } else {
+            builder.optionValue(monthOption, mergeArrayValues(Stream.of("June", "July", "July", "August").map(v -> new String[] {v}).toList(), mergePolicy));
+            builder.optionValue(intOption, mergeArrayValues(Stream.of(10, 333, 45).map(v -> new Integer[] {v}).toList(), mergePolicy));
+            builder.optionValue(floatOption, new Double[] {Double.valueOf(1000)});
+        }
+
+        builder.create().test(parserMode);
+    }
+
+    @ParameterizedTest
+    @MethodSource("testMergePolicy")
+    public void testMergePolicyNoValue(MergePolicy mergePolicy, ParserMode parserMode) {
+
+    }
+
+    private static <T> T mergeScalarValues(List<T> values, MergePolicy mergePolicy) {
+        switch (mergePolicy) {
+            case USE_FIRST -> {
+                return values.getFirst();
+            }
+            case USE_LAST -> {
+                return values.getLast();
+            }
+            default -> {
+                throw new IllegalArgumentException();
+            }
+        }
+    }
+
+    private static <T> T[] mergeArrayValues(List<T[]> values, MergePolicy mergePolicy) {
+        switch (mergePolicy) {
+            case USE_FIRST -> {
+                return values.getFirst();
+            }
+            case USE_LAST -> {
+                return values.getLast();
+            }
+            case CONCATENATE -> {
+                return values.stream().map(Stream::of).flatMap(x -> x).toList().toArray(values.getFirst());
+            }
+            default -> {
+                throw new IllegalArgumentException();
+            }
+        }
+    }
+
+    private static String mergeStringValues(List<String> values, MergePolicy mergePolicy) {
+        switch (mergePolicy) {
+            case USE_FIRST -> {
+                return values.getFirst();
+            }
+            case USE_LAST -> {
+                return values.getLast();
+            }
+            case CONCATENATE -> {
+                return values.stream().collect(Collectors.joining("\0"));
+            }
+            default -> {
+                throw new IllegalArgumentException();
+            }
+        }
+    }
+
+    private static List<Object[]> testMergePolicy() {
+        final List<Object[]> data = new ArrayList<>();
+        for (var mergePolicy : MergePolicy.values()) {
+            for (var parserMode : ParserMode.values()) {
+                data.add(new Object[] { mergePolicy, parserMode });
+            }
+        }
+        return data;
     }
 
     @ParameterizedTest
@@ -331,56 +470,77 @@ public class JOptSimpleOptionsBuilderTest {
     private static Collection<TestSpec> test() {
         final var pwd = Path.of("").toAbsolutePath();
         return Stream.of(
-                build().addOptionValue(
+                build().optionValue(
                         directoryOption("input").shortName("i").create(),
                         pwd
-                ).addArgs("--input", "", "-i", pwd.toString()),
+                ).args("--input", "", "-i", pwd.toString()),
 
-                build().addOptionValue(
+                build().optionValue(
                         directoryOption("dir").toArray(pathSeparator()).create(),
                         new Path[] { pwd, Path.of(".") }
-                ).addArgs("--dir=" + pwd.toString() + pathSeparator() + "."),
+                ).args("--dir=" + pwd.toString() + pathSeparator() + "."),
 
-                build().addOptionValue(
+                build().optionValue(
                         stringOption("arguments").toArray("\\s+").create(toList()),
                         List.of("", "a", "b", "c", "", "de")
-                ).addArgs("--arguments", " a b  c", "--arguments", " de"),
+                ).args("--arguments", " a b  c", "--arguments", " de"),
 
-                build().addOptionValue(
+                build().optionValue(
                         stringOption("arguments").toArray(";+").create(toList()),
                         List.of("a b", "c", "de")
-                ).addArgs("--arguments", "a b;;c", "--arguments", "de;"),
+                ).args("--arguments", "a b;;c", "--arguments", "de;"),
 
-                build().addOptionValue(stringOption("foo").create(), "--foo").addArgs("--foo", "--foo"),
+                build().optionValue(stringOption("foo").create(), "--foo").args("--foo", "--foo"),
 
-                build().addArgs("--foo")
-                        .addOptionValue(booleanOption("foo").create(), true)
-                        .addOptionValue(booleanOption("bar").create(), false)
+                build().args("--foo")
+                        .optionValue(booleanOption("foo").create(), true)
+                        .optionValue(booleanOption("bar").create(), false),
+
+                build().args("-x", "").optionValue(stringOption("x").create(), ""),
+                build().args("-x", "").optionValue(stringOption("x").toArray().create(), new String[] {""}),
+                build().args("-x", "", "-x", "").optionValue(stringOption("x").toArray().create(), new String[] {"", ""}),
+
+                // Test merging order.
+                build().optionValue(
+                        stringOption("x").shortName("y").toArray().create(toList()),
+                        List.of("10", "RR", "P", "Z")
+                ).args("-x", "10", "-y", "RR", "-x", "P", "-y", "Z"),
+
+                // Test converters are not executed on discarded invalid values (recoverable conversion errors)
+                build().optionValue(
+                        option("x", Integer.class).converter(Integer::valueOf).create(),
+                        100
+                ).args("-x", "a", "-x", "100"),
+                build().optionValue(
+                        option("x", Integer.class).converter(Integer::valueOf).toArray(",").mergePolicy(MergePolicy.USE_FIRST).create(),
+                        new Integer[] {34}
+                ).args("-x", "34,A", "-x", "f")
+
         ).map(TestSpec.Builder::create).toList();
     }
 
     private static Collection<TestSpec> testStringVector() {
         final var args = List.of("--foo", "1 22 333", "--foo", "44 44");
         return Stream.of(
-                build().addOptionValue(
+                build().optionValue(
                         stringOption("foo").toArray().create(),
                         new String[] { "1 22 333", "44 44" }
-                ).addArgs(args),
+                ).args(args),
 
-                build().addOptionValue(
+                build().optionValue(
                         stringOption("foo").toArray().create(toList()),
                         List.of("1 22 333", "44 44")
-                ).addArgs(args),
+                ).args(args),
 
-                build().addOptionValue(
+                build().optionValue(
                         stringOption("foo").toArray("\\s+").create(),
                         new String[] { "1", "22", "333", "44", "44" }
-                ).addArgs(args),
+                ).args(args),
 
-                build().addOptionValue(
+                build().optionValue(
                         stringOption("foo").toArray("\\s+").create(toList()),
                         List.of("1", "22", "333", "44", "44")
-                ).addArgs(args)
+                ).args(args)
         ).map(TestSpec.Builder::create).toList();
     }
 
