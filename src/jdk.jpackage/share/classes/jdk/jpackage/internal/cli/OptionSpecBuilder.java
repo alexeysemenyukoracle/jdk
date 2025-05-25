@@ -37,6 +37,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
+import jdk.jpackage.internal.cli.OptionSpec.MergePolicy;
 
 final class OptionSpecBuilder<T> {
 
@@ -83,8 +84,8 @@ final class OptionSpecBuilder<T> {
         }
 
         OptionSpec<T[]> createOptionSpec() {
-            final OptionSpec.MergePolicy mergePolicy = OptionSpec.MergePolicy.CONCATENATE;
-            return new OptionSpec<>(names(), Optional.of(createConverter()), scope, createValidator(), mergePolicy);
+            return new OptionSpec<>(names(), Optional.of(createConverter()), scope,
+                    createValidator(), OptionSpecBuilder.this.mergePolicy().orElse(MergePolicy.CONCATENATE));
         }
 
         ArrayOptionSpecBuilder defaultValue(T[] v) {
@@ -204,6 +205,11 @@ final class OptionSpecBuilder<T> {
             return this;
         }
 
+        ArrayOptionSpecBuilder mergePolicy(MergePolicy v) {
+            OptionSpecBuilder.this.mergePolicy(v);
+            return this;
+        }
+
         ArrayOptionSpecBuilder scope(OptionScope... v) {
             OptionSpecBuilder.this.scope(v);
             return this;
@@ -281,8 +287,8 @@ final class OptionSpecBuilder<T> {
     }
 
     OptionSpec<T> createOptionSpec() {
-        final OptionSpec.MergePolicy mergePolicy = OptionSpec.MergePolicy.USE_LAST;
-        return new OptionSpec<>(names(), createConverter(), scope, createValidator(), mergePolicy);
+        return new OptionSpec<>(names(), createConverter(), scope, createValidator(),
+                mergePolicy().orElse(MergePolicy.USE_LAST));
     }
 
     ArrayOptionSpecBuilder toArray(String splitRegexp) {
@@ -411,6 +417,11 @@ final class OptionSpecBuilder<T> {
         return this;
     }
 
+    OptionSpecBuilder<T> mergePolicy(MergePolicy v) {
+        mergePolicy = v;
+        return this;
+    }
+
     OptionSpecBuilder<T> scope(OptionScope... v) {
         return scope(Set.of(v));
     }
@@ -461,6 +472,10 @@ final class OptionSpecBuilder<T> {
         return Optional.ofNullable(shortName);
     }
 
+    private Optional<MergePolicy> mergePolicy() {
+        return Optional.ofNullable(mergePolicy);
+    }
+
     private Optional<Set<OptionScope>> scope() {
         return Optional.ofNullable(scope);
     }
@@ -495,6 +510,7 @@ final class OptionSpecBuilder<T> {
     private final Class<? extends T> valueType;
     private String name;
     private String shortName;
+    private MergePolicy mergePolicy;
     private Set<OptionScope> scope;
     private T defaultValue;
     private OptionValueConverter.Builder<T> converterBuilder = OptionValueConverter.build();
