@@ -24,13 +24,17 @@ package jdk.jpackage.internal.cli;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.lang.reflect.Array;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.UnaryOperator;
+import java.util.stream.StreamSupport;
+import jdk.jpackage.internal.util.ExceptionAnalizer;
 
 final class TestUtils {
 
@@ -58,12 +62,36 @@ final class TestUtils {
     }
 
     static void assertExceptionEquals(Exception expected, Exception actual) {
-        assertEquals(new ExceptionProperties(expected), new ExceptionProperties(actual));
+        assertEquals(new ExceptionAnalizer(expected), new ExceptionAnalizer(actual));
     }
 
     static void assertExceptionListEquals(List<? extends Exception> expected, List<? extends Exception> actual) {
-        assertEquals(expected.stream().map(ExceptionProperties::new).toList(),
-                actual.stream().map(ExceptionProperties::new).toList());
+        assertEquals(expected.stream().map(ExceptionAnalizer::new).toList(),
+                actual.stream().map(ExceptionAnalizer::new).toList());
+    }
+
+
+    static Function<String, String[]> splitOrEmpty(String splitRegexp) {
+        Objects.requireNonNull(splitRegexp);
+        return str -> {
+            if (str.isEmpty()) {
+                return new String[0];
+            } else {
+                return str.split(splitRegexp);
+            }
+        };
+    }
+
+    static <T> List<T[]> arrayElements(Class<? extends T> elementType, Iterable<T> elements) {
+        Objects.requireNonNull(elementType);
+        return StreamSupport.stream(elements.spliterator(), false).map(e -> {
+            @SuppressWarnings("unchecked")
+            final var arr = (T[])Array.newInstance(elementType, e == null ? 0 : 1);
+            if (e != null) {
+                Array.set(arr, 0, e);
+            }
+            return arr;
+        }).toList();
     }
 
 
@@ -115,17 +143,6 @@ final class TestUtils {
         }
 
         private static final long serialVersionUID = 1L;
-    }
-
-
-    private record ExceptionProperties(Class<? extends Exception> type, String mesage, Class<? extends Throwable> causeType) {
-        ExceptionProperties {
-            Objects.requireNonNull(type);
-        }
-
-        ExceptionProperties(Exception ex) {
-            this(ex.getClass(), ex.getMessage(), Optional.ofNullable(ex.getCause()).map(Throwable::getClass).orElse(null));
-        }
     }
 
 

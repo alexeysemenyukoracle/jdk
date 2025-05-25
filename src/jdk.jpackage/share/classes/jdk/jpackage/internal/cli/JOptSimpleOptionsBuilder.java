@@ -72,10 +72,9 @@ final class JOptSimpleOptionsBuilder {
     }
 
     JOptSimpleOptionsBuilder optionValues(Collection<OptionValue<?>> v) {
-        if (v != null) {
-            options(v.stream().map(OptionValue::asOption).map(Optional::orElseThrow).toList());
-        }
-        return this;
+        return options(Optional.ofNullable(v).map(x -> {
+            return x.stream().map(OptionValue::asOption).map(Optional::orElseThrow).toList();
+        }).orElse((List<Option>)null));
     }
 
     JOptSimpleOptionsBuilder optionValues(OptionValue<?>... v) {
@@ -210,8 +209,6 @@ final class JOptSimpleOptionsBuilder {
                 } else {
                     return Result.ofError(ex);
                 }
-            } catch (RuntimeException ex) {
-                return Result.ofError(ex);
             }
         }
 
@@ -336,7 +333,7 @@ final class JOptSimpleOptionsBuilder {
                 // "id" references an option without a value and it was recognized on the command line.
                 return Optional.of(List.of());
             } else {
-                return Optional.empty();
+                throw new UnsupportedOperationException();
             }
         }
 
@@ -355,12 +352,7 @@ final class JOptSimpleOptionsBuilder {
             }).sorted(Comparator.comparingInt(IndexedStringOptionValue::index));
 
             final var converter = optionSpec.valueConverter().orElseThrow();
-            final OptionArrayValueConverter<?> arrConverter;
-            if (converter instanceof OptionArrayValueConverter<?> c) {
-                arrConverter = c;
-            } else {
-                arrConverter = null;
-            }
+            final var arrConverter = optionSpec.arrayValueConverter().orElse(null);
 
             return orderedOptionValues.map(indexedValue -> {
                 final var optionName = indexedValue.optionName();
@@ -538,23 +530,35 @@ final class JOptSimpleOptionsBuilder {
                 final var optionSpec = option.getSpec();
                 if (!optionSpec.hasValue()) {
                     return Boolean.TRUE;
-                } else if (optionSpec.valueType().isArray()) {
+                } else if (optionSpec.arrayValueConverter().isPresent()) {
                     switch (optionSpec.mergePolicy()) {
-                        case USE_LAST -> {
-                            return value.getFirst().value();
-                        }
                         case USE_FIRST -> {
-                            return value.getLast().value();
+                            // Find the first non-empty array, get its first element and wrap it into one-element array.
+                            return value.stream().map(OptionWithValue::value).filter(arr -> {
+                                return Array.getLength(arr) > 0;
+                            }).findFirst().map(arr -> {
+                                return asArray(Array.get(arr, 0));
+                            }).orElseGet(value.getFirst()::value);
+                        }
+                        case USE_LAST -> {
+                            // Find the last non-empty array, get its last element and wrap it into one-element array.
+                            return value.reversed().stream().map(OptionWithValue::value).filter(arr -> {
+                                return Array.getLength(arr) > 0;
+                            }).findFirst().map(arr -> {
+                                return asArray(Array.get(arr, Array.getLength(arr) - 1));
+                            }).orElseGet(value.getFirst()::value);
                         }
                         case CONCATENATE -> {
-                            return value.stream().map(OptionWithValue::value).map(Object.class::cast).reduce((a, b) -> {
+                            return value.stream().map(OptionWithValue::value).filter(arr -> {
+                                return Array.getLength(arr) > 0;
+                            }).map(Object.class::cast).reduce((a, b) -> {
                                 final var al = Array.getLength(a);
                                 final var bl = Array.getLength(b);
                                 final var arr = Array.newInstance(a.getClass().componentType(), al + bl);
                                 System.arraycopy(a, 0, arr, 0, al);
                                 System.arraycopy(b, 0, arr, al, bl);
                                 return arr;
-                            }).orElseThrow();
+                            }).orElseGet(value.getFirst()::value);
                         }
                         default -> {
                             throw new UnsupportedOperationException();
@@ -569,6 +573,12 @@ final class JOptSimpleOptionsBuilder {
         @Override
         public boolean contains(OptionName optionName) {
             return optionNames.contains(optionName);
+        }
+
+        private static Object asArray(Object v) {
+            final var arr = Array.newInstance(v.getClass(), 1);
+            Array.set(arr, 0, v);
+            return arr;
         }
 
         private final Map<Option, List<? extends OptionWithValue<?>>> values;
@@ -630,9 +640,7 @@ final class JOptSimpleOptionsBuilder {
 
     private static <T> List<T> getOptionValue(List<T> values, OptionSpec.MergePolicy mergePolicy) {
         Objects.requireNonNull(mergePolicy);
-        if(values.isEmpty()) {
-            throw new IllegalArgumentException();
-        } else if (values.size() == 1) {
+        if (values.size() == 1) {
             return values;
         } else {
             switch (mergePolicy) {
