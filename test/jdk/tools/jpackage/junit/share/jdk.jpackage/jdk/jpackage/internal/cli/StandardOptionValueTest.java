@@ -74,15 +74,16 @@ public class StandardOptionValueTest {
         }
 
         static void groupByOption(Consumer<String>sink, Collection<? extends OptionSpec<?>> specs) {
-            sink.accept("| Option | Scope | With runtime installer | With predefined app image |");
-            sink.accept("| --- | --- | :---: | :---: |");
+            sink.accept("| Option | Scope | With runtime installer | With predefined app image | Merge");
+            sink.accept("| --- | --- | :---: | :---: | :---: |");
             for (final var spec : specs.stream().sorted(Comparator.comparing(v -> { return v.name().name(); })).toList()) {
                 final var mods = filterByType(spec.scope(), BundlingOperationModifier.class);
-                sink.accept(String.format("| %s | %s | %s | %s |",
+                sink.accept(String.format("| %s | %s | %s | %s | %s |",
                         formatOptionNames(spec),
                         format(filterByType(spec.scope(), BundlingOperationOptionScope.class)),
                         (mods.contains(BundlingOperationModifier.BUNDLE_RUNTIME) ? "x" : ""),
-                        (mods.contains(BundlingOperationModifier.BUNDLE_PREDEFINED_APP_IMAGE) ? "x" : "")
+                        (mods.contains(BundlingOperationModifier.BUNDLE_PREDEFINED_APP_IMAGE) ? "x" : ""),
+                        spec.mergePolicy()
                 ));
             }
         }
