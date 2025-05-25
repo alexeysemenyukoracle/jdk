@@ -196,8 +196,8 @@ public class ValidatorTest {
             tokenizedString = "3,-5,-77,9";
         }
 
-        final var intArray = OptionValueConverter.build()
-                .convert(ValueConverter.create(Integer::valueOf, Integer.class))
+        final var intArray = OptionValueConverter.<Integer>build()
+                .converter(ValueConverter.create(Integer::valueOf, Integer.class))
                 .mutate(configureConverter())
                 .tokenizer(str -> str.split(","))
                 .createArray().convert(OptionName.of("foo"), StringToken.of(tokenizedString));
