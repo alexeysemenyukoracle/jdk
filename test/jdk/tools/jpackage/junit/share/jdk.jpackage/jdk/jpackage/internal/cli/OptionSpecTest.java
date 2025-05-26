@@ -115,7 +115,7 @@ public class OptionSpecTest {
             builder = buildSpec().names(names);
         }
 
-        final var optionSpecs = builder.create().generateForEveryName().toList();
+        final var optionSpecs = builder.create().copyForEveryName().toList();
 
         assertEquals(names.size(), optionSpecs.size());
 
@@ -152,11 +152,18 @@ public class OptionSpecTest {
                     Optional.ofNullable(names).orElseGet(List::of),
                     Optional.ofNullable(converter),
                     Optional.ofNullable(scope).orElseGet(Set::of),
-                    mergePolicy);
+                    mergePolicy,
+                    Optional.ofNullable(valuePattern),
+                    description);
         }
 
         OptionSpecBuilder<T> names(String... v) {
             return names(List.of(v));
+        }
+
+        OptionSpecBuilder<T> description(String v) {
+            description = v;
+            return this;
         }
 
         OptionSpecBuilder<T> names(List<String> v) {
@@ -179,9 +186,16 @@ public class OptionSpecTest {
             return this;
         }
 
+        OptionSpecBuilder<T> valuePattern(String v) {
+            valuePattern = v;
+            return this;
+        }
+
         private List<OptionName> names;
         private OptionValueConverter<T> converter;
         private Set<OptionScope> scope = Set.of(new OptionScope() {});
         private MergePolicy mergePolicy = MergePolicy.USE_LAST;
+        private String valuePattern;
+        private String description = "";
     }
 }

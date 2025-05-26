@@ -48,6 +48,11 @@ public interface OptionValue<T> {
     }
 
     @SuppressWarnings("unchecked")
+    default OptionSpec<T> optionSpec() {
+        return (OptionSpec<T>)asOption().map(Option::getSpec).orElseThrow();
+    }
+
+    @SuppressWarnings("unchecked")
     default Optional<T> findIn(Options cmdline) {
         return (Optional<T>)cmdline.find(id());
     }

@@ -28,7 +28,9 @@ package jdk.jpackage.internal.cli;
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
+import static jdk.jpackage.internal.util.function.ThrowingRunnable.toRunnable;
 
+import java.io.Writer;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -57,14 +59,26 @@ import jdk.jpackage.internal.util.Result;
  * Two types of command line argument processing are supported:
  * <ol>
  * <li>Parse command line. Parsed data is stored as a map of strings.
- * <li>Convert strings to objects. Parsed data is stored as map of objects.
+ * <li>Convert strings to objects. Parsed data is stored as a map of objects.
  * </ol>
  */
 final class JOptSimpleOptionsBuilder {
 
     Function<String[], Result<OptionsBuilder>> create() {
-        return JOptSimpleParser.create(Optional.ofNullable(options).orElseGet(List::of),
-                Optional.ofNullable(unrecognizedOptionHandler))::parse;
+        return createJOptSimpleParser()::parse;
+    }
+
+    void printHelp(Writer sink) {
+        toRunnable(() -> createJOptSimpleParser().parser().printHelpOn(sink)).run();
+    }
+
+    JOptSimpleOptionsBuilder helpOption(Option v) {
+        helpOption = v;
+        return this;
+    }
+
+    JOptSimpleOptionsBuilder helpOption(OptionValue<?> v) {
+        return helpOption(v.asOption().orElseThrow());
     }
 
     JOptSimpleOptionsBuilder options(Collection<Option> v) {
@@ -89,6 +103,15 @@ final class JOptSimpleOptionsBuilder {
     JOptSimpleOptionsBuilder unrecognizedOptionHandler(Function<String, ? extends Exception> v) {
         unrecognizedOptionHandler = v;
         return this;
+    }
+
+    private JOptSimpleParser createJOptSimpleParser() {
+        return JOptSimpleParser.create(options(), Optional.ofNullable(helpOption),
+                Optional.ofNullable(unrecognizedOptionHandler));
+    }
+
+    private Collection<Option> options() {
+        return Optional.ofNullable(options).orElseGet(List::of);
     }
 
 
@@ -120,6 +143,10 @@ final class JOptSimpleOptionsBuilder {
 
         Options create() {
             return Optional.ofNullable(excludes).map(options::excludeOptions).orElse(options);
+        }
+
+        Set<Option> knownOptions() {
+            return options.knownOptions();
         }
 
         Result<ConvertedOptionsBuilder> convertedOptions() {
@@ -163,7 +190,8 @@ final class JOptSimpleOptionsBuilder {
             });
         }
 
-        static JOptSimpleParser create(Iterable<Option> options, Optional<Function<String, ? extends Exception>> unrecognizedOptionHandler) {
+        static JOptSimpleParser create(Iterable<Option> options, Optional<Option> helpOption,
+                Optional<Function<String, ? extends Exception>> unrecognizedOptionHandler) {
             final var parser = createOptionParser();
 
             // Create joptsimple option specs for distinct option names,
@@ -171,9 +199,17 @@ final class JOptSimpleOptionsBuilder {
             // This is needed to accurately detect whan options names was passed.
             final var optionSpecApplier = new OptionSpecApplier().generateForEveryName(true);
 
-            final Map<Option, List<? extends OptionSpec<?>>> optionMap = StreamSupport.stream(options.spliterator(), false).collect(toMap(x -> x, option -> {
-                return optionSpecApplier.applyToParser(parser, option.getSpec());
-            }));
+            final Map<Option, List<? extends OptionSpec<?>>> optionMap = StreamSupport.stream(options.spliterator(), false)
+                    .filter(o -> {
+                        // Filter out help option if any, it will be applied separately.
+                        return helpOption.map(o::equals).orElse(true);
+                    }).collect(toMap(x -> x, option -> {
+                        return optionSpecApplier.applyToParser(parser, option.getSpec());
+                    }));
+
+            helpOption.ifPresent(ho -> {
+                parser.acceptsAll(ho.getSpec().names().stream().map(OptionName::name).toList()).forHelp();
+            });
 
             return new JOptSimpleParser(parser, optionMap, unrecognizedOptionHandler);
         }
@@ -206,14 +242,15 @@ final class JOptSimpleOptionsBuilder {
         <T> List<OptionSpec<T>> applyToParser(OptionParser parser, OptionSpec<T> spec) {
             final Stream<OptionSpec<T>> optionSpecs;
             if (generateForEveryName) {
-                optionSpecs = spec.generateForEveryName();
+                optionSpecs = spec.copyForEveryName();
             } else {
                 optionSpecs = Stream.of(spec);
             }
             return optionSpecs.peek(v -> {
                 final var specBuilder = parser.acceptsAll(v.names().stream().map(OptionName::name).toList());
                 if (v.hasValue()) {
-                    specBuilder.withRequiredArg();
+                    final var builder = specBuilder.withRequiredArg();
+                    spec.valuePattern().map(ValuePatternAdapter::new).map(builder::withValuesConvertedBy);
                 }
             }).toList();
         }
@@ -222,6 +259,21 @@ final class JOptSimpleOptionsBuilder {
             generateForEveryName = v;
             return this;
         }
+
+
+        private record ValuePatternAdapter(String valuePattern) implements jdk.internal.joptsimple.ValueConverter<String> {
+
+            @Override
+            public String convert(String value) {
+                return value;
+            }
+
+            @Override
+            public Class<? extends String> valueType() {
+                return String.class;
+            }
+        }
+
 
         private boolean generateForEveryName;
     }
@@ -249,6 +301,10 @@ final class JOptSimpleOptionsBuilder {
 
         UntypedOptions excludeOptions(Collection<Option> excludes) {
             return new UntypedOptions(this, excludes);
+        }
+
+        Set<Option> knownOptions() {
+            return optionMap.keySet();
         }
 
         Result<TypedOptions> toTypedOptions() {
@@ -527,5 +583,6 @@ final class JOptSimpleOptionsBuilder {
     }
 
     private Collection<Option> options;
+    private Option helpOption;
     private Function<String, ? extends Exception> unrecognizedOptionHandler;
 }

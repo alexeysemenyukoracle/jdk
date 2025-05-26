@@ -24,7 +24,18 @@
  */
 package jdk.jpackage.internal.cli;
 
+/**
+ * Defines creating an option value of type {@link T[]} from a string.
+ *
+ * @param <T> option value element type
+ */
 interface OptionArrayValueConverter<T> extends OptionValueConverter<T[]> {
 
+    /**
+     * Splits the given string into tokens and returns the result.
+     *
+     * @param str the string to tokenize
+     * @return the result of tokenization of the input string
+     */
     String[] tokenize(String str);
 }

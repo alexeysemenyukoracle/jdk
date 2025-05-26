@@ -70,6 +70,12 @@ final class OptionsAnalyzer {
     }
 
     List<? extends Exception> findErrors() {
+        if (hasAppImage && PREDEFINED_RUNTIME_IMAGE.containsIn(cmdline)) {
+            // Short circuit this erroneous case as bundling operation is ambiguous.
+            return List.of(new MutualExclusiveOptions(asOptionList(
+                    PREDEFINED_RUNTIME_IMAGE, PREDEFINED_APP_IMAGE)).validate(cmdline).orElseThrow());
+        }
+
         final List<Exception> errors = new ArrayList<>();
 
         StandardOptionValue.options().stream()
@@ -88,7 +94,7 @@ final class OptionsAnalyzer {
             errors.add(I18N.buildConfigException("ERR_NoEntryPoint").create());
         }
 
-        if (bundlingOperationModifiers().isEmpty() && !INPUT.containsIn(cmdline)) {
+        if (bundlingOperationModifiers().isEmpty() && isBundling() && !INPUT.containsIn(cmdline)) {
             errors.add(I18N.buildConfigException("error.no-input-parameter").create());
         }
 
@@ -114,6 +120,10 @@ final class OptionsAnalyzer {
 
     private boolean isBundlingNativePackage() {
         return StandardBundlingOperation.CREATE_NATIVE.contains(bundlingOperation);
+    }
+
+    private boolean isBundling() {
+        return StandardBundlingOperation.CREATE_BUNDLE.contains(bundlingOperation);
     }
 
     private ConfigException onOutOfScopeOption(OptionSpec<?> optionSpec) {
