@@ -32,8 +32,28 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 
+/**
+ * Option spec.
+ *
+ * Names are used to identify an option. Converter converts option value from a
+ * {@link String} to an object of type {@link T}. Scope defines where the option
+ * applies. The standard scopes are: {@link BundlingOperationOptionScope},
+ * {@link BundlingOperationModifier}. Merge policy defines how to handle
+ * multiple values of the option. Value pattern and description are targeted for
+ * help output.
+ *
+ * @param names        the names
+ * @param converter    the converter. Converts from a {@link String} to an
+ *                     object of type {@link T}
+ * @param scope        the scope
+ * @param mergePolicy  the merge policy
+ * @param valuePattern the value pattern. Used in help output
+ * @param description  the description. Used in help output
+ * @param <T>          option value type
+ */
 record OptionSpec<T>(List<OptionName> names, Optional<OptionValueConverter<T>> converter,
-        Set<OptionScope> scope, MergePolicy mergePolicy) {
+        Set<OptionScope> scope, MergePolicy mergePolicy, Optional<String> valuePattern,
+        String description) {
 
     enum MergePolicy {
         USE_FIRST,
@@ -52,6 +72,11 @@ record OptionSpec<T>(List<OptionName> names, Optional<OptionValueConverter<T>> c
             throw new IllegalArgumentException("Empty scope");
         }
         Objects.requireNonNull(mergePolicy);
+        Objects.requireNonNull(valuePattern);
+        if (converter.isEmpty() && valuePattern.isPresent()) {
+            throw new IllegalArgumentException("Option without a value can not have a value pattern");
+        }
+        Objects.requireNonNull(description);
 
         final var typeMustBeArray = mergePolicy.equals(MergePolicy.CONCATENATE);
         final var type = valueType(converter);
@@ -61,17 +86,37 @@ record OptionSpec<T>(List<OptionName> names, Optional<OptionValueConverter<T>> c
         }
     }
 
+    /**
+     * Returns the first (primary) name of this option spec.
+     *
+     * @return the first name of this option spec
+     */
     OptionName name() {
         return names.getFirst();
     }
 
+    /**
+     * Returns all names but the first of this option spec. Returns an empty list if
+     * the option spec has only one name.
+     *
+     * @return the additional names
+     */
     List<OptionName> otherNames() {
         return names.subList(1, names.size());
     }
 
-    Stream<OptionSpec<T>> generateForEveryName() {
+    /**
+     * Returns a stream of copy option spec objects, each having a single name.
+     * <p>
+     * If the option has three names "a", "b", and "c", the stream will have three
+     * option spec objects each with a single name. The firt will have name "a", the
+     * second - "b", and the third "c".
+     *
+     * @return the stream of copy option spec objects each having a single name
+     */
+    Stream<OptionSpec<T>> copyForEveryName() {
         return names().stream().map(v -> {
-            return new OptionSpec<>(List.of(v), converter, scope, mergePolicy);
+            return new OptionSpec<>(List.of(v), converter, scope, mergePolicy, valuePattern, description);
         });
     }
 

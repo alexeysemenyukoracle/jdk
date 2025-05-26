@@ -34,6 +34,11 @@ import java.util.function.Function;
 import jdk.jpackage.internal.cli.Validator.ParsedValue;
 import jdk.jpackage.internal.util.Result;
 
+/**
+ * Defines creating an option value of type {@link T} from a string.
+ *
+ * @param <T> option value type
+ */
 interface OptionValueConverter<T> {
 
     /**

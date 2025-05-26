@@ -94,6 +94,16 @@ enum StandardBundlingOperation implements BundlingOperationOptionScope {
         }).collect(Collectors.toSet());
     }
 
+    static Predicate<StandardBundlingOperation> currentPlatform() {
+        return op -> {
+            return  op.os() == OperatingSystem.current();
+        };
+    }
+
+    static Stream<StandardBundlingOperation> narrow(Stream<OptionScope> scope) {
+        return scope.filter(StandardBundlingOperation.class::isInstance).map(StandardBundlingOperation.class::cast);
+    }
+
     static final Set<BundlingOperationOptionScope> WINDOWS = Set.of(
             CREATE_WIN_APP_IMAGE, CREATE_WIN_MSI, CREATE_WIN_EXE);
 

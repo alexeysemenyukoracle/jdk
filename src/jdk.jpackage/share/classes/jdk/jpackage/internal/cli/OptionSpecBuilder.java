@@ -62,7 +62,8 @@ final class OptionSpecBuilder<T> {
 
     final class ArrayOptionSpecBuilder {
 
-        private ArrayOptionSpecBuilder() {
+        private ArrayOptionSpecBuilder(Function<String, String[]> tokenizer) {
+            this.tokenizer = Objects.requireNonNull(tokenizer);
         }
 
         OptionSpecBuilder<T> outer() {
@@ -85,11 +86,22 @@ final class OptionSpecBuilder<T> {
 
         OptionSpec<T[]> createOptionSpec() {
             return new OptionSpec<>(names(), Optional.of(createConverter()), scope,
-                    OptionSpecBuilder.this.mergePolicy().orElse(MergePolicy.CONCATENATE));
+                    OptionSpecBuilder.this.mergePolicy().orElse(MergePolicy.CONCATENATE),
+                    Optional.of(valuePattern()), OptionSpecBuilder.this.description().orElse(""));
         }
 
         ArrayOptionSpecBuilder defaultValue(T[] v) {
             arrayDefaultValue = v;
+            return this;
+        }
+
+        ArrayOptionSpecBuilder valuePatternSeparator(String v) {
+            valuePatternSeparator = v;
+            return this;
+        }
+
+        ArrayOptionSpecBuilder valuePattern(String v) {
+            OptionSpecBuilder.this.valuePattern(v);
             return this;
         }
 
@@ -205,6 +217,11 @@ final class OptionSpecBuilder<T> {
             return this;
         }
 
+        ArrayOptionSpecBuilder description(String v) {
+            OptionSpecBuilder.this.description(v);
+            return this;
+        }
+
         ArrayOptionSpecBuilder mergePolicy(MergePolicy v) {
             OptionSpecBuilder.this.mergePolicy(v);
             return this;
@@ -247,6 +264,7 @@ final class OptionSpecBuilder<T> {
 
         private OptionValueConverter<T[]> createConverter() {
             final var newBuilder = converterBuilder.copy();
+            newBuilder.tokenizer(tokenizer);
             createValidator().ifPresent(newBuilder::validator);
             return newBuilder.createArray();
         }
@@ -256,6 +274,15 @@ final class OptionSpecBuilder<T> {
                 return Optional.of(validatorBuilder.create());
             } else {
                 return Optional.empty();
+            }
+        }
+
+        private String valuePattern() {
+            final var elementValuePattern = OptionSpecBuilder.this.valuePattern().orElseThrow();
+            if (valuePatternSeparator == null) {
+                return elementValuePattern;
+            } else {
+                return String.format("%s[%s%s...]", elementValuePattern, valuePatternSeparator, elementValuePattern);
             }
         }
 
@@ -271,6 +298,8 @@ final class OptionSpecBuilder<T> {
         }
 
         private T[] arrayDefaultValue;
+        private String valuePatternSeparator;
+        private final Function<String, String[]> tokenizer;
     }
 
 
@@ -290,14 +319,14 @@ final class OptionSpecBuilder<T> {
 
     OptionSpec<T> createOptionSpec() {
         return new OptionSpec<>(names(), createConverter(), scope,
-                mergePolicy().orElse(MergePolicy.USE_LAST));
+                mergePolicy().orElse(MergePolicy.USE_LAST), valuePattern(), description().orElse(""));
     }
 
     ArrayOptionSpecBuilder toArray(String splitRegexp) {
         Objects.requireNonNull(splitRegexp);
         return toArray(str -> {
             return str.split(splitRegexp);
-        });
+        }).valuePatternSeparator(splitRegexp);
     }
 
     ArrayOptionSpecBuilder toArray() {
@@ -307,8 +336,11 @@ final class OptionSpecBuilder<T> {
     }
 
     ArrayOptionSpecBuilder toArray(Function<String, String[]> tokenizer) {
-        converterBuilder.tokenizer(Objects.requireNonNull(tokenizer));
-        return new ArrayOptionSpecBuilder();
+        return new ArrayOptionSpecBuilder(tokenizer);
+    }
+
+    ArrayOptionSpecBuilder mutateAndToArray(Function<OptionSpecBuilder<T>, ArrayOptionSpecBuilder> transformer) {
+        return transformer.apply(this);
     }
 
     OptionSpecBuilder<T> mutate(Consumer<OptionSpecBuilder<T>> mutator) {
@@ -419,6 +451,11 @@ final class OptionSpecBuilder<T> {
         return this;
     }
 
+    OptionSpecBuilder<T> description(String v) {
+        description = v;
+        return this;
+    }
+
     OptionSpecBuilder<T> mergePolicy(MergePolicy v) {
         mergePolicy = v;
         return this;
@@ -466,12 +503,21 @@ final class OptionSpecBuilder<T> {
         return this;
     }
 
+    OptionSpecBuilder<T> valuePattern(String v) {
+        valuePattern = v;
+        return this;
+    }
+
     private Optional<String> name() {
         return Optional.ofNullable(name);
     }
 
     private Optional<String> shortName() {
         return Optional.ofNullable(shortName);
+    }
+
+    private Optional<String> description() {
+        return Optional.ofNullable(description);
     }
 
     private Optional<MergePolicy> mergePolicy() {
@@ -484,6 +530,17 @@ final class OptionSpecBuilder<T> {
 
     private Optional<T> defaultValue() {
         return Optional.ofNullable(defaultValue);
+    }
+
+    private Optional<String> valuePattern() {
+        return Optional.ofNullable(valuePattern).or(this::defaultValuePattern);
+    }
+
+    private Optional<String> defaultValuePattern() {
+        return converterBuilder.converter().map(_ -> {
+            final var tokens = name.split("-");
+            return tokens[tokens.length - 1];
+        });
     }
 
     private List<OptionName> names() {
@@ -514,9 +571,11 @@ final class OptionSpecBuilder<T> {
     private final Class<? extends T> valueType;
     private String name;
     private String shortName;
+    private String description;
     private MergePolicy mergePolicy;
     private Set<OptionScope> scope;
     private T defaultValue;
+    private String valuePattern;
     private OptionValueConverter.Builder<T> converterBuilder = OptionValueConverter.build();
     private Validator.Builder<T, RuntimeException> validatorBuilder = Validator.build();
 }

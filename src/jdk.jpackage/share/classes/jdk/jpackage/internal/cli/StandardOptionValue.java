@@ -31,7 +31,6 @@ import static jdk.jpackage.internal.cli.OptionValueExceptionFactory.UNREACHABLE_
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.CREATE_BUNDLE;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.CREATE_MAC_PKG;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.CREATE_NATIVE;
-import static jdk.jpackage.internal.cli.StandardBundlingOperation.MAC_SIGNING;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.SIGN_MAC_APP_IMAGE;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.fromOptionName;
 import static jdk.jpackage.internal.cli.StandardValueConverter.identityConv;
@@ -48,13 +47,17 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import jdk.internal.util.OperatingSystem;
 import jdk.jpackage.internal.cli.OptionValueExceptionFactory.StandardArgumentsMapper;
 import jdk.jpackage.internal.model.ConfigException;
 import jdk.jpackage.internal.model.PackageType;
+import jdk.jpackage.internal.util.SetBuilder;
 
 public final class StandardOptionValue {
 
@@ -70,6 +73,9 @@ public final class StandardOptionValue {
     private static final OptionValueExceptionFactory<ConfigException> ERROR_WITH_OPTION_NAME_AND_VALUE =
             OptionValueExceptionFactory.build(ConfigException::new).formatArgumentsTransformer(StandardArgumentsMapper.NAME_AND_VALUE).create();
 
+    private final static Set<OperatingSystem> SUPPORTED_OS = Set.of(
+            OperatingSystem.LINUX, OperatingSystem.WINDOWS, OperatingSystem.MACOS);
+
     /**
      * Modes in which bundling operations don't involve building of an app image.
      */
@@ -78,6 +84,18 @@ public final class StandardOptionValue {
             BundlingOperationModifier.BUNDLE_RUNTIME,
             // jpackage will not build an app image if predefined app image is supplied
             BundlingOperationModifier.BUNDLE_PREDEFINED_APP_IMAGE);
+
+    private final static Set<OptionScope> MAC_SIGNING = new SetBuilder<OptionScope>()
+            .add(StandardBundlingOperation.MAC_SIGNING)
+            .add(NOT_BUILDING_APP_IMAGE)
+            .create();
+
+
+    public final static OptionValue<Boolean> HELP = auxilaryOption("help").shortName("h").create();
+
+    public final static OptionValue<Boolean> VERSION = auxilaryOption("version").create();
+
+    public final static OptionValue<Boolean> VERBOSE = auxilaryOption("verbose").create();
 
     public final static OptionValue<PackageType> TYPE = option("type", PackageType.class).shortName("t")
             .converterExceptionFactory(ERROR_WITH_VALUE).converterExceptionFormatString("ERR_InvalidInstallerType")
@@ -92,19 +110,21 @@ public final class StandardOptionValue {
             .outOfScope(BundlingOperationModifier.values())
             .create();
 
-    public final static OptionValue<Path> DEST = directoryOption("dest").shortName("d").validator(StandardValidator.IS_DIRECTORY_OR_NON_EXISTENT).create();
+    public final static OptionValue<Path> DEST = directoryOption("dest").shortName("d")
+            .valuePattern("destination")
+            .validator(StandardValidator.IS_DIRECTORY_OR_NON_EXISTENT)
+            .create();
 
     public final static OptionValue<String> DESCRIPTION = stringOption("description").create();
 
     public final static OptionValue<String> VENDOR = stringOption("vendor").create();
 
     public final static OptionValue<String> APPCLASS = stringOption("main-class")
+            .valuePattern("class-name")
             .outOfScope(BundlingOperationModifier.values())
             .create();
 
     public final static OptionValue<String> NAME = stringOption("name").shortName("n").create();
-
-    public final static OptionValue<Boolean> VERBOSE = booleanOption("verbose").create();
 
     public final static OptionValue<Path> RESOURCE_DIR = directoryOption("resource-dir")
             .inScope(CREATE_BUNDLE).inScope(MAC_SIGNING)
@@ -116,31 +136,41 @@ public final class StandardOptionValue {
             .outOfScope(BundlingOperationModifier.values())
             .create(toList());
 
-    public final static OptionValue<List<String>> JLINK_OPTIONS = stringOption("jlink-options").toArray(stringListTokenizer()).create(toList());
+    public final static OptionValue<List<String>> JLINK_OPTIONS = stringOption("jlink-options")
+            .outOfScope(NOT_BUILDING_APP_IMAGE)
+            .toArray(stringListTokenizer())
+            .create(toList());
 
-    public final static OptionValue<Path> ICON = pathOption("icon").create();
+    public final static OptionValue<Path> ICON = pathOption("icon").valuePattern("path").create();
 
     public final static OptionValue<String> COPYRIGHT = stringOption("copyright").create();
 
     public final static OptionValue<Path> LICENSE_FILE = pathOption("license-file")
+            .valuePattern("path")
             .validator(StandardValidator.IS_EXISTENT_NOT_DIRECTORY)
             .validatorExceptionFormatString("ERR_LicenseFileNotExit")
             .validatorExceptionFactory(ERROR_WITHOUT_CONTEXT)
             .create();
 
-    public final static OptionValue<String> VERSION = stringOption("app-version").create();
+    public final static OptionValue<String> APP_VERSION = stringOption("app-version").create();
 
-    public final static OptionValue<String> ABOUT_URL = urlOption("about-url").create();
+    public final static OptionValue<String> ABOUT_URL = urlOption("about-url")
+            .scope(CREATE_NATIVE).inScope(NOT_BUILDING_APP_IMAGE)
+            .create();
 
     public final static OptionValue<List<String>> JAVA_OPTIONS = stringOption("java-options").toArray(stringListTokenizer())
             .outOfScope(NOT_BUILDING_APP_IMAGE)
             .create(toList());
 
     public final static OptionValue<List<Path>> APP_CONTENT = pathOption("app-content").toArray(pathSeparator())
+            .valuePattern("additional-content")
             .outOfScope(NOT_BUILDING_APP_IMAGE)
             .create(toList());
 
-    public final static OptionValue<List<Path>> FILE_ASSOCIATIONS = pathOption("file-associations").toArray(pathSeparator()).create(toList());
+    public final static OptionValue<List<Path>> FILE_ASSOCIATIONS = pathOption("file-associations")
+            .toArray(pathSeparator())
+            .outOfScope(BundlingOperationModifier.BUNDLE_RUNTIME)
+            .create(toList());
 
     private final static class IllegalAddLauncherSyntaxException extends IllegalArgumentException {
 
@@ -151,6 +181,7 @@ public final class StandardOptionValue {
     }
 
     public final static OptionValue<List<AdditionalLauncher>> ADD_LAUNCHER = option("add-launcher", AdditionalLauncher.class)
+            .valuePattern("name=path")
             .outOfScope(BundlingOperationModifier.values())
             .converterExceptionFactory((optionName, optionValue, formatString, cause) -> {
                 final String msgId;
@@ -168,42 +199,49 @@ public final class StandardOptionValue {
                 return new AdditionalLauncher(components[0], StandardValueConverter.pathConv().convert(components[1]));
             }).toArray().defaultValue(new AdditionalLauncher[0]).create(toList());
 
-    public final static OptionValue<Path> TEMP_ROOT = pathOption("temp")
+    public final static OptionValue<Path> TEMP_ROOT = directoryOption("temp")
             .validatorExceptionFactory(ERROR_WITH_VALUE)
             .validatorExceptionFormatString("ERR_BuildRootInvalid")
             .validator(StandardValidator.IS_DIRECTORY_EMPTY_OR_NON_EXISTENT)
             .create();
 
-    public final static OptionValue<Path> INSTALL_DIR = pathOption("install-dir").create();
+    public final static OptionValue<Path> INSTALL_DIR = pathOption("install-dir")
+            .valuePattern("path")
+            .create();
 
     public final static OptionValue<Path> PREDEFINED_APP_IMAGE = directoryOption("app-image")
-            .inScope(CREATE_NATIVE).inScope(SIGN_MAC_APP_IMAGE)
+            .scope(CREATE_NATIVE).inScope(SIGN_MAC_APP_IMAGE).inScope(BundlingOperationModifier.BUNDLE_PREDEFINED_APP_IMAGE)
             .validatorExceptionFactory(ERROR_WITH_VALUE)
             .validatorExceptionFormatString("ERR_AppImageNotExist")
             .create();
 
     public final static OptionValue<Path> PREDEFINED_RUNTIME_IMAGE = directoryOption("runtime-image")
+            .outOfScope(BundlingOperationModifier.BUNDLE_PREDEFINED_APP_IMAGE)
             .validatorExceptionFactory(ERROR_WITH_OPTION_NAME_AND_VALUE)
             .validatorExceptionFormatString("message.runtime-image-dir-does-not-exist")
             .create();
 
     public final static OptionValue<Path> MAIN_JAR = pathOption("main-jar")
+            .valuePattern("main-jar")
             .outOfScope(BundlingOperationModifier.values())
             .create();
 
     public final static OptionValue<String> MODULE = stringOption("module").shortName("m")
+            .valuePattern("module-name[/main-class]")
             .outOfScope(NOT_BUILDING_APP_IMAGE)
             .create();
 
     public final static OptionValue<List<String>> ADD_MODULES = stringOption("add-modules").toArray(",")
+            .valuePattern("module-name")
             .outOfScope(NOT_BUILDING_APP_IMAGE)
             .create(toList());
 
     public final static OptionValue<List<Path>> MODULE_PATH = pathOption("module-path").toArray(pathSeparator())
+            .valuePattern("module-name")
             .outOfScope(NOT_BUILDING_APP_IMAGE)
             .create(toList());
 
-    public final static OptionValue<Boolean> LAUNCHER_AS_SERVICE = booleanOption("launcher-as-service").create();
+    public final static OptionValue<Boolean> LAUNCHER_AS_SERVICE = booleanOption("launcher-as-service").scope(upperBound(CREATE_NATIVE)).create();
 
     //
     // Linux-specific
@@ -213,7 +251,9 @@ public final class StandardOptionValue {
 
     public final static OptionValue<String> LINUX_BUNDLE_NAME = stringOption("linux-package-name").scope(upperBound(CREATE_NATIVE)).create();
 
-    public final static OptionValue<String> LINUX_DEB_MAINTAINER = stringOption("linux-deb-maintainer").create();
+    public final static OptionValue<String> LINUX_DEB_MAINTAINER = stringOption("linux-deb-maintainer")
+            .valuePattern("email-address")
+            .create();
 
     public final static OptionValue<String> LINUX_CATEGORY = stringOption("linux-app-category").scope(upperBound(CREATE_NATIVE)).create();
 
@@ -223,13 +263,17 @@ public final class StandardOptionValue {
 
     public final static OptionValue<Boolean> LINUX_SHORTCUT_HINT = booleanOption("linux-shortcut").scope(upperBound(CREATE_NATIVE)).create();
 
-    public final static OptionValue<String> LINUX_MENU_GROUP = stringOption("linux-menu-group").scope(upperBound(CREATE_NATIVE)).create();
+    public final static OptionValue<String> LINUX_MENU_GROUP = stringOption("linux-menu-group")
+            .valuePattern("menu-group-name")
+            .scope(upperBound(CREATE_NATIVE)).create();
 
     //
     // MacOS-specific
     //
 
-    public final static OptionValue<List<Path>> MAC_DMG_CONTENT = pathOption("mac-dmg-content").toArray(pathSeparator()).create(toList());
+    public final static OptionValue<List<Path>> MAC_DMG_CONTENT = pathOption("mac-dmg-content")
+            .valuePattern("additional-content")
+            .toArray(pathSeparator()).create(toList());
 
     public final static OptionValue<Boolean> MAC_SIGN = booleanOption("mac-sign").scope(MAC_SIGNING).shortName("s").create();
 
@@ -247,23 +291,31 @@ public final class StandardOptionValue {
 
     public final static OptionValue<String> MAC_APP_IMAGE_SIGN_IDENTITY = stringOption("mac-app-image-sign-identity").scope(MAC_SIGNING).create();
 
-    public final static OptionValue<String> MAC_INSTALLER_SIGN_IDENTITY = stringOption("mac-installer-sign-identity").scope(CREATE_MAC_PKG).create();
+    public final static OptionValue<String> MAC_INSTALLER_SIGN_IDENTITY = stringOption("mac-installer-sign-identity")
+            .scope(CREATE_MAC_PKG).inScope(NOT_BUILDING_APP_IMAGE)
+            .create();
 
-    public final static OptionValue<Path> MAC_SIGNING_KEYCHAIN = pathOption("mac-signing-keychain").scope(MAC_SIGNING).create();
+    public final static OptionValue<Path> MAC_SIGNING_KEYCHAIN = pathOption("mac-signing-keychain")
+            .valuePattern("keychain-name")
+            .scope(MAC_SIGNING).create();
 
-    public final static OptionValue<Path> MAC_ENTITLEMENTS = pathOption("mac-entitlements").scope(MAC_SIGNING).create();
+    public final static OptionValue<Path> MAC_ENTITLEMENTS = pathOption("mac-entitlements")
+            .valuePattern("path")
+            .scope(MAC_SIGNING).create();
 
     //
     // Windows-specific
     //
 
-    public final static OptionValue<String> WIN_HELP_URL = stringOption("win-help-url").scope(upperBound(CREATE_NATIVE)).create();
+    public final static OptionValue<String> WIN_HELP_URL = urlOption("win-help-url").scope(upperBound(CREATE_NATIVE)).create();
 
-    public final static OptionValue<String> WIN_UPDATE_URL = stringOption("win-update-url").scope(upperBound(CREATE_NATIVE)).create();
+    public final static OptionValue<String> WIN_UPDATE_URL = urlOption("win-update-url").scope(upperBound(CREATE_NATIVE)).create();
 
     public final static OptionValue<Boolean> WIN_MENU_HINT = booleanOption("win-menu").scope(upperBound(CREATE_NATIVE)).create();
 
-    public final static OptionValue<String> WIN_MENU_GROUP = stringOption("win-menu-group").scope(upperBound(CREATE_NATIVE)).create();
+    public final static OptionValue<String> WIN_MENU_GROUP = stringOption("win-menu-group")
+            .valuePattern("menu-group-name")
+            .scope(upperBound(CREATE_NATIVE)).create();
 
     public final static OptionValue<Boolean> WIN_SHORTCUT_HINT = booleanOption("win-shortcut").scope(upperBound(CREATE_NATIVE)).create();
 
@@ -295,6 +347,11 @@ public final class StandardOptionValue {
             JAVA_OPTIONS
     );
 
+    /**
+     * Returns all options defined in {@link StandardOptionValue} class.
+     *
+     * @return all defined options
+     */
     static Set<Option> options() {
         return Stream.of(StandardOptionValue.class.getFields()).filter(f -> {
             return Modifier.isStatic(f.getModifiers());
@@ -307,9 +364,39 @@ public final class StandardOptionValue {
                 .collect(toSet());
     }
 
+    /**
+     * Returns a {@link Predicate} that returns {@code true} if the given option
+     * spec denotes an option supported on all platforms.
+     *
+     * @return the predicate
+     */
+    static Predicate<OptionSpec<?>> sharedOption() {
+        return optionSpec -> {
+            final var optionSupportedOSs = StandardBundlingOperation.narrow(optionSpec.scope().stream())
+                    .map(StandardBundlingOperation::os).collect(Collectors.toSet());
+            return optionSupportedOSs.equals(SUPPORTED_OS);
+        };
+    }
+
+    /**
+     * Returns a {@link Predicate} that returns {@code true} if the given option
+     * spec denotes an option supported on the current platform.
+     *
+     * @see {@link OperatingSystem#current()}
+     *
+     * @return the predicate
+     */
+    static Predicate<OptionSpec<?>> currentPlatformOption() {
+        return optionSpec -> {
+            return StandardBundlingOperation.narrow(optionSpec.scope().stream())
+                    .filter(StandardBundlingOperation.currentPlatform()).findFirst().isPresent();
+        };
+    }
+
     private static <T> OptionSpecBuilder<T> option(String name, Class<? extends T> valueType) {
         return OptionSpecBuilder.<T>create(valueType)
                 .name(Objects.requireNonNull(name))
+                .description("help.option.description." + name)
                 .scope(fromOptionName(name))
                 .scope(scope -> {
                     if (Collections.disjoint(scope, CREATE_NATIVE)) {
@@ -338,6 +425,7 @@ public final class StandardOptionValue {
 
     private static OptionSpecBuilder<Path> directoryOption(String name) {
         return pathOption(name)
+                .valuePattern("directory")
                 .validator(StandardValidator.IS_DIRECTORY)
                 .validatorExceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME)
                 .validatorExceptionFormatString("error.paramater-not-directory");
@@ -345,6 +433,7 @@ public final class StandardOptionValue {
 
     private static OptionSpecBuilder<String> urlOption(String name) {
         return stringOption(name)
+                .valuePattern("url")
                 .validator(StandardValidator.IS_URL)
                 .validatorExceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME)
                 .validatorExceptionFormatString("error.paramater-not-url");
@@ -352,6 +441,10 @@ public final class StandardOptionValue {
 
     private static OptionSpecBuilder<Boolean> booleanOption(String name) {
         return option(name, Boolean.class).defaultValue(Boolean.FALSE);
+    }
+
+    private static OptionSpecBuilder<Boolean> auxilaryOption(String name) {
+        return booleanOption(name).inScope(MAC_SIGNING).inScope(BundlingOperationModifier.values());
     }
 
     private static UnaryOperator<Set<OptionScope>> upperBound(Collection<? extends BundlingOperationOptionScope> upperBound) {

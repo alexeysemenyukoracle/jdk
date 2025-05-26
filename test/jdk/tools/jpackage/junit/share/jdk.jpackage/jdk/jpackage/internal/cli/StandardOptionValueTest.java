@@ -64,7 +64,7 @@ public class StandardOptionValueTest {
     }
 
     @Test
-    public void groupByOption() {
+    public void printMarkdownOptionTable() {
         OptionSpecFormatter.print(OptionSpecFormatter::groupByOption);
     }
 
