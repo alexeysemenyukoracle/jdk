@@ -28,11 +28,9 @@ import static jdk.jpackage.internal.cli.OptionValueExceptionFactory.UNREACHABLE_
 import static jdk.jpackage.internal.cli.StandardValueConverter.identityConv;
 import static jdk.jpackage.internal.cli.StandardValueConverter.pathConv;
 import static jdk.jpackage.internal.cli.TestUtils.arrayElements;
-import jdk.jpackage.internal.util.ExceptionAnalizer;
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static jdk.jpackage.internal.util.TestUtils.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -57,10 +55,13 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import jdk.jpackage.internal.cli.OptionSpec.MergePolicy;
+import jdk.jpackage.internal.cli.OptionValueConverter.ConverterException;
 import jdk.jpackage.internal.cli.OptionValueExceptionFactory.StandardArgumentsMapper;
 import jdk.jpackage.internal.cli.TestUtils.OptionFailure;
 import jdk.jpackage.internal.cli.TestUtils.TestException;
 import jdk.jpackage.internal.util.Result;
+import jdk.jpackage.internal.util.TestUtils.ExceptionAnalizer;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -72,11 +73,10 @@ public class JOptSimpleOptionsBuilderTest {
 
     enum ParserMode {
         PARSE,
-        CONVERT,
-        VALIDATE
+        CONVERT
     }
 
-    public record TestSpec(Map<OptionValue<?>, Object> options, List<String> args) {
+    public record TestSpec(Map<OptionValue<?>, ExpectedValue<?>> options, List<String> args) {
         public TestSpec {
             Objects.requireNonNull(options);
             Objects.requireNonNull(args);
@@ -96,22 +96,28 @@ public class JOptSimpleOptionsBuilderTest {
                 } else {
                     actualValue = optionValue.getFrom(cmdline);
                 }
-                if (expectedValue.getClass().isArray()) {
-                    assertArrayEquals((Object[])expectedValue, (Object[])actualValue);
-                } else {
-                    assertEquals(expectedValue, actualValue);
-                }
+                expectedValue.assertIt(actualValue);
             }
         }
 
-        static class Builder {
+
+        final static class Builder {
 
             TestSpec create() {
                 return new TestSpec(options, args);
             }
 
-            Builder optionValue(OptionValue<?> option, Object expectedValue) {
-                options.put(option, expectedValue);
+            Builder optionStringValue(OptionValue<?> option, String expectedValue) {
+                options.put(option, new ExpectedValue<>(expectedValue, Assertions::assertEquals));
+                return this;
+             }
+
+            <T> Builder optionValue(OptionValue<T> option, T expectedValue) {
+               return optionValue(option, expectedValue, defaultAsserter());
+            }
+
+            <T> Builder optionValue(OptionValue<T> option, T expectedValue, BiConsumer<T, T> asserter) {
+                options.put(option, new ExpectedValue<>(expectedValue, asserter));
                 return this;
             }
 
@@ -124,8 +130,31 @@ public class JOptSimpleOptionsBuilderTest {
                 return this;
             }
 
-            private final Map<OptionValue<?>, Object> options = new HashMap<>();
+            private static <T> BiConsumer<T, T> defaultAsserter() {
+                return (expected, actual) -> {
+                    if (expected.getClass().isArray()) {
+                        assertArrayEquals(expected, actual);
+                    } else {
+                        assertEquals(expected, actual);
+                    }
+                };
+            }
+
+            private final Map<OptionValue<?>, ExpectedValue<?>> options = new HashMap<>();
             private final List<String> args = new ArrayList<>();
+        }
+
+
+        private record ExpectedValue<T>(T value, BiConsumer<T, T> asserter) {
+            ExpectedValue {
+                Objects.requireNonNull(value);
+                Objects.requireNonNull(asserter);
+            }
+
+            @SuppressWarnings("unchecked")
+            void assertIt(Object actual) {
+                asserter.accept(value, (T)actual);
+            }
         }
     }
 
@@ -225,40 +254,19 @@ public class JOptSimpleOptionsBuilderTest {
     @ParameterizedTest
     @MethodSource
     public void test(TestSpec spec) {
-        spec.test(ParserMode.VALIDATE);
+        spec.test(ParserMode.CONVERT);
     }
 
     @ParameterizedTest
     @MethodSource
     public void testStringVector(TestSpec spec) {
-        List.of(ParserMode.CONVERT, ParserMode.VALIDATE).forEach(spec::test);
-    }
-
-    @ParameterizedTest
-    @ValueSource(booleans = {true, false})
-    public void testConversionVsValidation(boolean asArray, @TempDir Path tmpDir) {
-        final var nonExistentDir = tmpDir.resolve("non-existent");
-
-        final TestSpec.Builder builder = build().args("--dir", nonExistentDir.toString());
-        if (asArray) {
-            builder.optionValue(directoryOption("dir").toArray().create(), new Path[] { nonExistentDir });
-        } else {
-            builder.optionValue(directoryOption("dir").create(), nonExistentDir);
-        }
-
-        final var testSpec = builder.create();
-
-        testSpec.test(ParserMode.CONVERT);
-
-        final var ex = assertThrowsExactly(TestException.class, () -> testSpec.test(ParserMode.VALIDATE));
-
-        assertEquals(String.format(FORMAT_STRING_NOT_DIRECTORY, nonExistentDir, "--dir"), ex.getMessage());
+        spec.test(ParserMode.CONVERT);
     }
 
     @Test
     public void testConversionErrors(@TempDir Path tmpDir) {
 
-        final var dirOption = directoryOption("dir").shortName("r").toArray(",");
+        final var dirOption = pathOption("dir").shortName("r").toArray(",");
 
         final var urlOption = stringOption("url").converter(str -> {
             try {
@@ -287,7 +295,7 @@ public class JOptSimpleOptionsBuilderTest {
                 .expectError("r", StringToken.of("file,*", "*"))
                 .expectError("url", ":foo")
                 .expectError("lru", ":bar")
-                .test(ParserMode.CONVERT);
+                .test();
     }
 
     @Test
@@ -306,36 +314,20 @@ public class JOptSimpleOptionsBuilderTest {
                 .expectError("number", StringToken.of("2,-34,-45", "-45"))
                 .expectError("n", StringToken.of("2,-17,0,56", "-17"))
                 .expectError("n", StringToken.of("2,-17,0,56", "0"))
-                .test(ParserMode.VALIDATE);
+                .test();
     }
 
-    @ParameterizedTest
-    @EnumSource(names = {"CONVERT", "VALIDATE"})
-    public void testConverterError(ParserMode parserMode) {
+    @Test
+    public void testConverterError() {
 
         final var scalarException = new RuntimeException("Scalar error");
         final var arrayException = new RuntimeException("Array error");
 
         final Function<RuntimeException, Consumer<OptionSpecBuilder<String>>> mutatorCreator = ex -> {
             return builder -> {
-                switch (parserMode) {
-                    case CONVERT -> {
-                        builder.converter(_ -> {
-                            throw ex;
-                        });
-                    }
-                    case VALIDATE -> {
-                        builder.validator(new Predicate<String>() {
-                            @Override
-                            public boolean test(String v) {
-                                throw ex;
-                            }
-                        });
-                    }
-                    default -> {
-                        throw new IllegalArgumentException();
-                    }
-                }
+                builder.converter(_ -> {
+                    throw ex;
+                });
             };
         };
 
@@ -350,22 +342,54 @@ public class JOptSimpleOptionsBuilderTest {
         cfg.clearArgs().cleareExpectedInternalExceptions()
                 .args("--val=10")
                 .expectAnyInternalException(scalarException)
-                .test(parserMode);
+                .test();
 
         cfg.clearArgs().cleareExpectedInternalExceptions()
                 .args("--arr=foo")
                 .expectAnyInternalException(arrayException)
-                .test(parserMode);
+                .test();
 
         cfg.clearArgs().cleareExpectedInternalExceptions()
                 .args("--arr=bar", "--val=57")
                 .expectAnyInternalException(scalarException, arrayException)
-                .test(parserMode);
+                .test();
 
         cfg.clearArgs().cleareExpectedInternalExceptions()
                 .args("--val=57", "--arr=bar")
                 .expectAnyInternalException(scalarException, arrayException)
-                .test(parserMode);
+                .test();
+    }
+
+    @Test
+    public void testArrayUnrecoverableMergeFailure() {
+
+        new FaultyParserArgsConfig()
+                .arrayOptions(pathOption("path").toArray(",").mergePolicy(MergePolicy.USE_FIRST))
+                .args("--path=*,foo", "--path=bar")
+                .expectError("path", StringToken.of("*,foo", "*"))
+                .expectedErrorsExactMatch(false).test();
+
+        new FaultyParserArgsConfig()
+                .arrayOptions(pathOption("path").toArray(",").mergePolicy(MergePolicy.USE_LAST))
+                .args("--path=bar", "--path=foo,*")
+                .expectError("path", StringToken.of("foo,*", "*"))
+                .expectedErrorsExactMatch(false).test();
+    }
+
+    @Test
+    public void testScalarUnrecoverableMergeFailure() {
+
+        new FaultyParserArgsConfig()
+                .options(pathOption("path").mergePolicy(MergePolicy.USE_FIRST))
+                .args("--path=*", "--path=bar")
+                .expectError("path", StringToken.of("*", "*"))
+                .test();
+
+        new FaultyParserArgsConfig()
+                .options(pathOption("path").mergePolicy(MergePolicy.USE_LAST))
+                .args("--path=bar", "--path=*")
+                .expectError("path", StringToken.of("*", "*"))
+                .test();
     }
 
     @ParameterizedTest
@@ -396,8 +420,8 @@ public class JOptSimpleOptionsBuilderTest {
         if (parserMode.equals(ParserMode.PARSE)) {
             builder.optionValue(strOption, mergeStringValues(List.of("", "A"), mergePolicy));
             builder.optionValue(monthOption, mergeStringValues(List.of("June", "July", "August"), mergePolicy));
-            builder.optionValue(intOption, mergeStringValues(List.of("10", "45"), mergePolicy));
-            builder.optionValue(floatOption, "1000");
+            builder.optionStringValue(intOption, mergeStringValues(List.of("10", "45"), mergePolicy));
+            builder.optionStringValue(floatOption, "1000");
         } else {
             builder.optionValue(strOption, mergeScalarValues(List.of("", "A"), mergePolicy));
             builder.optionValue(monthOption, mergeScalarValues(List.of("June", "July", "August"), mergePolicy));
@@ -432,11 +456,11 @@ public class JOptSimpleOptionsBuilderTest {
         final var builder = build().args("-d", "1000", "--int=", "--month=June", "--int=10:333", "-m", "July+July", "-i", "45", "-m", "August", "--int=");
 
         if (parserMode.equals(ParserMode.PARSE)) {
-            builder.optionValue(monthOption,
+            builder.optionStringValue(monthOption,
                     mergeStringValues(List.of("June", "July+July", "August"), mergePolicy));
-            builder.optionValue(intOption,
+            builder.optionStringValue(intOption,
                     mergeStringValues(List.of("", "10:333", "45", ""), mergePolicy));
-            builder.optionValue(floatOption, "1000");
+            builder.optionStringValue(floatOption, "1000");
         } else {
             builder.optionValue(monthOption,
                     mergeArrayValues(arrayElements(String.class, List.of("June", "July", "July", "August")), mergePolicy));
@@ -463,8 +487,8 @@ public class JOptSimpleOptionsBuilderTest {
         final var builder = build().args("-a", "-boo", "-b");
 
         if (parserMode.equals(ParserMode.PARSE)) {
-            builder.optionValue(aOption, mergeScalarValues(List.of("true"), mergePolicy));
-            builder.optionValue(bOption, mergeScalarValues(List.of("true", "true"), mergePolicy));
+            builder.optionStringValue(aOption, mergeScalarValues(List.of("true"), mergePolicy));
+            builder.optionStringValue(bOption, mergeScalarValues(List.of("true", "true"), mergePolicy));
         } else {
             builder.optionValue(aOption, mergeScalarValues(List.of(true), mergePolicy));
             builder.optionValue(bOption, mergeScalarValues(List.of(true, true), mergePolicy));
@@ -632,37 +656,81 @@ public class JOptSimpleOptionsBuilderTest {
                         100
                 ).args("-x", "a", "-x", "100"),
                 build().optionValue(
-                        option("x", Integer.class).converter(Integer::valueOf).toArray(",").mergePolicy(MergePolicy.USE_FIRST).create(),
+                        option("x", Integer.class).mergePolicy(MergePolicy.USE_FIRST)
+                                .exceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME)
+                                .exceptionFormatString("")
+                                .converter(Integer::valueOf).toArray(",").create(),
                         new Integer[] {34}
                 ).args("-x", "34,A", "-x", "f"),
 
                 // Test the last array element (recoverable conversion errors).
                 build().optionValue(
-                        option("x", Integer.class).converter(Integer::valueOf).toArray(",").mergePolicy(MergePolicy.USE_LAST).create(toList()),
+                        option("x", Integer.class).mergePolicy(MergePolicy.USE_LAST)
+                                .converter(Integer::valueOf).toArray(",").create(toList()),
                         List.of(78)
                 ).args("-x", "1,3,78"),
                 build().optionValue(
-                        option("x", Integer.class).converter(Integer::valueOf).toArray(",").mergePolicy(MergePolicy.USE_LAST).create(toList()),
+                        option("x", Integer.class).mergePolicy(MergePolicy.USE_LAST)
+                                .exceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME)
+                                .exceptionFormatString("")
+                                .converter(Integer::valueOf).toArray(",").create(toList()),
+                        List.of(78)
+                ).args("-x", "1,ZZZ,78"),
+                build().optionValue(
+                        option("x", Integer.class).mergePolicy(MergePolicy.USE_LAST)
+                                .converter(Integer::valueOf).toArray(",").create(toList()),
                         List.of(35)
                 ).args("-x", "1,3,78", "-x", "a", "-x", "35"),
                 build().optionValue(
-                        option("x", Integer.class).converter(Integer::valueOf).toArray(TestUtils.splitOrEmpty(",")).mergePolicy(MergePolicy.USE_LAST).create(toList()),
+                        option("x", Integer.class).mergePolicy(MergePolicy.USE_LAST)
+                                .converter(Integer::valueOf).toArray(TestUtils.splitOrEmpty(",")).create(toList()),
                         List.of()
                 ).args("-x", "1,3,78", "-x", ""),
 
                 // Test the first array element (recoverable conversion errors).
                 build().optionValue(
-                        option("x", Integer.class).converter(Integer::valueOf).toArray(",").mergePolicy(MergePolicy.USE_FIRST).create(toList()),
+                        option("x", Integer.class).mergePolicy(MergePolicy.USE_FIRST)
+                                .exceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME)
+                                .exceptionFormatString("")
+                                .converter(Integer::valueOf).toArray(",").create(toList()),
                         List.of(1)
-                ).args("-x", "1,3,78"),
+                ).args("-x", "1,ZZZ,78"),
                 build().optionValue(
-                        option("x", Integer.class).converter(Integer::valueOf).toArray(",").mergePolicy(MergePolicy.USE_FIRST).create(toList()),
+                        option("x", Integer.class).mergePolicy(MergePolicy.USE_FIRST)
+                                .converter(Integer::valueOf).toArray(",").create(toList()),
                         List.of(1)
                 ).args("-x", "1,3,78", "-x", "a", "-x", "35"),
                 build().optionValue(
-                        option("x", Integer.class).converter(Integer::valueOf).toArray(TestUtils.splitOrEmpty(",")).mergePolicy(MergePolicy.USE_FIRST).create(toList()),
+                        option("x", Integer.class).mergePolicy(MergePolicy.USE_FIRST)
+                                .converter(Integer::valueOf).toArray(TestUtils.splitOrEmpty(",")).create(toList()),
                         List.of()
-                ).args("-x", "", "-x", "1,3,78")
+                ).args("-x", "", "-x", "1,23,78"),
+
+                // Test array value is a scalar for parser.
+                build().optionValue(
+                        option("arr", int[].class).converter(str -> {
+                            return Stream.of(str.split(",")).map(Integer::valueOf).mapToInt(Integer::intValue).toArray();
+                        }).create(),
+                        new int[] {1, 45, 67}
+                ).args("--arr=1,45,67"),
+
+                // Test that parser can handle multi-dimensional arrays.
+                build().optionValue(
+                        option("arr", int[].class).converter(str -> {
+                            if (str.isEmpty()) {
+                                return new int[0];
+                            } else {
+                                return Stream.of(str.split(",")).map(Integer::valueOf).mapToInt(Integer::intValue).toArray();
+                            }
+                        }).toArray(":").create(toList()),
+                        List.of(new int[] {1, 45, 67}, new int[0], new int[] {3}, new int[] {56}, new int[] {77, 82}),
+                        (expected, actual) -> {
+                            assertEquals(expected.size(), actual.size());
+                            for (int i = 0; i != expected.size(); i++) {
+                                assertArrayEquals(expected.get(i), actual.get(i));
+                            }
+                        }
+                ).args("--arr=1,45,67::3:56", "--arr=77,82")
 
         ).map(TestSpec.Builder::create).toList();
     }
@@ -740,9 +808,6 @@ public class JOptSimpleOptionsBuilderTest {
                 case CONVERT -> {
                     return builder.convertedOptions().orElseThrow().create();
                 }
-                case VALIDATE -> {
-                    return builder.convertedOptions().orElseThrow().validatedOptions().orElseThrow().create();
-                }
                 default -> {
                     throw new IllegalArgumentException();
                 }
@@ -757,7 +822,7 @@ public class JOptSimpleOptionsBuilderTest {
 
     private static final class FaultyParserArgsConfig {
 
-        void test(ParserMode parserMode) {
+        void test() {
 
             final Collection<OptionFailure> actualErrors = new ArrayList<>();
 
@@ -775,44 +840,23 @@ public class JOptSimpleOptionsBuilderTest {
 
             final var parser = new JOptSimpleOptionsBuilder().optionValues(optionValues).create();
 
-            final Supplier<Result<?>> createCmdline;
-            switch (parserMode) {
-                case CONVERT -> {
-                    createCmdline = parser.apply(args.toArray(String[]::new)).orElseThrow()::convertedOptions;
-                }
-                case VALIDATE -> {
-                    createCmdline = parser.apply(args.toArray(String[]::new))
-                            .orElseThrow().convertedOptions().orElseThrow()::validatedOptions;
-                }
-                default -> {
-                    throw new UnsupportedOperationException();
-                }
-            }
+            final Supplier<Result<?>> createCmdline = parser.apply(args.toArray(String[]::new)).orElseThrow()::convertedOptions;
 
-            if (!expectedInternalExceptions.isEmpty()) {
-                final Class<? extends Exception> exceptionWrapperType;
-                switch (parserMode) {
-                    case CONVERT -> {
-                        exceptionWrapperType = OptionValueConverter.ConverterException.class;
-                    }
-                    case VALIDATE -> {
-                        exceptionWrapperType = Validator.ValidatorException.class;
-                    }
-                    default -> {
-                        throw new UnsupportedOperationException();
-                    }
-                }
-
-                final var ex = assertThrowsExactly(exceptionWrapperType, () -> createCmdline.get());
+            if (expectedInternalExceptions.isEmpty()) {
+                assertFalse(createCmdline.get().hasValue());
+            } else {
+                final var ex = assertThrowsExactly(ConverterException.class, () -> createCmdline.get());
                 assertTrue(expectedInternalExceptions.stream().anyMatch(v -> {
                     return v == ex.getCause();
                 }));
-            } else {
-                assertFalse(createCmdline.get().hasValue());
             }
 
-            TestUtils.assertOptionFailuresEquals(expectedErrors,
-                    actualErrors.stream().map(OptionFailure::withoutException).toList());
+            final var actualErrorWithoutExceptions = actualErrors.stream().map(OptionFailure::withoutException).toList();
+            if (expectedErrorsExactMatch) {
+                TestUtils.assertOptionFailuresEquals(expectedErrors, actualErrorWithoutExceptions);
+            } else {
+                TestUtils.assertOptionFailuresContains(expectedErrors, actualErrorWithoutExceptions);
+            }
         }
 
         FaultyParserArgsConfig args(Collection<String> v) {
@@ -878,6 +922,11 @@ public class JOptSimpleOptionsBuilderTest {
             return this;
         }
 
+        FaultyParserArgsConfig expectedErrorsExactMatch(boolean v) {
+            expectedErrorsExactMatch = v;
+            return this;
+        }
+
         private static void configureExceptions(OptionSpecBuilder<?> builder) {
             builder.exceptionFactory(factory -> {
                 if (factory == null || factory == UNREACHABLE_EXCEPTION_FACTORY) {
@@ -893,6 +942,7 @@ public class JOptSimpleOptionsBuilderTest {
         private final Collection<OptionSpecBuilder<?>.ArrayOptionSpecBuilder> arrayOptionSpecBuilders = new ArrayList<>();
         private final Collection<OptionFailure> expectedErrors = new ArrayList<>();
         private List<Exception> expectedInternalExceptions = new ArrayList<>();
+        private boolean expectedErrorsExactMatch = true;
     }
 
 

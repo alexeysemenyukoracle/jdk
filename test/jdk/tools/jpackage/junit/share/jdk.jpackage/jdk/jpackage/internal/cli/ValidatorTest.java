@@ -23,8 +23,7 @@
 package jdk.jpackage.internal.cli;
 
 import static jdk.jpackage.internal.cli.TestUtils.assertExceptionListEquals;
-import static jdk.jpackage.internal.cli.TestUtils.configureValidator;
-import static jdk.jpackage.internal.cli.TestUtils.configureConverter;
+import static jdk.jpackage.internal.cli.TestUtils.configureCheckedValidator;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -32,7 +31,6 @@ import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Stream;
 import jdk.jpackage.internal.cli.TestUtils.TestException;
 import jdk.jpackage.internal.cli.Validator.ParsedValue;
 import jdk.jpackage.internal.cli.Validator.ValidatingConsumerException;
@@ -41,7 +39,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 
 public class ValidatorTest {
 
@@ -65,7 +62,7 @@ public class ValidatorTest {
             }
         }
 
-        final var validator = builder.mutate(configureValidator()).create();
+        final var validator = builder.mutate(configureCheckedValidator()).create();
 
         final var optionName = OptionName.of("obj");
         final var optionValue = ParsedValue.create(new Object(), StringToken.of("foo"));
@@ -75,7 +72,7 @@ public class ValidatorTest {
     @Test
     public void test_predicate_negative() {
 
-        final var validator =  Validator.build().predicate(_ -> false).mutate(configureValidator()).create();
+        final var validator =  Validator.build().predicate(_ -> false).mutate(configureCheckedValidator()).create();
 
         final var optionName = OptionName.of("obj");
         final var optionValue = ParsedValue.create(new Object(), StringToken.of("foo"));
@@ -132,7 +129,7 @@ public class ValidatorTest {
 
         final var validator = builder.consumer(_ -> {
             throw validatorException;
-        }).mutate(configureValidator()).create();
+        }).mutate(configureCheckedValidator()).create();
 
         final var optionName = OptionName.of("obj");
         final var optionValue = ParsedValue.create(new Object(), StringToken.of("foo"));
@@ -171,7 +168,7 @@ public class ValidatorTest {
             }
         }
 
-        final var validator = builder.mutate(configureValidator()).create();
+        final var validator = builder.mutate(configureCheckedValidator()).create();
 
         final var token = StringToken.of("foo");
         final var ex = assertThrowsExactly(ValidatorException.class, () -> {
@@ -179,41 +176,6 @@ public class ValidatorTest {
         });
 
         assertSame(VALITDATOR_EXCEPTION, ex.getCause());
-    }
-
-    @ParameterizedTest
-    @ValueSource(booleans = {true, false})
-    public void testArrayValidator(boolean positive) {
-
-        final var validator = Validator.<Integer, Exception>build().predicate(v -> {
-            return v > 0;
-        }).mutate(configureValidator()).createArray();
-
-        final String tokenizedString;
-        if (positive) {
-            tokenizedString = "3,5,77,9";
-        } else {
-            tokenizedString = "3,-5,-77,9";
-        }
-
-        final var intArray = OptionValueConverter.<Integer>build()
-                .converter(ValueConverter.create(Integer::valueOf, Integer.class))
-                .mutate(configureConverter())
-                .tokenizer(str -> str.split(","))
-                .createArray().convert(OptionName.of("foo"), StringToken.of(tokenizedString));
-
-        final List<TestException> expectedExceptions;
-        if (positive) {
-            expectedExceptions = List.of();
-        } else {
-            final var expectedExcepion = new TestException("Option --foo: bad substring [" + tokenizedString + "] in string [" + tokenizedString + "]");
-            expectedExceptions = List.of(expectedExcepion, expectedExcepion);
-        }
-
-        final var actualExceptions = validator.validate(OptionName.of("foo"),
-                ParsedValue.create(intArray, StringToken.of(tokenizedString)));
-
-        assertExceptionListEquals(expectedExceptions, actualExceptions);
     }
 
 

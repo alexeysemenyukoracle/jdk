@@ -35,7 +35,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Predicate;
 import java.util.stream.IntStream;
 import jdk.jpackage.internal.cli.OptionSpec.MergePolicy;
 import org.junit.jupiter.api.Test;
@@ -87,11 +86,6 @@ public class OptionSpecTest {
 
         ex = assertThrowsExactly(IllegalArgumentException.class, () -> buildSpec().names("foo").scope(Set.of()).create());
         assertEquals("Empty scope", ex.getMessage());
-
-        ex = assertThrowsExactly(IllegalArgumentException.class, () -> {
-            OptionSpecTest.<String>buildSpec().names("foo").validator(validator(_ -> true)).create();
-        });
-        assertEquals("Validator is not applicable", ex.getMessage());
 
         ex = assertThrowsExactly(IllegalArgumentException.class, () -> {
             buildSpec().names("foo").mergePolicy(MergePolicy.CONCATENATE).create();
@@ -150,14 +144,6 @@ public class OptionSpecTest {
                 .create();
     }
 
-    private static <T> Validator<T, ? extends Exception> validator(Predicate<T> predicate) {
-        return Validator.<T, RuntimeException>build()
-                .exceptionFactory(OptionValueExceptionFactory.UNREACHABLE_EXCEPTION_FACTORY)
-                .formatString("")
-                .predicate(predicate)
-                .create();
-    }
-
 
     private final static class OptionSpecBuilder<T> {
 
@@ -166,7 +152,6 @@ public class OptionSpecTest {
                     Optional.ofNullable(names).orElseGet(List::of),
                     Optional.ofNullable(converter),
                     Optional.ofNullable(scope).orElseGet(Set::of),
-                    Optional.ofNullable(validator),
                     mergePolicy);
         }
 
@@ -189,11 +174,6 @@ public class OptionSpecTest {
             return this;
         }
 
-        OptionSpecBuilder<T> validator(Validator<T, ? extends Exception> v) {
-            validator = v;
-            return this;
-        }
-
         OptionSpecBuilder<T> mergePolicy(MergePolicy v) {
             mergePolicy = v;
             return this;
@@ -202,7 +182,6 @@ public class OptionSpecTest {
         private List<OptionName> names;
         private OptionValueConverter<T> converter;
         private Set<OptionScope> scope = Set.of(new OptionScope() {});
-        private Validator<T, ? extends Exception> validator;
         private MergePolicy mergePolicy = MergePolicy.USE_LAST;
     }
 }

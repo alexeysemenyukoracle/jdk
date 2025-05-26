@@ -33,8 +33,7 @@ import java.util.stream.Stream;
 
 
 record OptionSpec<T>(List<OptionName> names, Optional<OptionValueConverter<T>> valueConverter,
-        Set<OptionScope> scope, Optional<Validator<T, ? extends Exception>> valueValidator,
-        MergePolicy mergePolicy) {
+        Set<OptionScope> scope, MergePolicy mergePolicy) {
 
     enum MergePolicy {
         USE_FIRST,
@@ -52,12 +51,7 @@ record OptionSpec<T>(List<OptionName> names, Optional<OptionValueConverter<T>> v
         if (scope.isEmpty()) {
             throw new IllegalArgumentException("Empty scope");
         }
-        Objects.requireNonNull(valueValidator);
         Objects.requireNonNull(mergePolicy);
-
-        if (valueConverter.isEmpty() && valueValidator.isPresent()) {
-            throw new IllegalArgumentException("Validator is not applicable");
-        }
 
         final var typeMustBeArray = mergePolicy.equals(MergePolicy.CONCATENATE);
         final var type = valueType(valueConverter);
@@ -77,7 +71,7 @@ record OptionSpec<T>(List<OptionName> names, Optional<OptionValueConverter<T>> v
 
     Stream<OptionSpec<T>> generateForEveryName() {
         return names().stream().map(v -> {
-            return new OptionSpec<>(List.of(v), valueConverter, scope, valueValidator, mergePolicy);
+            return new OptionSpec<>(List.of(v), valueConverter, scope, mergePolicy);
         });
     }
 

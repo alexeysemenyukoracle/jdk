@@ -132,11 +132,13 @@ final class OptionsAnalyzer {
             // The option is not applicable when packaging of a runtime in a native bundle.
             return I18N.buildConfigException("ERR_NoInstallerEntryPoint", mapFormatArguments(optionSpec)).create();
         } else {
-            return I18N.buildConfigException("ERR_InvalidTypeOption", mapFormatArguments(optionSpec, bundlingOperation.packageTypeValue())).create();
+            return I18N.buildConfigException("ERR_InvalidTypeOption",
+                    mapFormatArguments(optionSpec, bundlingOperation.packageTypeValue())).create();
         }
     }
 
-    private static Optional<StandardBundlingOperation> getBundlingOperation(Options cmdline, OperatingSystem os, BundlingEnvironment env) {
+    private static Optional<StandardBundlingOperation> getBundlingOperation(Options cmdline,
+            OperatingSystem os, BundlingEnvironment env) {
         Objects.requireNonNull(cmdline);
         Objects.requireNonNull(os);
         Objects.requireNonNull(env);
@@ -147,7 +149,8 @@ final class OptionsAnalyzer {
             if (obj instanceof PackageType packageType) {
                 return packageType;
             } else {
-                return typeOption.getSpec().valueConverter().orElseThrow().convert(typeOption.getSpec().name(), StringToken.of((String)obj));
+                return typeOption.getSpec().valueConverter().orElseThrow()
+                        .convert(typeOption.getSpec().name(), StringToken.of((String)obj)).orElseThrow();
             }
         }).flatMap(packageType -> {
             // Filter bundling operations supported on the given OS.

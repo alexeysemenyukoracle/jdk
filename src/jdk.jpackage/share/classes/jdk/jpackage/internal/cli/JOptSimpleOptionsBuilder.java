@@ -42,18 +42,23 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import jdk.internal.joptsimple.OptionParser;
 import jdk.internal.joptsimple.OptionSet;
 import jdk.jpackage.internal.cli.OptionSpec.MergePolicy;
-import jdk.jpackage.internal.cli.Validator.ParsedValue;
 import jdk.jpackage.internal.util.Result;
 
 
 /**
- * Builds instanced of {@link Options} interface backed with joptsimple command line parser.
+ * Builds instanced of {@link Options} interface backed with joptsimple command
+ * line parser.
+ *
+ * Two types of command line argument processing are supported:
+ * <ol>
+ * <li>Parse command line. Parsed data is stored as a map of strings.
+ * <li>Convert strings to objects. Parsed data is stored as map of objects.
+ * </ol>
  */
 final class JOptSimpleOptionsBuilder {
 
@@ -87,26 +92,6 @@ final class JOptSimpleOptionsBuilder {
     }
 
 
-    final static class ValidatedOptionsBuilder {
-
-        private ValidatedOptionsBuilder(ValidatedOptions options) {
-            this.options = Objects.requireNonNull(options);
-        }
-
-        Options create() {
-            return Optional.ofNullable(excludes).map(options::excludeOptions).orElse(options);
-        }
-
-        ValidatedOptionsBuilder excludes(Collection<Option> v) {
-            excludes = v;
-            return this;
-        }
-
-        private Collection<Option> excludes;
-        private final ValidatedOptions options;
-    }
-
-
     final static class ConvertedOptionsBuilder {
 
         private ConvertedOptionsBuilder(TypedOptions options) {
@@ -115,10 +100,6 @@ final class JOptSimpleOptionsBuilder {
 
         Options create() {
             return Optional.ofNullable(excludes).map(options::excludeOptions).orElse(options);
-        }
-
-        Result<ValidatedOptionsBuilder> validatedOptions() {
-            return options.toValidatedOptions().map(ValidatedOptionsBuilder::new);
         }
 
         ConvertedOptionsBuilder excludes(Collection<Option> v) {
@@ -272,19 +253,19 @@ final class JOptSimpleOptionsBuilder {
 
         Result<TypedOptions> toTypedOptions() {
             final List<Exception> errors = new ArrayList<>();
-            final Map<Option, List<? extends OptionWithValue<?>>> value = new HashMap<>();
+            final Map<Option, Object> value = new HashMap<>();
 
             for (final var e : optionMap.entrySet()) {
                 final var option = e.getKey();
                 final var mainSpec = option.getSpec();
                 if (mainSpec.hasValue()) {
-                    final var result = convertValues(mainSpec, optionSet, getValues(mainSpec).orElseThrow());
+                    final var result = convertValues(mainSpec, optionSet, getValues(mainSpec));
                     result.value().ifPresent(v -> {
-                        value.put(option, v);
+                        value.put(option, mergeValues(mainSpec, v));
                     });
                     errors.addAll(result.errors());
                 } else {
-                    value.put(option, List.of());
+                    value.put(option, Boolean.TRUE);
                 }
             }
 
@@ -316,28 +297,28 @@ final class JOptSimpleOptionsBuilder {
         private Optional<List<String>> findValues(OptionIdentifier id) {
             Objects.requireNonNull(id);
             if (optionMap.containsKey(id)) {
-                return getValues(((Option)id).getSpec());
+                return Optional.of(getValues(((Option)id).getSpec()));
             } else {
                 return Optional.empty();
             }
         }
 
-        private Optional<List<String>> getValues(OptionSpec<?> mainSpec) {
+        private List<String> getValues(OptionSpec<?> mainSpec) {
             Objects.requireNonNull(mainSpec);
 
             final var values = optionValues(mergerOptionSet, mainSpec.name());
 
             if (!values.isEmpty()) {
-                return Optional.of(getOptionValue(values, mainSpec.mergePolicy()));
+                return getOptionValue(values, mainSpec.mergePolicy());
             } else if (mainSpec.names().stream().anyMatch(this::contains)) {
                 // "id" references an option without a value and it was recognized on the command line.
-                return Optional.of(List.of());
+                return List.of();
             } else {
                 throw new UnsupportedOperationException();
             }
         }
 
-        private static <T> Result<List<OptionWithValue<T>>> convertValues(OptionSpec<T> optionSpec,
+        private static <T> Result<List<T>> convertValues(OptionSpec<T> optionSpec,
                 OptionSet optionSet, List<String> orderedStringValues) {
             Objects.requireNonNull(optionSet);
             Objects.requireNonNull(orderedStringValues);
@@ -357,7 +338,7 @@ final class JOptSimpleOptionsBuilder {
             return orderedOptionValues.map(indexedValue -> {
                 final var optionName = indexedValue.optionName();
 
-                final var conversionResult = applyConverter(converter, optionName, indexedValue.optionValue());
+                final Result<T> conversionResult = converter.convert(optionName, StringToken.of(indexedValue.optionValue()));
 
                 if (conversionResult.hasErrors()) {
                     if (arrConverter != null && optionSpec.mergePolicy() != MergePolicy.CONCATENATE) {
@@ -366,28 +347,15 @@ final class JOptSimpleOptionsBuilder {
                         final String str = getOptionValue(List.of(tokens), optionSpec.mergePolicy()).getFirst();
                         final String[] token = arrConverter.tokenize(str);
                         if (token.length == 1 && str.equals(token[0])) {
-                            final var singleTokenConversionResult = applyConverter(converter, optionName, str);
+                            final var singleTokenConversionResult = converter.convert(optionName, StringToken.of(str));
                             if (singleTokenConversionResult.hasValue()) {
-                                final OptionWithValue<T> optionWithValue = new ArrayOptionWithValue<>(
-                                        optionName, singleTokenConversionResult.orElseThrow(), indexedValue.optionValue(), token);
-                                return Result.ofValue(optionWithValue);
+                                return singleTokenConversionResult;
                             }
                         }
                     }
-                    return conversionResult.<OptionWithValue<T>>mapErrors();
                 }
 
-                final OptionWithValue<T> optionWithValue;
-
-                if (arrConverter != null) {
-                    final var tokens = arrConverter.tokenize(indexedValue.optionValue());
-                    optionWithValue = new ArrayOptionWithValue<>(optionName, conversionResult.orElseThrow(),
-                            indexedValue.optionValue(), tokens);
-                } else {
-                    optionWithValue = new ScalarOptionWithValue<>(optionName, conversionResult.orElseThrow(),
-                            StringToken.of(indexedValue.optionValue()));
-                }
-                return Result.ofValue(optionWithValue);
+                return conversionResult;
             }).map(r -> r.map(List::of)).reduce((a, b) -> {
                 if (a.hasValue() && b.hasValue()) {
                     // Merge values as they both present.
@@ -399,15 +367,50 @@ final class JOptSimpleOptionsBuilder {
             }).orElseThrow();
         }
 
-        private static <T> Result<T> applyConverter(OptionValueConverter<T> converter, OptionName optionName, String str) {
-            try {
-                return Result.ofValue(converter.convert(optionName, StringToken.of(str)));
-            } catch (OptionValueConverter.ConverterException ex) {
-                // Converter internal error, bail out
-                throw ex;
-            } catch (RuntimeException ex) {
-                return Result.ofError(ex);
+        private static Object mergeValues(OptionSpec<?> optionSpec, List<?> value) {
+            if (optionSpec.arrayValueConverter().isEmpty()) {
+                return getOptionValue(value, optionSpec.mergePolicy()).getFirst();
+            } else {
+                switch (optionSpec.mergePolicy()) {
+                    case USE_FIRST -> {
+                        // Find the first non-empty array, get its first element and wrap it into one-element array.
+                        return value.stream().filter(arr -> {
+                            return Array.getLength(arr) > 0;
+                        }).findFirst().map(arr -> {
+                            return asArray(Array.get(arr, 0));
+                        }).orElseGet(value::getFirst);
+                    }
+                    case USE_LAST -> {
+                        // Find the last non-empty array, get its last element and wrap it into one-element array.
+                        return value.reversed().stream().filter(arr -> {
+                            return Array.getLength(arr) > 0;
+                        }).findFirst().map(arr -> {
+                            return asArray(Array.get(arr, Array.getLength(arr) - 1));
+                        }).orElseGet(value::getFirst);
+                    }
+                    case CONCATENATE -> {
+                        return value.stream().filter(arr -> {
+                            return Array.getLength(arr) > 0;
+                        }).map(Object.class::cast).reduce((a, b) -> {
+                            final var al = Array.getLength(a);
+                            final var bl = Array.getLength(b);
+                            final var arr = Array.newInstance(a.getClass().componentType(), al + bl);
+                            System.arraycopy(a, 0, arr, 0, al);
+                            System.arraycopy(b, 0, arr, al, bl);
+                            return arr;
+                        }).orElseGet(value::getFirst);
+                    }
+                    default -> {
+                        throw new UnsupportedOperationException();
+                    }
+                }
             }
+        }
+
+        private static Object asArray(Object v) {
+            final var arr = Array.newInstance(v.getClass(), 1);
+            Array.set(arr, 0, v);
+            return arr;
         }
 
         @SuppressWarnings("unchecked")
@@ -430,62 +433,9 @@ final class JOptSimpleOptionsBuilder {
     }
 
 
-    private interface OptionWithValue<T> {
-        OptionName name();
-        T value();
-        List<? extends Exception> validate(Validator<T, ? extends Exception> validator);
-
-        @SuppressWarnings("unchecked")
-        default List<? extends Exception> validateCastUnchecked(Validator<?, ? extends Exception> validator) {
-            return validate((Validator<T, ? extends Exception>)validator);
-        }
-    }
-
-
-    private record ScalarOptionWithValue<T>(OptionName name, T value,
-            StringToken sourceToken) implements OptionWithValue<T>, ParsedValue<T> {
-        ScalarOptionWithValue {
-            Objects.requireNonNull(name);
-            Objects.requireNonNull(value);
-            Objects.requireNonNull(sourceToken);
-        }
-
-        @Override
-        public List<? extends Exception> validate(Validator<T, ? extends Exception> validator) {
-            return validator.validate(name, this).stream().toList();
-        }
-    }
-
-
-    private record ArrayOptionWithValue<T>(OptionName name, T value, String tokenizedString,
-            String[] tokens) implements OptionWithValue<T> {
-        ArrayOptionWithValue {
-            Objects.requireNonNull(name);
-            Objects.requireNonNull(value);
-            Objects.requireNonNull(tokenizedString);
-            Objects.requireNonNull(tokens);
-        }
-
-        @Override
-        public List<? extends Exception> validate(Validator<T, ? extends Exception> validator) {
-            Objects.requireNonNull(validator);
-
-            @SuppressWarnings("unchecked")
-            final var buf = (T)Array.newInstance(Array.get(value, 0).getClass(), 1);
-
-            return IntStream.range(0, Array.getLength(value)).mapToObj(i -> {
-                Array.set(buf, 0, Array.get(value, i));
-                return ParsedValue.create(buf, StringToken.of(tokenizedString, tokens[i]));
-            }).map(parsedValue -> {
-                return validator.validate(name, parsedValue);
-            }).flatMap(Collection::stream).toList();
-        }
-    }
-
-
     private final static class TypedOptions implements Options {
 
-        TypedOptions(Map<Option, List<? extends OptionWithValue<?>>> values, Set<OptionName> optionNames) {
+        TypedOptions(Map<Option, Object> values, Set<OptionName> optionNames) {
             this.values = Objects.requireNonNull(values);
             this.optionNames = Objects.requireNonNull(optionNames);
             assertNoUnexpectedOptionNames(values, optionNames);
@@ -499,109 +449,6 @@ final class JOptSimpleOptionsBuilder {
 
         TypedOptions excludeOptions(Collection<Option> excludes) {
             return new TypedOptions(this, excludes);
-        }
-
-        Result<ValidatedOptions> toValidatedOptions() {
-            final List<Exception> errors = new ArrayList<>();
-
-            for (final var e : values.entrySet()) {
-                final var option = e.getKey();
-                final var mainSpec = option.getSpec();
-                mainSpec.valueValidator().ifPresent(validator -> {
-                    e.getValue().stream().map(optionWithValue -> {
-                        return optionWithValue.validateCastUnchecked(validator);
-                    }).forEach(errors::addAll);
-                });
-            }
-
-            if (errors.isEmpty()) {
-                return Result.ofValue(new ValidatedOptions(values.keySet().stream().collect(toMap(x -> x, option -> {
-                    return find(option).orElseThrow();
-                })), optionNames));
-            } else {
-                return Result.ofErrors(errors);
-            }
-        }
-
-        @Override
-        public Optional<Object> find(OptionIdentifier id) {
-            return Optional.ofNullable(values.get(id)).map(value -> {
-                final var option = (Option)id;
-                final var optionSpec = option.getSpec();
-                if (!optionSpec.hasValue()) {
-                    return Boolean.TRUE;
-                } else if (optionSpec.arrayValueConverter().isPresent()) {
-                    switch (optionSpec.mergePolicy()) {
-                        case USE_FIRST -> {
-                            // Find the first non-empty array, get its first element and wrap it into one-element array.
-                            return value.stream().map(OptionWithValue::value).filter(arr -> {
-                                return Array.getLength(arr) > 0;
-                            }).findFirst().map(arr -> {
-                                return asArray(Array.get(arr, 0));
-                            }).orElseGet(value.getFirst()::value);
-                        }
-                        case USE_LAST -> {
-                            // Find the last non-empty array, get its last element and wrap it into one-element array.
-                            return value.reversed().stream().map(OptionWithValue::value).filter(arr -> {
-                                return Array.getLength(arr) > 0;
-                            }).findFirst().map(arr -> {
-                                return asArray(Array.get(arr, Array.getLength(arr) - 1));
-                            }).orElseGet(value.getFirst()::value);
-                        }
-                        case CONCATENATE -> {
-                            return value.stream().map(OptionWithValue::value).filter(arr -> {
-                                return Array.getLength(arr) > 0;
-                            }).map(Object.class::cast).reduce((a, b) -> {
-                                final var al = Array.getLength(a);
-                                final var bl = Array.getLength(b);
-                                final var arr = Array.newInstance(a.getClass().componentType(), al + bl);
-                                System.arraycopy(a, 0, arr, 0, al);
-                                System.arraycopy(b, 0, arr, al, bl);
-                                return arr;
-                            }).orElseGet(value.getFirst()::value);
-                        }
-                        default -> {
-                            throw new UnsupportedOperationException();
-                        }
-                    }
-                } else {
-                    return getOptionValue(value.stream().map(OptionWithValue::value).toList(), optionSpec.mergePolicy()).getFirst();
-                }
-            });
-        }
-
-        @Override
-        public boolean contains(OptionName optionName) {
-            return optionNames.contains(optionName);
-        }
-
-        private static Object asArray(Object v) {
-            final var arr = Array.newInstance(v.getClass(), 1);
-            Array.set(arr, 0, v);
-            return arr;
-        }
-
-        private final Map<Option, List<? extends OptionWithValue<?>>> values;
-        private final Set<OptionName> optionNames;
-    }
-
-
-    private final static class ValidatedOptions implements Options {
-
-        ValidatedOptions(Map<Option, Object> values, Set<OptionName> optionNames) {
-            this.values = Objects.requireNonNull(values);
-            this.optionNames = Objects.requireNonNull(optionNames);
-            assertNoUnexpectedOptionNames(values, optionNames);
-        }
-
-        ValidatedOptions(ValidatedOptions other, Collection<Option> excludes) {
-            this(other.values.entrySet().stream().filter(e -> {
-                return !excludes.contains(e.getKey());
-            }).collect(toMap(Map.Entry::getKey, Map.Entry::getValue)), applyExcludes(other.optionNames, excludes));
-        }
-
-        ValidatedOptions excludeOptions(Collection<Option> excludes) {
-            return new ValidatedOptions(this, excludes);
         }
 
         @Override
