@@ -332,7 +332,7 @@ final class JOptSimpleOptionsBuilder {
                 return indexedValue.index() >= 0;
             }).sorted(Comparator.comparingInt(IndexedStringOptionValue::index));
 
-            final var converter = optionSpec.valueConverter().orElseThrow();
+            final var converter = optionSpec.converter().orElseThrow();
             final var arrConverter = optionSpec.arrayValueConverter().orElse(null);
 
             return orderedOptionValues.map(indexedValue -> {
