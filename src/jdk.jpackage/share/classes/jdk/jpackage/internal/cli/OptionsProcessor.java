@@ -58,11 +58,7 @@ final class OptionsProcessor {
         return optionsBuilder
                 // Command line structure is valid.
                 // Run value converters that will convert strings into objects (e.g.: String -> Path)
-                .convertedOptions()
-                // All string values were successfully converted into objects.
-                // Validate these objects (e.g.: test path is a directory)
-                .flatMap(JOptSimpleOptionsBuilder.ConvertedOptionsBuilder::validatedOptions)
-                .map(JOptSimpleOptionsBuilder.ValidatedOptionsBuilder::create);
+                .convertedOptions().map(JOptSimpleOptionsBuilder.ConvertedOptionsBuilder::create);
     }
 
     private final JOptSimpleOptionsBuilder.OptionsBuilder optionsBuilder;

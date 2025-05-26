@@ -85,7 +85,7 @@ final class OptionSpecBuilder<T> {
 
         OptionSpec<T[]> createOptionSpec() {
             return new OptionSpec<>(names(), Optional.of(createConverter()), scope,
-                    createValidator(), OptionSpecBuilder.this.mergePolicy().orElse(MergePolicy.CONCATENATE));
+                    OptionSpecBuilder.this.mergePolicy().orElse(MergePolicy.CONCATENATE));
         }
 
         ArrayOptionSpecBuilder defaultValue(T[] v) {
@@ -246,12 +246,14 @@ final class OptionSpecBuilder<T> {
         }
 
         private OptionValueConverter<T[]> createConverter() {
-            return converterBuilder.createArray();
+            final var newBuilder = converterBuilder.copy();
+            createValidator().ifPresent(newBuilder::validator);
+            return newBuilder.createArray();
         }
 
-        private Optional<Validator<T[], ? extends Exception>> createValidator() {
+        private Optional<Validator<T, ? extends RuntimeException>> createValidator() {
             if (validatorBuilder.hasValidatingMethod()) {
-                return Optional.of(validatorBuilder.createArray());
+                return Optional.of(validatorBuilder.create());
             } else {
                 return Optional.empty();
             }
@@ -287,7 +289,7 @@ final class OptionSpecBuilder<T> {
     }
 
     OptionSpec<T> createOptionSpec() {
-        return new OptionSpec<>(names(), createConverter(), scope, createValidator(),
+        return new OptionSpec<>(names(), createConverter(), scope,
                 mergePolicy().orElse(MergePolicy.USE_LAST));
     }
 
@@ -493,13 +495,15 @@ final class OptionSpecBuilder<T> {
 
     private Optional<OptionValueConverter<T>> createConverter() {
         if (converterBuilder.converter().isPresent()) {
-            return Optional.of(converterBuilder.create());
+            final var newBuilder = converterBuilder.copy();
+            createValidator().ifPresent(newBuilder::validator);
+            return Optional.of(newBuilder.create());
         } else {
             return Optional.empty();
         }
     }
 
-    private Optional<Validator<T, ? extends Exception>> createValidator() {
+    private Optional<Validator<T, ? extends RuntimeException>> createValidator() {
         if (validatorBuilder.hasValidatingMethod()) {
             return Optional.of(validatorBuilder.create());
         } else {

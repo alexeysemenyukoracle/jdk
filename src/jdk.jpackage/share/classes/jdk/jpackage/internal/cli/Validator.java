@@ -24,13 +24,11 @@
  */
 package jdk.jpackage.internal.cli;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
-import java.util.stream.Stream;
 
 @FunctionalInterface
 interface Validator<T, U extends Exception> {
@@ -86,10 +84,6 @@ interface Validator<T, U extends Exception> {
 
         Validator<T, U> create() {
             return new Details.ScalarValidator<>(Optional.ofNullable(predicate), Optional.ofNullable(consumer), formatString, exceptionFactory);
-        }
-
-        Validator<T[], U> createArray() {
-            return new Details.ArrayValidator<>(create());
         }
 
         Builder<T, U> predicate(Predicate<T> v) {
@@ -187,31 +181,6 @@ interface Validator<T, U extends Exception> {
                 } catch (Exception ex) {
                     throw new ValidatorException(ex);
                 }
-            }
-        }
-
-
-        private record ArrayValidator<T, U extends Exception>(Validator<T, U> elementValidator) implements Validator<T[], U> {
-            ArrayValidator {
-                Objects.requireNonNull(elementValidator);
-            }
-
-            @Override
-            public List<U> validate(OptionName optionName, ParsedValue<T[]> optionValue) {
-                return Stream.of(optionValue.value()).map(v -> {
-                    return elementValidator.validate(optionName, new ParsedValue<>() {
-
-                        @Override
-                        public StringToken sourceToken() {
-                            return optionValue.sourceToken();
-                        }
-
-                        @Override
-                        public T value() {
-                            return v;
-                        }
-                    });
-                }).flatMap(Collection::stream).toList();
             }
         }
 

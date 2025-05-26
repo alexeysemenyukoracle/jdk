@@ -32,9 +32,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 import java.util.stream.StreamSupport;
-import jdk.jpackage.internal.util.ExceptionAnalizer;
+import jdk.jpackage.internal.util.TestUtils.ExceptionAnalizer;
 
 final class TestUtils {
 
@@ -44,7 +45,13 @@ final class TestUtils {
         };
     }
 
-    static <T> Consumer<Validator.Builder<T, Exception>> configureValidator() {
+    static <T> Consumer<Validator.Builder<T, RuntimeException>> configureValidator() {
+        return builder -> {
+            builder.exceptionFactory(DEFAULT_EXCEPTION_FACTORY).formatString(DEFAULT_EXCEPTION_MESSAGE_FORMAT_STRING);
+        };
+    }
+
+    static <T> Consumer<Validator.Builder<T, Exception>> configureCheckedValidator() {
         return builder -> {
             builder.exceptionFactory(DEFAULT_EXCEPTION_FACTORY).formatString(DEFAULT_EXCEPTION_MESSAGE_FORMAT_STRING);
         };
@@ -59,6 +66,10 @@ final class TestUtils {
     static void assertOptionFailuresEquals(Collection<OptionFailure> expected, Collection<OptionFailure> actual) {
         assertEquals(expected.stream().sorted(OptionFailure.compareNameAndValue()).toList(),
                 actual.stream().sorted(OptionFailure.compareNameAndValue()).toList());
+    }
+
+    static void assertOptionFailuresContains(Collection<OptionFailure> expected, Collection<OptionFailure> actual) {
+        assertEquals(List.of(), expected.stream().filter(Predicate.not(actual::contains)).toList());
     }
 
     static void assertExceptionEquals(Exception expected, Exception actual) {

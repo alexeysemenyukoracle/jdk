@@ -25,11 +25,14 @@
 package jdk.jpackage.internal.cli;
 
 import java.lang.reflect.Array;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.stream.Stream;
+import jdk.jpackage.internal.cli.Validator.ParsedValue;
+import jdk.jpackage.internal.util.Result;
 
 interface OptionValueConverter<T> {
 
@@ -39,9 +42,9 @@ interface OptionValueConverter<T> {
      *
      * @param optionName  the option name
      * @param optionValue the string value of the option to convert
-     * @return the converted value
+     * @return the conversion result
      */
-    T convert(OptionName optionName, StringToken optionValue);
+    Result<T> convert(OptionName optionName, StringToken optionValue);
 
     /**
      * Gives the class of the type of values this converter converts to.
@@ -68,8 +71,23 @@ interface OptionValueConverter<T> {
 
     static final class Builder<T> {
 
+        private Builder() {
+        }
+
+        private Builder(Builder<T> other) {
+            converter = other.converter;
+            validator = other.validator;
+            tokenizer = other.tokenizer;
+            formatString = other.formatString;
+            exceptionFactory = other.exceptionFactory;
+        }
+
+        Builder<T> copy() {
+            return new Builder<>(this);
+        }
+
         OptionValueConverter<T> create() {
-            return new DefaultOptionValueConverter<>(converter, formatString, exceptionFactory);
+            return new DefaultOptionValueConverter<>(converter, formatString, exceptionFactory, validator());
         }
 
         OptionArrayValueConverter<T> createArray() {
@@ -78,6 +96,11 @@ interface OptionValueConverter<T> {
 
         Builder<T> converter(ValueConverter<T> v) {
             converter = v;
+            return this;
+        }
+
+        Builder<T> validator(Validator<T, ? extends RuntimeException> v) {
+            validator = v;
             return this;
         }
 
@@ -105,6 +128,10 @@ interface OptionValueConverter<T> {
             return Optional.ofNullable(converter);
         }
 
+        Optional<Validator<T, ? extends RuntimeException>> validator() {
+            return Optional.ofNullable(validator);
+        }
+
         Optional<Function<String, String[]>> tokenizer() {
             return Optional.ofNullable(tokenizer);
         }
@@ -119,23 +146,42 @@ interface OptionValueConverter<T> {
 
 
         private record DefaultOptionValueConverter<T>(ValueConverter<T> converter, String formatString,
-                OptionValueExceptionFactory<? extends RuntimeException> exceptionFactory) implements OptionValueConverter<T> {
+                OptionValueExceptionFactory<? extends RuntimeException> exceptionFactory,
+                Optional<Validator<T, ? extends RuntimeException>> validator) implements OptionValueConverter<T> {
 
             DefaultOptionValueConverter {
                 Objects.requireNonNull(converter);
                 Objects.requireNonNull(formatString);
                 Objects.requireNonNull(exceptionFactory);
+                Objects.requireNonNull(validator);
             }
 
             @Override
-            public T convert(OptionName optionName, StringToken optionValue) {
+            public Result<T> convert(OptionName optionName, StringToken optionValue) {
                 Objects.requireNonNull(optionName);
+
+                final T convertedValue;
                 try {
-                    return converter.convert(optionValue.value());
+                    convertedValue = converter.convert(optionValue.value());
                 } catch (IllegalArgumentException ex) {
-                    throw exceptionFactory.create(optionName, optionValue, formatString, Optional.of(ex));
+                    return Result.ofError(exceptionFactory.create(optionName, optionValue, formatString, Optional.of(ex)));
                 } catch (Exception ex) {
                     throw new ConverterException(ex);
+                }
+
+                final List<? extends Exception> validationExceptions = validator.map(val -> {
+                    try {
+                        return val.validate(optionName, ParsedValue.create(convertedValue, optionValue));
+                    } catch (Validator.ValidatorException ex) {
+                        // All unexpected exceptions that the converter yields should be tunneled via ConverterException.
+                        throw new ConverterException(ex.getCause());
+                    }
+                }).orElseGet(List::of);
+
+                if (validationExceptions.isEmpty()) {
+                    return Result.ofValue(convertedValue);
+                } else {
+                    return Result.ofErrors(validationExceptions);
                 }
             }
 
@@ -156,12 +202,27 @@ interface OptionValueConverter<T> {
 
             @SuppressWarnings("unchecked")
             @Override
-            public T[] convert(OptionName optionName, StringToken optionValue) {
-                return Stream.of(tokenize(optionValue.value())).map(token -> {
-                    return elementConverter.convert(optionName, StringToken.of(optionValue.value(), token));
-                }).toArray(length -> {
-                    return (T[])Array.newInstance(elementConverter.valueType(), length);
-                });
+            public Result<T[]> convert(OptionName optionName, StringToken optionValue) {
+
+                final List<Exception> exceptions = new ArrayList<>();
+                final List<T> convertedValues = new ArrayList<>();
+
+                final var tokens = tokenize(optionValue.value());
+                for (var token : tokens) {
+                    final var result = elementConverter.convert(optionName, StringToken.of(optionValue.value(), token));
+                    exceptions.addAll(result.errors());
+                    if (exceptions.isEmpty()) {
+                        result.value().ifPresent(convertedValues::add);
+                    }
+                }
+
+                if (!exceptions.isEmpty()) {
+                    return Result.ofErrors(exceptions);
+                } else {
+                    return Result.ofValue(convertedValues.toArray(length -> {
+                        return (T[])Array.newInstance(elementConverter.valueType(), length);
+                    }));
+                }
             }
 
             @SuppressWarnings("unchecked")
@@ -177,6 +238,7 @@ interface OptionValueConverter<T> {
         }
 
         private ValueConverter<T> converter;
+        private Validator<T, ? extends RuntimeException> validator;
         private Function<String, String[]> tokenizer;
         private String formatString;
         private OptionValueExceptionFactory<? extends RuntimeException> exceptionFactory;
