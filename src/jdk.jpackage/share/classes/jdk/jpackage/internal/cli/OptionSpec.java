@@ -87,13 +87,11 @@ record OptionSpec<T>(List<OptionName> names, Optional<OptionValueConverter<T>> c
         return valueType(converter).orElseThrow();
     }
 
-    @SuppressWarnings("unchecked")
-    Optional<OptionArrayValueConverter<T>> arrayValueConverter() {
+    Optional<OptionArrayValueConverter<?>> arrayValueConverter() {
         return converter.filter(OptionArrayValueConverter.class::isInstance).map(OptionArrayValueConverter.class::cast);
     }
 
-    @SuppressWarnings("unchecked")
-    private static <T> Optional<Class<T>> valueType(Optional<OptionValueConverter<T>> valueConverter) {
-        return valueConverter.map(OptionValueConverter::valueType).map(x -> (Class<T>)x);
+    private static <T> Optional<Class<? extends T>> valueType(Optional<OptionValueConverter<T>> valueConverter) {
+        return valueConverter.map(OptionValueConverter::valueType);
     }
 }
