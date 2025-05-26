@@ -28,7 +28,8 @@ import static jdk.jpackage.internal.cli.OptionValueExceptionFactory.UNREACHABLE_
 import static jdk.jpackage.internal.cli.StandardValueConverter.identityConv;
 import static jdk.jpackage.internal.cli.StandardValueConverter.pathConv;
 import static jdk.jpackage.internal.cli.TestUtils.arrayElements;
-import static jdk.jpackage.internal.util.TestUtils.assertArrayEquals;
+import static jdk.jpackage.test.JUnitUtils.assertArrayEquals;
+import jdk.jpackage.test.JUnitUtils.ExceptionAnalizer;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
@@ -60,7 +61,6 @@ import jdk.jpackage.internal.cli.OptionValueExceptionFactory.StandardArgumentsMa
 import jdk.jpackage.internal.cli.TestUtils.OptionFailure;
 import jdk.jpackage.internal.cli.TestUtils.TestException;
 import jdk.jpackage.internal.util.Result;
-import jdk.jpackage.internal.util.TestUtils.ExceptionAnalizer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -790,7 +790,6 @@ public class JOptSimpleOptionsBuilderTest {
         return option(name, Boolean.class).defaultValue(Boolean.FALSE);
     }
 
-    @SafeVarargs
     private static Function<List<String>, Options> createParser(ParserMode mode, OptionValue<?>... options) {
         return createParser(mode, List.of(options));
     }
