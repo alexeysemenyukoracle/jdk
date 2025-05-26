@@ -149,7 +149,7 @@ final class OptionsAnalyzer {
             if (obj instanceof PackageType packageType) {
                 return packageType;
             } else {
-                return typeOption.getSpec().valueConverter().orElseThrow()
+                return typeOption.getSpec().converter().orElseThrow()
                         .convert(typeOption.getSpec().name(), StringToken.of((String)obj)).orElseThrow();
             }
         }).flatMap(packageType -> {

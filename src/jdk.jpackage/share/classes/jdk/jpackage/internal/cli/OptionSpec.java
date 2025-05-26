@@ -32,7 +32,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 
-record OptionSpec<T>(List<OptionName> names, Optional<OptionValueConverter<T>> valueConverter,
+record OptionSpec<T>(List<OptionName> names, Optional<OptionValueConverter<T>> converter,
         Set<OptionScope> scope, MergePolicy mergePolicy) {
 
     enum MergePolicy {
@@ -46,7 +46,7 @@ record OptionSpec<T>(List<OptionName> names, Optional<OptionValueConverter<T>> v
         if (names.isEmpty()) {
             throw new IllegalArgumentException("Empty name list");
         }
-        Objects.requireNonNull(valueConverter);
+        Objects.requireNonNull(converter);
         Objects.requireNonNull(scope);
         if (scope.isEmpty()) {
             throw new IllegalArgumentException("Empty scope");
@@ -54,7 +54,7 @@ record OptionSpec<T>(List<OptionName> names, Optional<OptionValueConverter<T>> v
         Objects.requireNonNull(mergePolicy);
 
         final var typeMustBeArray = mergePolicy.equals(MergePolicy.CONCATENATE);
-        final var type = valueType(valueConverter);
+        final var type = valueType(converter);
         if (typeMustBeArray && !type.map(Class::isArray).orElse(false)) {
             throw new IllegalArgumentException(String.format("Invalid merge policy [%s] for type [%s]",
                     mergePolicy, type.map(Class::getName).orElse("")));
@@ -71,7 +71,7 @@ record OptionSpec<T>(List<OptionName> names, Optional<OptionValueConverter<T>> v
 
     Stream<OptionSpec<T>> generateForEveryName() {
         return names().stream().map(v -> {
-            return new OptionSpec<>(List.of(v), valueConverter, scope, mergePolicy);
+            return new OptionSpec<>(List.of(v), converter, scope, mergePolicy);
         });
     }
 
@@ -80,16 +80,16 @@ record OptionSpec<T>(List<OptionName> names, Optional<OptionValueConverter<T>> v
     }
 
     boolean hasValue() {
-        return valueConverter.isPresent();
+        return converter.isPresent();
     }
 
     Class<? extends T> valueType() {
-        return valueType(valueConverter).orElseThrow();
+        return valueType(converter).orElseThrow();
     }
 
     @SuppressWarnings("unchecked")
     Optional<OptionArrayValueConverter<T>> arrayValueConverter() {
-        return valueConverter.filter(OptionArrayValueConverter.class::isInstance).map(OptionArrayValueConverter.class::cast);
+        return converter.filter(OptionArrayValueConverter.class::isInstance).map(OptionArrayValueConverter.class::cast);
     }
 
     @SuppressWarnings("unchecked")
