@@ -20,7 +20,7 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package jdk.jpackage.internal.util;
+package jdk.jpackage.test;
 
 import java.util.Map;
 import java.util.Objects;
@@ -28,7 +28,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.Assertions;
 
 
-public final class TestUtils {
+public final class JUnitUtils {
 
     public static void assertArrayEquals(Object expected, Object actual) {
         ARRAY_ASSERTERS.getOrDefault(expected.getClass().componentType(), OBJECT_ARRAY_ASSERTER).acceptUnchecked(expected, actual);

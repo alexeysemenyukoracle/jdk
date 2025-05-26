@@ -35,7 +35,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 import java.util.stream.StreamSupport;
-import jdk.jpackage.internal.util.TestUtils.ExceptionAnalizer;
+import jdk.jpackage.test.JUnitUtils.ExceptionAnalizer;
 
 final class TestUtils {
 
