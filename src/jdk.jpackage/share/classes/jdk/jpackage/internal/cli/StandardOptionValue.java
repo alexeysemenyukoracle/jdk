@@ -46,6 +46,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
@@ -75,6 +76,15 @@ public final class StandardOptionValue {
 
     private final static Set<OperatingSystem> SUPPORTED_OS = Set.of(
             OperatingSystem.LINUX, OperatingSystem.WINDOWS, OperatingSystem.MACOS);
+
+
+    /**
+     * Scope of options configuring a launcher.
+     */
+    interface LauncherProperty<T> extends OptionScope {
+        OptionSpec<T> optionSpecForPropertyFile();
+    }
+
 
     /**
      * Modes in which bundling operations don't involve building of an app image.
@@ -115,13 +125,16 @@ public final class StandardOptionValue {
             .validator(StandardValidator.IS_DIRECTORY_OR_NON_EXISTENT)
             .create();
 
-    public final static OptionValue<String> DESCRIPTION = stringOption("description").create();
+    public final static OptionValue<String> DESCRIPTION = stringOption("description")
+            .mutate(launcherProperty())
+            .create();
 
     public final static OptionValue<String> VENDOR = stringOption("vendor").create();
 
     public final static OptionValue<String> APPCLASS = stringOption("main-class")
             .valuePattern("class-name")
             .outOfScope(BundlingOperationModifier.values())
+            .mutate(launcherProperty())
             .create();
 
     public final static OptionValue<String> NAME = stringOption("name").shortName("n").create();
@@ -134,6 +147,7 @@ public final class StandardOptionValue {
 
     public final static OptionValue<List<String>> ARGUMENTS = stringOption("arguments").toArray(stringListTokenizer())
             .outOfScope(BundlingOperationModifier.values())
+            .mutate(launcherArrayProperty(String.class))
             .create(toList());
 
     public final static OptionValue<List<String>> JLINK_OPTIONS = stringOption("jlink-options")
@@ -141,7 +155,9 @@ public final class StandardOptionValue {
             .toArray(stringListTokenizer())
             .create(toList());
 
-    public final static OptionValue<Path> ICON = pathOption("icon").valuePattern("path").create();
+    public final static OptionValue<Path> ICON = pathOption("icon").valuePattern("path")
+            .mutate(launcherProperty())
+            .create();
 
     public final static OptionValue<String> COPYRIGHT = stringOption("copyright").create();
 
@@ -158,8 +174,10 @@ public final class StandardOptionValue {
             .scope(CREATE_NATIVE).inScope(NOT_BUILDING_APP_IMAGE)
             .create();
 
-    public final static OptionValue<List<String>> JAVA_OPTIONS = stringOption("java-options").toArray(stringListTokenizer())
+    public final static OptionValue<List<String>> JAVA_OPTIONS = stringOption("java-options")
+            .toArray(stringListTokenizer())
             .outOfScope(NOT_BUILDING_APP_IMAGE)
+            .mutate(launcherArrayProperty(String.class))
             .create(toList());
 
     public final static OptionValue<List<Path>> APP_CONTENT = pathOption("app-content").toArray(pathSeparator())
@@ -224,11 +242,13 @@ public final class StandardOptionValue {
     public final static OptionValue<Path> MAIN_JAR = pathOption("main-jar")
             .valuePattern("main-jar")
             .outOfScope(BundlingOperationModifier.values())
+            .mutate(launcherProperty())
             .create();
 
     public final static OptionValue<String> MODULE = stringOption("module").shortName("m")
             .valuePattern("module-name[/main-class]")
             .outOfScope(NOT_BUILDING_APP_IMAGE)
+            .mutate(launcherProperty())
             .create();
 
     public final static OptionValue<List<String>> ADD_MODULES = stringOption("add-modules").toArray(",")
@@ -241,7 +261,10 @@ public final class StandardOptionValue {
             .outOfScope(NOT_BUILDING_APP_IMAGE)
             .create(toList());
 
-    public final static OptionValue<Boolean> LAUNCHER_AS_SERVICE = booleanOption("launcher-as-service").scope(upperBound(CREATE_NATIVE)).create();
+    public final static OptionValue<Boolean> LAUNCHER_AS_SERVICE = booleanOption("launcher-as-service")
+            .scope(upperBound(CREATE_NATIVE))
+            .mutate(launcherProperty())
+            .create();
 
     //
     // Linux-specific
@@ -261,7 +284,10 @@ public final class StandardOptionValue {
 
     public final static OptionValue<String> LINUX_PACKAGE_DEPENDENCIES = stringOption("linux-package-deps").scope(upperBound(CREATE_NATIVE)).create();
 
-    public final static OptionValue<Boolean> LINUX_SHORTCUT_HINT = booleanOption("linux-shortcut").scope(upperBound(CREATE_NATIVE)).create();
+    public final static OptionValue<Boolean> LINUX_SHORTCUT_HINT = booleanOption("linux-shortcut")
+            .scope(upperBound(CREATE_NATIVE))
+            .mutate(launcherProperty())
+            .create();
 
     public final static OptionValue<String> LINUX_MENU_GROUP = stringOption("linux-menu-group")
             .valuePattern("menu-group-name")
@@ -311,13 +337,19 @@ public final class StandardOptionValue {
 
     public final static OptionValue<String> WIN_UPDATE_URL = urlOption("win-update-url").scope(upperBound(CREATE_NATIVE)).create();
 
-    public final static OptionValue<Boolean> WIN_MENU_HINT = booleanOption("win-menu").scope(upperBound(CREATE_NATIVE)).create();
+    public final static OptionValue<Boolean> WIN_MENU_HINT = booleanOption("win-menu")
+            .scope(upperBound(CREATE_NATIVE))
+            .mutate(launcherProperty())
+            .create();
 
     public final static OptionValue<String> WIN_MENU_GROUP = stringOption("win-menu-group")
             .valuePattern("menu-group-name")
             .scope(upperBound(CREATE_NATIVE)).create();
 
-    public final static OptionValue<Boolean> WIN_SHORTCUT_HINT = booleanOption("win-shortcut").scope(upperBound(CREATE_NATIVE)).create();
+    public final static OptionValue<Boolean> WIN_SHORTCUT_HINT = booleanOption("win-shortcut")
+            .scope(upperBound(CREATE_NATIVE))
+            .mutate(launcherProperty())
+            .create();
 
     public final static OptionValue<Boolean> WIN_SHORTCUT_PROMPT = booleanOption("win-shortcut-prompt").scope(upperBound(CREATE_NATIVE)).create();
 
@@ -327,25 +359,21 @@ public final class StandardOptionValue {
 
     public final static OptionValue<String> WIN_UPGRADE_UUID = stringOption("win-upgrade-uuid").scope(upperBound(CREATE_NATIVE)).create();
 
-    public final static OptionValue<Boolean> WIN_CONSOLE_HINT = booleanOption("win-console").outOfScope(NOT_BUILDING_APP_IMAGE).create();
+    public final static OptionValue<Boolean> WIN_CONSOLE_HINT = booleanOption("win-console")
+            .outOfScope(NOT_BUILDING_APP_IMAGE)
+            .mutate(launcherProperty())
+            .create();
 
     /**
-     * Options in additional launcher .propertiy files.
+     * Returns options configuring a launcher.
+     *
+     * @return the options configuring a launcher
      */
-    public final static Set<OptionValue<?>> LAUNCHER_PROPERTIES = Set.of(
-            MAIN_JAR,
-            APPCLASS,
-            MODULE,
-            DESCRIPTION,
-            ICON,
-            LAUNCHER_AS_SERVICE,
-            WIN_CONSOLE_HINT,
-            WIN_SHORTCUT_HINT,
-            WIN_MENU_HINT,
-            LINUX_SHORTCUT_HINT,
-            ARGUMENTS,
-            JAVA_OPTIONS
-    );
+    static Set<Option> launcherOptions() {
+        return options().stream().filter(option -> {
+            return option.getSpec().scope().stream().anyMatch(LauncherProperty.class::isInstance);
+        }).collect(toSet());
+    }
 
     /**
      * Returns all options defined in {@link StandardOptionValue} class.
@@ -459,6 +487,18 @@ public final class StandardOptionValue {
         };
     }
 
+    private static <T> Consumer<OptionSpecBuilder<T>> launcherProperty() {
+        return builder -> {
+            builder.inScope(new LauncherScalarProperty<>(builder));
+        };
+    }
+
+    private static <T> Consumer<OptionSpecBuilder<T>.ArrayOptionSpecBuilder> launcherArrayProperty(Class<? extends T> elementType) {
+        return builder -> {
+            builder.inScope(new LauncherArrayProperty<>(builder));
+        };
+    }
+
     static Function<String, String[]> stringListTokenizer() {
         return str -> {
             return Arguments.getArgumentList(str).toArray(String[]::new);
@@ -535,6 +575,32 @@ public final class StandardOptionValue {
                 }
             }
             return sb.toString();
+        }
+    }
+
+
+    private record LauncherScalarProperty<T>(OptionSpecBuilder<T> builder) implements LauncherProperty<T> {
+        public LauncherScalarProperty {
+            Objects.requireNonNull(builder);
+        }
+
+        @Override
+        public OptionSpec<T> optionSpecForPropertyFile() {
+            // TODO: implement
+            return null;
+        }
+    }
+
+
+    private record LauncherArrayProperty<T>(OptionSpecBuilder<T>.ArrayOptionSpecBuilder builder) implements LauncherProperty<T> {
+        public LauncherArrayProperty {
+            Objects.requireNonNull(builder);
+        }
+
+        @Override
+        public OptionSpec<T> optionSpecForPropertyFile() {
+            // TODO: implement
+            return null;
         }
     }
 }

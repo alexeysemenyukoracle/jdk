@@ -127,8 +127,8 @@ final class StandardHelpFormatter {
         }
 
         private static Stream<? extends OptionSpec<?>> launcherOptions() {
-            final var fromPropertyFile = StandardOptionValue.LAUNCHER_PROPERTIES.stream()
-                    .map(OptionValue::optionSpec)
+            final var fromPropertyFile = StandardOptionValue.launcherOptions().stream()
+                    .map(Option::getSpec)
                     .filter(currentPlatformOption())
                     .filter(spec -> {
                         // Want options applicable to the app image bundling on the current platform.
