@@ -117,7 +117,7 @@ public final class StandardOptionValue {
             }).create();
 
     public final static OptionValue<Path> INPUT = directoryOption("input").shortName("i")
-            .outOfScope(BundlingOperationModifier.values())
+            .outOfScope(NOT_BUILDING_APP_IMAGE)
             .create();
 
     public final static OptionValue<Path> DEST = directoryOption("dest").shortName("d")
@@ -133,7 +133,7 @@ public final class StandardOptionValue {
 
     public final static OptionValue<String> APPCLASS = stringOption("main-class")
             .valuePattern("class-name")
-            .outOfScope(BundlingOperationModifier.values())
+            .outOfScope(NOT_BUILDING_APP_IMAGE)
             .mutate(launcherProperty())
             .create();
 
@@ -146,7 +146,7 @@ public final class StandardOptionValue {
             .create();
 
     public final static OptionValue<List<String>> ARGUMENTS = stringOption("arguments").toArray(stringListTokenizer())
-            .outOfScope(BundlingOperationModifier.values())
+            .outOfScope(NOT_BUILDING_APP_IMAGE)
             .mutate(launcherArrayProperty(String.class))
             .create(toList());
 
@@ -200,7 +200,7 @@ public final class StandardOptionValue {
 
     public final static OptionValue<List<AdditionalLauncher>> ADD_LAUNCHER = option("add-launcher", AdditionalLauncher.class)
             .valuePattern("name=path")
-            .outOfScope(BundlingOperationModifier.values())
+            .outOfScope(NOT_BUILDING_APP_IMAGE)
             .converterExceptionFactory((optionName, optionValue, formatString, cause) -> {
                 final String msgId;
                 if (cause.orElseThrow() instanceof IllegalAddLauncherSyntaxException) {
@@ -241,7 +241,7 @@ public final class StandardOptionValue {
 
     public final static OptionValue<Path> MAIN_JAR = pathOption("main-jar")
             .valuePattern("main-jar")
-            .outOfScope(BundlingOperationModifier.values())
+            .outOfScope(NOT_BUILDING_APP_IMAGE)
             .mutate(launcherProperty())
             .create();
 
@@ -262,7 +262,7 @@ public final class StandardOptionValue {
             .create(toList());
 
     public final static OptionValue<Boolean> LAUNCHER_AS_SERVICE = booleanOption("launcher-as-service")
-            .scope(upperBound(CREATE_NATIVE))
+            .scope(nativeBundling())
             .mutate(launcherProperty())
             .create();
 
@@ -270,28 +270,28 @@ public final class StandardOptionValue {
     // Linux-specific
     //
 
-    public final static OptionValue<String> LINUX_RELEASE = stringOption("linux-app-release").scope(upperBound(CREATE_NATIVE)).create();
+    public final static OptionValue<String> LINUX_RELEASE = stringOption("linux-app-release").scope(nativeBundling()).create();
 
-    public final static OptionValue<String> LINUX_BUNDLE_NAME = stringOption("linux-package-name").scope(upperBound(CREATE_NATIVE)).create();
+    public final static OptionValue<String> LINUX_BUNDLE_NAME = stringOption("linux-package-name").scope(nativeBundling()).create();
 
     public final static OptionValue<String> LINUX_DEB_MAINTAINER = stringOption("linux-deb-maintainer")
             .valuePattern("email-address")
             .create();
 
-    public final static OptionValue<String> LINUX_CATEGORY = stringOption("linux-app-category").scope(upperBound(CREATE_NATIVE)).create();
+    public final static OptionValue<String> LINUX_CATEGORY = stringOption("linux-app-category").scope(nativeBundling()).create();
 
-    public final static OptionValue<String> LINUX_RPM_LICENSE_TYPE = stringOption("linux-rpm-license-type").scope(upperBound(CREATE_NATIVE)).create();
+    public final static OptionValue<String> LINUX_RPM_LICENSE_TYPE = stringOption("linux-rpm-license-type").scope(nativeBundling()).create();
 
-    public final static OptionValue<String> LINUX_PACKAGE_DEPENDENCIES = stringOption("linux-package-deps").scope(upperBound(CREATE_NATIVE)).create();
+    public final static OptionValue<String> LINUX_PACKAGE_DEPENDENCIES = stringOption("linux-package-deps").scope(nativeBundling()).create();
 
     public final static OptionValue<Boolean> LINUX_SHORTCUT_HINT = booleanOption("linux-shortcut")
-            .scope(upperBound(CREATE_NATIVE))
+            .scope(nativeBundling())
             .mutate(launcherProperty())
             .create();
 
     public final static OptionValue<String> LINUX_MENU_GROUP = stringOption("linux-menu-group")
             .valuePattern("menu-group-name")
-            .scope(upperBound(CREATE_NATIVE)).create();
+            .scope(nativeBundling()).create();
 
     //
     // MacOS-specific
@@ -333,31 +333,31 @@ public final class StandardOptionValue {
     // Windows-specific
     //
 
-    public final static OptionValue<String> WIN_HELP_URL = urlOption("win-help-url").scope(upperBound(CREATE_NATIVE)).create();
+    public final static OptionValue<String> WIN_HELP_URL = urlOption("win-help-url").scope(nativeBundling()).create();
 
-    public final static OptionValue<String> WIN_UPDATE_URL = urlOption("win-update-url").scope(upperBound(CREATE_NATIVE)).create();
+    public final static OptionValue<String> WIN_UPDATE_URL = urlOption("win-update-url").scope(nativeBundling()).create();
 
     public final static OptionValue<Boolean> WIN_MENU_HINT = booleanOption("win-menu")
-            .scope(upperBound(CREATE_NATIVE))
+            .scope(nativeBundling())
             .mutate(launcherProperty())
             .create();
 
     public final static OptionValue<String> WIN_MENU_GROUP = stringOption("win-menu-group")
             .valuePattern("menu-group-name")
-            .scope(upperBound(CREATE_NATIVE)).create();
+            .scope(nativeBundling()).create();
 
     public final static OptionValue<Boolean> WIN_SHORTCUT_HINT = booleanOption("win-shortcut")
-            .scope(upperBound(CREATE_NATIVE))
+            .scope(nativeBundling())
             .mutate(launcherProperty())
             .create();
 
-    public final static OptionValue<Boolean> WIN_SHORTCUT_PROMPT = booleanOption("win-shortcut-prompt").scope(upperBound(CREATE_NATIVE)).create();
+    public final static OptionValue<Boolean> WIN_SHORTCUT_PROMPT = booleanOption("win-shortcut-prompt").scope(nativeBundling()).create();
 
-    public final static OptionValue<Boolean> WIN_PER_USER_INSTALLATION = booleanOption("win-per-user-install").scope(upperBound(CREATE_NATIVE)).create();
+    public final static OptionValue<Boolean> WIN_PER_USER_INSTALLATION = booleanOption("win-per-user-install").scope(nativeBundling()).create();
 
-    public final static OptionValue<Boolean> WIN_DIR_CHOOSER = booleanOption("win-dir-chooser").scope(upperBound(CREATE_NATIVE)).create();
+    public final static OptionValue<Boolean> WIN_DIR_CHOOSER = booleanOption("win-dir-chooser").scope(nativeBundling()).create();
 
-    public final static OptionValue<String> WIN_UPGRADE_UUID = stringOption("win-upgrade-uuid").scope(upperBound(CREATE_NATIVE)).create();
+    public final static OptionValue<String> WIN_UPGRADE_UUID = stringOption("win-upgrade-uuid").scope(nativeBundling()).create();
 
     public final static OptionValue<Boolean> WIN_CONSOLE_HINT = booleanOption("win-console")
             .outOfScope(NOT_BUILDING_APP_IMAGE)
@@ -370,6 +370,21 @@ public final class StandardOptionValue {
      * @return the options configuring a launcher
      */
     static Set<Option> launcherOptions() {
+        return options().stream().filter(option -> {
+            return option.getSpec().scope().stream().anyMatch(LauncherProperty.class::isInstance);
+        }).collect(toSet());
+    }
+
+    /**
+     * Returns options configuring a launcher for reading properties of an
+     * additional launcher from a .property file.
+     * <p>
+     * These are the same options returned by {@link #launcherOptions()} but with
+     * different error formatting.
+     *
+     * @return the options configuring a launcher
+     */
+    static Set<Option> launcherPropertyFileOptions() {
         return options().stream().filter(option -> {
             return option.getSpec().scope().stream().anyMatch(LauncherProperty.class::isInstance);
         }).collect(toSet());
@@ -472,18 +487,15 @@ public final class StandardOptionValue {
     }
 
     private static OptionSpecBuilder<Boolean> auxilaryOption(String name) {
-        return booleanOption(name).inScope(MAC_SIGNING).inScope(BundlingOperationModifier.values());
+        return booleanOption(name).inScope(MAC_SIGNING).inScope(NOT_BUILDING_APP_IMAGE);
     }
 
-    private static UnaryOperator<Set<OptionScope>> upperBound(Collection<? extends BundlingOperationOptionScope> upperBound) {
+    private static UnaryOperator<Set<OptionScope>> nativeBundling() {
         return scope -> {
-            return scope.stream().filter(v -> {
-                if (v instanceof BundlingOperationOptionScope) {
-                    return upperBound.contains(v);
-                } else {
-                    return true;
-                }
-            }).collect(toSet());
+            return new SetBuilder<OptionScope>()
+                    .set(scope)
+                    .remove(new SetBuilder<OptionScope>().set(StandardBundlingOperation.values()).remove(CREATE_NATIVE).create())
+                    .create();
         };
     }
 
