@@ -25,16 +25,26 @@
 
 package jdk.jpackage.internal.cli;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Collection;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Properties;
+import java.util.stream.Stream;
 import jdk.jpackage.internal.model.BundlingEnvironment;
 import jdk.jpackage.internal.util.Result;
+import jdk.jpackage.internal.cli.JOptSimpleOptionsBuilder.OptionsBuilder;
+import jdk.jpackage.internal.cli.JOptSimpleOptionsBuilder.ConvertedOptionsBuilder;
 
 /**
  * Processes jpackage command line.
  */
 final class OptionsProcessor {
 
-    OptionsProcessor(JOptSimpleOptionsBuilder.OptionsBuilder optionsBuilder, BundlingEnvironment bundlingEnv) {
+    OptionsProcessor(OptionsBuilder optionsBuilder, BundlingEnvironment bundlingEnv) {
         this.optionsBuilder = Objects.requireNonNull(optionsBuilder);
         this.bundlingEnv = Objects.requireNonNull(bundlingEnv);
     }
@@ -58,7 +68,32 @@ final class OptionsProcessor {
         return optionsBuilder
                 // Command line structure is valid.
                 // Run value converters that will convert strings into objects (e.g.: String -> Path)
-                .convertedOptions().map(JOptSimpleOptionsBuilder.ConvertedOptionsBuilder::create);
+                .convertedOptions().map(ConvertedOptionsBuilder::create);
+    }
+
+    static Result<Options> readAdditionalLauncherProperties(Path file, Collection<Option> knownOptions) {
+        final var props = new Properties();
+        try (var in = Files.newBufferedReader(file)) {
+            props.load(in);
+        } catch (IOException ex) {
+            throw new UncheckedIOException(ex);
+        }
+
+        // Convert the property file into command line arguments.
+        // Silently ignore unknown properties.
+        final var args = knownOptions.stream().map(knownOption -> {
+            return knownOption.getSpec().names().stream().map(optionName -> {
+                return Optional.ofNullable(props.getProperty(optionName.name())).map(stringOptionValue -> {
+                    return Stream.of(optionName.formatForCommandLine(), stringOptionValue);
+                }).orElse(null);
+            }).flatMap(x -> x);
+        }).flatMap(x -> x).filter(Objects::nonNull).toArray(String[]::new);
+
+        // Feed the contents of the property file as a command line arguments to the command line parser.
+        return new JOptSimpleOptionsBuilder().options(knownOptions).create()
+                .apply(args)
+                .flatMap(OptionsBuilder::convertedOptions)
+                .map(ConvertedOptionsBuilder::create);
     }
 
     private final JOptSimpleOptionsBuilder.OptionsBuilder optionsBuilder;
