@@ -47,9 +47,13 @@ public interface OptionValue<T> {
         }
     }
 
+    default Option getOption() {
+        return asOption().orElseThrow();
+    }
+
     @SuppressWarnings("unchecked")
-    default OptionSpec<T> optionSpec() {
-        return (OptionSpec<T>)asOption().map(Option::getSpec).orElseThrow();
+    default OptionSpec<T> getSpec() {
+        return (OptionSpec<T>)getOption().getSpec();
     }
 
     @SuppressWarnings("unchecked")

@@ -101,6 +101,7 @@ public interface Options {
         };
     }
 
+
     public final static class StandardPredicate {
 
         public static Predicate<Options> containts(OptionIdentifier id) {

@@ -40,7 +40,6 @@ import static jdk.jpackage.internal.util.function.ThrowingFunction.toFunction;
 import java.lang.reflect.Modifier;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -60,6 +59,9 @@ import jdk.jpackage.internal.model.ConfigException;
 import jdk.jpackage.internal.model.PackageType;
 import jdk.jpackage.internal.util.SetBuilder;
 
+/**
+ * jpackage command line options
+ */
 public final class StandardOptionValue {
 
     private static final OptionValueExceptionFactory<ConfigException> ERROR_WITH_VALUE =
@@ -375,19 +377,11 @@ public final class StandardOptionValue {
         }).collect(toSet());
     }
 
-    /**
-     * Returns options configuring a launcher for reading properties of an
-     * additional launcher from a .property file.
-     * <p>
-     * These are the same options returned by {@link #launcherOptions()} but with
-     * different error formatting.
-     *
-     * @return the options configuring a launcher
-     */
-    static Set<Option> launcherPropertyFileOptions() {
-        return options().stream().filter(option -> {
-            return option.getSpec().scope().stream().anyMatch(LauncherProperty.class::isInstance);
-        }).collect(toSet());
+    static <T> OptionSpec<T> mapLauncherPropertyOptionSpec(OptionSpec<T> optionSpec) {
+        return optionSpec.scope().stream()
+                .filter(LauncherProperty.class::isInstance)
+                .map(LauncherProperty.class::cast)
+                .findFirst().map(LauncherProperty<T>::optionSpecForPropertyFile).orElse(optionSpec);
     }
 
     /**
@@ -598,21 +592,19 @@ public final class StandardOptionValue {
 
         @Override
         public OptionSpec<T> optionSpecForPropertyFile() {
-            // TODO: implement
-            return null;
+            return builder.createOptionSpec();
         }
     }
 
 
-    private record LauncherArrayProperty<T>(OptionSpecBuilder<T>.ArrayOptionSpecBuilder builder) implements LauncherProperty<T> {
+    private record LauncherArrayProperty<T>(OptionSpecBuilder<T>.ArrayOptionSpecBuilder builder) implements LauncherProperty<T[]> {
         public LauncherArrayProperty {
             Objects.requireNonNull(builder);
         }
 
         @Override
-        public OptionSpec<T> optionSpecForPropertyFile() {
-            // TODO: implement
-            return null;
+        public OptionSpec<T[]> optionSpecForPropertyFile() {
+            return builder.createOptionSpec();
         }
     }
 }

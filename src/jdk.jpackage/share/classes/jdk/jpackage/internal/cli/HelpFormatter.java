@@ -29,11 +29,15 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 
+/**
+ * Generic help formatter.
+ */
 final class HelpFormatter {
 
     private HelpFormatter(List<OptionGroup> optionGroups, OptionGroupFormatter formatter) {
@@ -59,7 +63,7 @@ final class HelpFormatter {
         }
 
         HelpFormatter create() {
-            return new HelpFormatter(groups, createConsoleFormatter());
+            return new HelpFormatter(groups, validatedGroupFormatter());
         }
 
         Builder groups(Collection<OptionGroup> v) {
@@ -71,34 +75,59 @@ final class HelpFormatter {
             return groups(List.of(v));
         }
 
+        Builder groupFormatter(OptionGroupFormatter v) {
+            groupFormatter = v;
+            return this;
+        }
+
+        private OptionGroupFormatter validatedGroupFormatter() {
+            return Optional.ofNullable(groupFormatter).orElseGet(Builder::createConsoleFormatter);
+        }
+
         private static OptionGroupFormatter createConsoleFormatter() {
             return new ConsoleOptionGroupFormatter(new ConsoleOptionFormatter(2, 10));
         }
 
         private final List<OptionGroup> groups = new ArrayList<>();
+        private OptionGroupFormatter groupFormatter;
     }
 
 
     interface OptionFormatter {
-        void format(OptionSpec<?> optionSpec, Consumer<CharSequence> sink);
+
+        default public void format(OptionSpec<?> optionSpec, Consumer<CharSequence> sink) {
+            format(optionSpec.names().stream().map(OptionName::formatForCommandLine).collect(Collectors.joining(" ")),
+                    optionSpec.valuePattern(),
+                    optionSpec.description(), sink);
+        }
+
+        void format(String optionNames, Optional<String> valuePattern, String description, Consumer<CharSequence> sink);
     }
 
     interface OptionGroupFormatter {
-        void format(OptionGroup group, Consumer<CharSequence> sink);
+
+        default void format(OptionGroup group, Consumer<CharSequence> sink) {
+            formatHeader(group.name(), sink);
+            formatBody(group.options(), sink);
+        }
+
+        void formatHeader(String gropName, Consumer<CharSequence> sink);
+
+        void formatBody(Iterable<? extends OptionSpec<?>> optionSpecs, Consumer<CharSequence> sink);
     }
 
 
     record ConsoleOptionFormatter(int nameOffset, int descriptionOffset) implements OptionFormatter {
 
         @Override
-        public void format(OptionSpec<?> optionSpec, Consumer<CharSequence> sink) {
+        public void format(String optionNames, Optional<String> valuePattern, String description, Consumer<CharSequence> sink) {
             sink.accept(" ".repeat(nameOffset));
-            sink.accept(optionSpec.names().stream().map(OptionName::formatForCommandLine).collect(Collectors.joining(" ")));
-            optionSpec.valuePattern().map(v -> " <" + v + ">").ifPresent(sink);
+            sink.accept(optionNames);
+            valuePattern.map(v -> " <" + v + ">").ifPresent(sink);
             sink.accept(" ".repeat(nameOffset));
             eol(sink);
             final var descriptionOffsetStr = " ".repeat(descriptionOffset);
-            Stream.of(optionSpec.description().split("\\R")).map(line -> {
+            Stream.of(description.split("\\R")).map(line -> {
                 return descriptionOffsetStr + line;
             }).forEach(line -> {
                 sink.accept(line);
@@ -115,11 +144,16 @@ final class HelpFormatter {
         }
 
         @Override
-        public void format(OptionGroup group, Consumer<CharSequence> sink) {
+        public void formatHeader(String groupName, Consumer<CharSequence> sink) {
+            Objects.requireNonNull(groupName);
             eol(sink);
-            sink.accept(group.name() + ":");
+            sink.accept(groupName + ":");
             eol(sink);
-            group.options().forEach(optionSpec -> {
+        }
+
+        @Override
+        public void formatBody(Iterable<? extends OptionSpec<?>> optionSpecs, Consumer<CharSequence> sink) {
+            optionSpecs.forEach(optionSpec -> {
                 optionFormatter.format(optionSpec, sink);
             });
         }

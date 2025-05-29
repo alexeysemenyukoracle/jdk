@@ -34,10 +34,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.stream.Stream;
+import jdk.jpackage.internal.cli.JOptSimpleOptionsBuilder.ConvertedOptionsBuilder;
+import jdk.jpackage.internal.cli.JOptSimpleOptionsBuilder.OptionsBuilder;
 import jdk.jpackage.internal.model.BundlingEnvironment;
 import jdk.jpackage.internal.util.Result;
-import jdk.jpackage.internal.cli.JOptSimpleOptionsBuilder.OptionsBuilder;
-import jdk.jpackage.internal.cli.JOptSimpleOptionsBuilder.ConvertedOptionsBuilder;
 
 /**
  * Processes jpackage command line.
@@ -90,10 +90,11 @@ final class OptionsProcessor {
         }).flatMap(x -> x).filter(Objects::nonNull).toArray(String[]::new);
 
         // Feed the contents of the property file as a command line arguments to the command line parser.
-        return new JOptSimpleOptionsBuilder().options(knownOptions).create()
-                .apply(args)
-                .flatMap(OptionsBuilder::convertedOptions)
-                .map(ConvertedOptionsBuilder::create);
+        return new JOptSimpleOptionsBuilder().options(knownOptions)
+                .optionSpecMapper(StandardOptionValue::mapLauncherPropertyOptionSpec)
+                .create().apply(args)
+                        .flatMap(OptionsBuilder::convertedOptions)
+                        .map(ConvertedOptionsBuilder::create);
     }
 
     private final JOptSimpleOptionsBuilder.OptionsBuilder optionsBuilder;

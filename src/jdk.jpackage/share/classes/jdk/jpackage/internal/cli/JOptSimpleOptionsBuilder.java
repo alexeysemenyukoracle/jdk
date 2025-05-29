@@ -44,6 +44,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import jdk.internal.joptsimple.OptionParser;
@@ -78,7 +79,7 @@ final class JOptSimpleOptionsBuilder {
     }
 
     JOptSimpleOptionsBuilder helpOption(OptionValue<?> v) {
-        return helpOption(v.asOption().orElseThrow());
+        return helpOption(v.getOption());
     }
 
     JOptSimpleOptionsBuilder options(Collection<Option> v) {
@@ -92,12 +93,17 @@ final class JOptSimpleOptionsBuilder {
 
     JOptSimpleOptionsBuilder optionValues(Collection<OptionValue<?>> v) {
         return options(Optional.ofNullable(v).map(x -> {
-            return x.stream().map(OptionValue::asOption).map(Optional::orElseThrow).toList();
+            return x.stream().map(OptionValue::getOption).toList();
         }).orElse((List<Option>)null));
     }
 
     JOptSimpleOptionsBuilder optionValues(OptionValue<?>... v) {
         return optionValues(List.of(v));
+    }
+
+    JOptSimpleOptionsBuilder optionSpecMapper(UnaryOperator<OptionSpec<?>> v) {
+        optionSpecMapper = v;
+        return this;
     }
 
     JOptSimpleOptionsBuilder unrecognizedOptionHandler(Function<String, ? extends Exception> v) {
@@ -107,7 +113,7 @@ final class JOptSimpleOptionsBuilder {
 
     private JOptSimpleParser createJOptSimpleParser() {
         return JOptSimpleParser.create(options(), Optional.ofNullable(helpOption),
-                Optional.ofNullable(unrecognizedOptionHandler));
+                Optional.ofNullable(optionSpecMapper), Optional.ofNullable(unrecognizedOptionHandler));
     }
 
     private Collection<Option> options() {
@@ -191,6 +197,7 @@ final class JOptSimpleOptionsBuilder {
         }
 
         static JOptSimpleParser create(Iterable<Option> options, Optional<Option> helpOption,
+                Optional<UnaryOperator<OptionSpec<?>>> optionSpecMapper,
                 Optional<Function<String, ? extends Exception>> unrecognizedOptionHandler) {
             final var parser = createOptionParser();
 
@@ -204,11 +211,13 @@ final class JOptSimpleOptionsBuilder {
                         // Filter out help option if any, it will be applied separately.
                         return helpOption.map(o::equals).orElse(true);
                     }).collect(toMap(x -> x, option -> {
-                        return optionSpecApplier.applyToParser(parser, option.getSpec());
+                        var optionSpec = getMappedOptionSpec(option, optionSpecMapper);
+                        return optionSpecApplier.applyToParser(parser, optionSpec);
                     }));
 
             helpOption.ifPresent(ho -> {
-                parser.acceptsAll(ho.getSpec().names().stream().map(OptionName::name).toList()).forHelp();
+                var optionSpec = getMappedOptionSpec(ho, optionSpecMapper);
+                parser.acceptsAll(optionSpec.names().stream().map(OptionName::name).toList()).forHelp();
             });
 
             return new JOptSimpleParser(parser, optionMap, unrecognizedOptionHandler);
@@ -233,6 +242,16 @@ final class JOptSimpleOptionsBuilder {
             // No abbreviations!
             // Otherwise for the configured option "foo" it will recognize "f" as its abbreviation.
             return new OptionParser(false);
+        }
+
+        private static <T> OptionSpec<?> getMappedOptionSpec(Option option, Optional<UnaryOperator<OptionSpec<?>>> optionSpecMapper) {
+            @SuppressWarnings("unchecked")
+            final OptionSpec<T> optionSpec = (OptionSpec<T>)option.getSpec();
+            if (optionSpecMapper.isPresent()) {
+                return optionSpecMapper.orElseThrow().apply(optionSpec);
+            } else {
+                return optionSpec;
+            }
         }
     }
 
@@ -584,5 +603,6 @@ final class JOptSimpleOptionsBuilder {
 
     private Collection<Option> options;
     private Option helpOption;
+    private UnaryOperator<OptionSpec<?>> optionSpecMapper;
     private Function<String, ? extends Exception> unrecognizedOptionHandler;
 }

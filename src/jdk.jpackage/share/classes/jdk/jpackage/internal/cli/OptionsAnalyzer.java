@@ -153,7 +153,7 @@ final class OptionsAnalyzer {
         Objects.requireNonNull(os);
         Objects.requireNonNull(env);
 
-        final var typeOption = StandardOptionValue.TYPE.asOption().orElseThrow();
+        final var typeOption = StandardOptionValue.TYPE.getOption();
 
         return cmdline.find(typeOption).map(obj -> {
             if (obj instanceof PackageType packageType) {
@@ -201,7 +201,7 @@ final class OptionsAnalyzer {
         if (v instanceof OptionSpec<?> optionSpec) {
             return Optional.of(optionSpec);
         } else if (v instanceof OptionValue<?> ov) {
-            return asOptionSpec(ov.asOption().orElseThrow().getSpec());
+            return asOptionSpec(ov.getSpec());
         } else if (v instanceof Option option) {
             return asOptionSpec(option.getSpec());
         } else {
@@ -218,7 +218,7 @@ final class OptionsAnalyzer {
     }
 
     private static List<Option> asOptionList(OptionValue<?>... optionValues) {
-        return Stream.of(optionValues).map(OptionValue::asOption).map(Optional::orElseThrow).toList();
+        return Stream.of(optionValues).map(OptionValue::getOption).toList();
     }
 
     private static String formatOptionNameForErrorMessage(Options cmdline, OptionSpec<?> optionSpec) {

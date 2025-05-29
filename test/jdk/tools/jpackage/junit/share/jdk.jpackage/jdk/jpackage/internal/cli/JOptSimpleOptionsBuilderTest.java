@@ -29,7 +29,6 @@ import static jdk.jpackage.internal.cli.StandardValueConverter.identityConv;
 import static jdk.jpackage.internal.cli.StandardValueConverter.pathConv;
 import static jdk.jpackage.internal.cli.TestUtils.arrayElements;
 import static jdk.jpackage.test.JUnitUtils.assertArrayEquals;
-import jdk.jpackage.test.JUnitUtils.ExceptionAnalizer;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
@@ -45,7 +44,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -61,6 +59,7 @@ import jdk.jpackage.internal.cli.OptionValueExceptionFactory.StandardArgumentsMa
 import jdk.jpackage.internal.cli.TestUtils.OptionFailure;
 import jdk.jpackage.internal.cli.TestUtils.TestException;
 import jdk.jpackage.internal.util.Result;
+import jdk.jpackage.test.JUnitUtils.ExceptionAnalizer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -92,7 +91,7 @@ public class JOptSimpleOptionsBuilderTest {
                 final var expectedValue = e.getValue();
                 final Object actualValue;
                 if (parserMode.equals(ParserMode.PARSE)) {
-                    actualValue = cmdline.find(optionValue.asOption().orElseThrow()).orElseThrow();
+                    actualValue = cmdline.find(optionValue.getOption()).orElseThrow();
                 } else {
                     actualValue = optionValue.getFrom(cmdline);
                 }
@@ -797,7 +796,7 @@ public class JOptSimpleOptionsBuilderTest {
     private static Function<List<String>, Options> createParser(ParserMode mode, Iterable<OptionValue<?>> options) {
         Objects.requireNonNull(mode);
         final var parse = new JOptSimpleOptionsBuilder().options(StreamSupport.stream(options.spliterator(), false)
-                .map(OptionValue::asOption).map(Optional::orElseThrow).toList()).create();
+                .map(OptionValue::getOption).toList()).create();
         return args -> {
             final var builder = parse.apply(args.toArray(String[]::new)).orElseThrow();
             switch (mode) {

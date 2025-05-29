@@ -33,13 +33,24 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import jdk.jpackage.internal.cli.HelpFormatter.ConsoleOptionFormatter;
+import jdk.jpackage.internal.cli.HelpFormatter.ConsoleOptionGroupFormatter;
+import jdk.jpackage.internal.cli.HelpFormatter.OptionFormatter;
+import jdk.jpackage.internal.cli.HelpFormatter.OptionGroupFormatter;
 
+/**
+ * jpackage help formatter
+ */
 final class StandardHelpFormatter {
 
     enum OptionGroup {
+        SAMPLES("sample", shared()),
+
         GENERIC_OPTIONS("generic", shared().options(genericOptions())),
 
         RUNTIME_IMAGE_OPTIONS("runtime-image", shared().options(runtimeImageOptions())),
@@ -54,16 +65,15 @@ final class StandardHelpFormatter {
         ;
 
         OptionGroup(String name, Builder builder) {
-            this.name = "help.option-group." + Objects.requireNonNull(name);
-            this.optionSpecs = builder.create();
+            value = new HelpFormatter.OptionGroup("help.option-group." + Objects.requireNonNull(name), builder.create());
         }
 
-        HelpFormatter.OptionGroup toOptionGroup() {
-            return new HelpFormatter.OptionGroup(name, optionSpecs);
+        HelpFormatter.OptionGroup value() {
+            return value;
         }
 
         boolean isEmpty() {
-            return optionSpecs.isEmpty();
+            return value.options().isEmpty();
         }
 
         static Builder shared() {
@@ -76,7 +86,7 @@ final class StandardHelpFormatter {
 
         private static final class Builder {
 
-            Builder(Predicate<OptionSpec<?>> platformFilter) {
+            private Builder(Predicate<OptionSpec<?>> platformFilter) {
                 this.platformFilter = Objects.requireNonNull(platformFilter);
             }
 
@@ -107,14 +117,14 @@ final class StandardHelpFormatter {
                     StandardOptionValue.VENDOR,
                     StandardOptionValue.VERBOSE,
                     StandardOptionValue.VERSION
-            ).map(OptionValue::optionSpec);
+            ).map(OptionValue::getSpec);
         }
 
         private static Stream<? extends OptionSpec<?>> appImageOptions() {
             return Stream.of(
                     StandardOptionValue.INPUT,
                     StandardOptionValue.APP_CONTENT
-            ).map(OptionValue::optionSpec);
+            ).map(OptionValue::getSpec);
         }
 
         private static Stream<? extends OptionSpec<?>> runtimeImageOptions() {
@@ -123,7 +133,7 @@ final class StandardHelpFormatter {
                     StandardOptionValue.MODULE_PATH,
                     StandardOptionValue.JLINK_OPTIONS,
                     StandardOptionValue.PREDEFINED_RUNTIME_IMAGE
-            ).map(OptionValue::optionSpec);
+            ).map(OptionValue::getSpec);
         }
 
         private static Stream<? extends OptionSpec<?>> launcherOptions() {
@@ -140,7 +150,7 @@ final class StandardHelpFormatter {
 
             final Stream<? extends OptionSpec<?>> additional = Stream.of(
                     StandardOptionValue.ADD_LAUNCHER
-            ).map(OptionValue::optionSpec);
+            ).map(OptionValue::getSpec);
 
             return Stream.concat(fromPropertyFile, additional);
         }
@@ -176,18 +186,44 @@ final class StandardHelpFormatter {
                     }
                 }
 
-                private final static OptionName TYPE = StandardOptionValue.TYPE.optionSpec().name();
+                private final static OptionName TYPE = StandardOptionValue.TYPE.getSpec().name();
             });
         }
 
-        private final String name;
-        private final List<? extends OptionSpec<?>> optionSpecs;
+        private final HelpFormatter.OptionGroup value;
     }
+
+
+    private final static class GroupFormatter implements OptionGroupFormatter {
+
+        @Override
+        public void formatHeader(String groupName, Consumer<CharSequence> sink) {
+            groupFormatter.formatHeader(groupName, sink);
+        }
+
+        @Override
+        public void formatBody(Iterable<? extends OptionSpec<?>> optionSpecs, Consumer<CharSequence> sink) {
+            groupFormatter.formatBody(optionSpecs, sink);
+        }
+
+        @Override
+        public void format(HelpFormatter.OptionGroup group, Consumer<CharSequence> sink) {
+            formatHeader(group.name(), sink);
+            if (group == OptionGroup.GENERIC_OPTIONS.value()) {
+                optionSpecFormatter.format("@<filename>", Optional.empty(), "help.option.description.argument-file", sink);
+            }
+            formatBody(group.options(), sink);
+        }
+
+        private final OptionFormatter optionSpecFormatter = new ConsoleOptionFormatter(2, 10);
+        private final OptionGroupFormatter groupFormatter = new ConsoleOptionGroupFormatter(optionSpecFormatter);
+    }
+
 
     private StandardHelpFormatter() {}
 
     private static OptionSpec<Path> createRuntimeInstallerOptionSpec() {
-        final var srcSpec = StandardOptionValue.PREDEFINED_RUNTIME_IMAGE.optionSpec();
+        final var srcSpec = StandardOptionValue.PREDEFINED_RUNTIME_IMAGE.getSpec();
         return new OptionSpec<>(srcSpec.names(), srcSpec.converter(), srcSpec.scope(),
                 srcSpec.mergePolicy(), srcSpec.valuePattern(),
                 "help.option.description.installer-runtime-image");
@@ -198,11 +234,11 @@ final class StandardHelpFormatter {
     private final static OptionSpec<Path> RUNTIME_INSTALLER_RUNTIME_IMAGE = createRuntimeInstallerOptionSpec();
 
     static {
-        final var builder = HelpFormatter.build();
+        final var builder = HelpFormatter.build().groupFormatter(new GroupFormatter());
 
         Stream.of(OptionGroup.values())
-                .filter(Predicate.not(OptionGroup::isEmpty))
-                .map(OptionGroup::toOptionGroup)
+                .filter(Predicate.<OptionGroup>isEqual(OptionGroup.SAMPLES).or(Predicate.not(OptionGroup::isEmpty)))
+                .map(OptionGroup::value)
                 .forEach(builder::groups);
 
         INSTANCE = builder.create();

@@ -52,7 +52,7 @@ public class HelpTest {
 
         // Test group names are unique.
         final var groups = Stream.of(StandardHelpFormatter.OptionGroup.values())
-                .map(StandardHelpFormatter.OptionGroup::toOptionGroup)
+                .map(StandardHelpFormatter.OptionGroup::value)
                 .collect(Collectors.toMap(HelpFormatter.OptionGroup::name, HelpFormatter.OptionGroup::options));
 
         // Names of all options supported on the current platform.
@@ -68,7 +68,7 @@ public class HelpTest {
 
         // Test that each option belongs to only one group except of `--runtime-image`
         groupOptions.stream().collect(Collectors.toMap(x -> x, x -> x, (a, b) -> {
-            if (a.equals(StandardOptionValue.PREDEFINED_RUNTIME_IMAGE.optionSpec().name())) {
+            if (a.equals(StandardOptionValue.PREDEFINED_RUNTIME_IMAGE.getSpec().name())) {
                 return a;
             } else {
                 throw new AssertionError(String.format("Option [%s] is included in multiple groups", a.name()));
