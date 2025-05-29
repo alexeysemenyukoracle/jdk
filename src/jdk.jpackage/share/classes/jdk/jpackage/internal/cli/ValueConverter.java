@@ -55,7 +55,7 @@ interface ValueConverter<T> {
             @Override
             public T convert(String value) {
                 Objects.requireNonNull(value);
-                return mapper.apply(value);
+                return Objects.requireNonNull(mapper.apply(value));
             }
 
             @Override

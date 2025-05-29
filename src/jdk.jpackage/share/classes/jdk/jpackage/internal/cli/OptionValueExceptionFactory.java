@@ -141,7 +141,7 @@ interface OptionValueExceptionFactory<T extends Exception> {
 
             @Override
             public T create(OptionName optionName, StringToken optionValue, String formatString, Optional<Throwable> cause) {
-                return ctor.apply(createMessage(optionName, optionValue, formatString), cause.orElse(null));
+                return Objects.requireNonNull(ctor.apply(createMessage(optionName, optionValue, formatString), cause.orElse(null)));
             }
 
             private String createMessage(OptionName optionName, StringToken optionValue, String formatString) {

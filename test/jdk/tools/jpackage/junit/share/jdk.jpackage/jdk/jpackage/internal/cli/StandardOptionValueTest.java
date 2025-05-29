@@ -27,20 +27,29 @@ import static java.util.stream.Collectors.toMap;
 import static jdk.jpackage.internal.util.function.ThrowingFunction.toFunction;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.io.IOException;
 import java.lang.reflect.Modifier;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import jdk.jpackage.internal.cli.JOptSimpleOptionsBuilder.ConvertedOptionsBuilder;
+import jdk.jpackage.internal.cli.JOptSimpleOptionsBuilder.OptionsBuilder;
 import jdk.jpackage.test.Comm;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 public class StandardOptionValueTest {
 
@@ -63,10 +72,112 @@ public class StandardOptionValueTest {
         options.stream().map(Option::getSpec).map(OptionSpec::names).flatMap(Collection::stream).map(OptionName::name).collect(toMap(x -> x, x -> x));
     }
 
+    @ParameterizedTest
+    @MethodSource
+    public void testAddLauncherOption(AddLauncherTestSpec testSpec, @TempDir Path workDir) throws IOException {
+        testSpec.test(workDir);
+    }
+
     @Test
     public void printMarkdownOptionTable() {
         OptionSpecFormatter.print(OptionSpecFormatter::groupByOption);
     }
+
+
+    record AddLauncherTestSpec(Optional<AdditionalLauncher> expected, List<String> expectedErrors, Optional<String> optionValue) {
+        AddLauncherTestSpec {
+            if (expected.isEmpty() == expectedErrors.isEmpty()) {
+                throw new IllegalArgumentException();
+            }
+        }
+
+        void test(Path workDir) throws IOException {
+            final List<String> args = new ArrayList<>();
+            args.add(StandardOptionValue.ADD_LAUNCHER.getSpec().name().formatForCommandLine());
+            optionValue.ifPresent(args::add);
+            if (optionValue.isEmpty()) {
+                var path = workDir.resolve(expected.orElseThrow().propertyFile());
+                Files.createDirectories(path.getParent());
+                Files.createFile(path);
+                expected.map(v -> v.name() + "=" + path).ifPresent(args::add);
+            }
+
+            final var result = new JOptSimpleOptionsBuilder().optionValues(StandardOptionValue.ADD_LAUNCHER).create()
+                    .apply(args.toArray(String[]::new))
+                    .flatMap(OptionsBuilder::convertedOptions).map(ConvertedOptionsBuilder::create);
+
+            if (expectedErrors.isEmpty()) {
+                final var cmdline = result.orElseThrow();
+                assertEquals(expected.map(List::of).orElseGet(List::of), StandardOptionValue.ADD_LAUNCHER.getFrom(cmdline).stream().map(v -> {
+                    if (optionValue.isEmpty()) {
+                        return new AdditionalLauncher(v.name(), workDir.relativize(v.propertyFile()));
+                    } else {
+                        return v;
+                    }
+                }).toList());
+            } else {
+                assertEquals(expectedErrors.stream().sorted().toList(),
+                        result.errors().stream().map(Exception::getMessage).sorted().toList());
+            }
+        }
+
+        final static class Builder {
+
+            AddLauncherTestSpec create() {
+                return new AddLauncherTestSpec(Optional.ofNullable(expected), expectedErrors, Optional.ofNullable(optionValue));
+            }
+
+            Builder expect(String name, String path) {
+                expected = new AdditionalLauncher(name, Path.of(path));
+                return this;
+            }
+
+            Builder expectErrors(String... v) {
+                expectedErrors.addAll(List.of(v));
+                return this;
+            }
+
+            Builder expectMalformedError(String v) {
+                Objects.requireNonNull(v);
+                return optionValue(v).expectErrors(I18N.format("error.paramater-add-launcher-malformed", v, "--add-launcher"));
+            }
+
+            Builder optionValue(String v) {
+                optionValue = v;
+                return this;
+            }
+
+            private AdditionalLauncher expected;
+            private List<String> expectedErrors = new ArrayList<>();
+            private String optionValue;
+        }
+    }
+
+
+    private static Collection<AddLauncherTestSpec> testAddLauncherOption() {
+        return Stream.of(
+                buildAddLauncherTest().expect("foo", "some.properties"),
+                buildAddLauncherTest().expect("foo", "a/b/some.properties").expect("bar", "="),
+                buildAddLauncherTest().expect("a", "a.properties").expect("a", "b.properties"),
+                buildAddLauncherTest().expectMalformedError("some"),
+                buildAddLauncherTest().expectMalformedError(""),
+                buildAddLauncherTest().expectMalformedError("="),
+                buildAddLauncherTest().expectMalformedError("a="),
+                buildAddLauncherTest().expectMalformedError("=a"),
+                buildAddLauncherTest().expectMalformedError("=a"),
+                // Not a path
+                buildAddLauncherTest().optionValue("foo=*").expectErrors(I18N.format("error.paramater-add-launcher-not-file", "*", "foo")),
+                // The path is a directory
+                buildAddLauncherTest().optionValue("foo=.").expectErrors(I18N.format("error.paramater-add-launcher-not-file", ".", "foo")),
+                // The path doesn't exist
+                buildAddLauncherTest().optionValue("Foo=foo/bar/buz/111.z").expectErrors(I18N.format("error.paramater-add-launcher-not-file", "foo/bar/buz/111.z", "Foo"))
+        ).map(AddLauncherTestSpec.Builder::create).toList();
+    }
+
+    private static AddLauncherTestSpec.Builder buildAddLauncherTest() {
+        return new AddLauncherTestSpec.Builder();
+    }
+
 
     private final static class OptionSpecFormatter {
         static void print(BiConsumer<Consumer<String>, Collection<? extends OptionSpec<?>>> printer) {

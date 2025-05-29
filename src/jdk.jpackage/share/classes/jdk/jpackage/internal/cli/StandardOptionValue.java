@@ -55,7 +55,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import jdk.internal.util.OperatingSystem;
 import jdk.jpackage.internal.cli.OptionValueExceptionFactory.StandardArgumentsMapper;
-import jdk.jpackage.internal.model.ConfigException;
+import jdk.jpackage.internal.model.JPackageException;
+import jdk.jpackage.internal.model.KnownExceptionType;
 import jdk.jpackage.internal.model.PackageType;
 import jdk.jpackage.internal.util.SetBuilder;
 
@@ -64,17 +65,17 @@ import jdk.jpackage.internal.util.SetBuilder;
  */
 public final class StandardOptionValue {
 
-    private static final OptionValueExceptionFactory<ConfigException> ERROR_WITH_VALUE =
-            OptionValueExceptionFactory.build(ConfigException::new).formatArgumentsTransformer(StandardArgumentsMapper.VALUE).create();
+    private static final OptionValueExceptionFactory<JPackageException> ERROR_WITH_VALUE =
+            OptionValueExceptionFactory.build(JPackageException::new).formatArgumentsTransformer(StandardArgumentsMapper.VALUE).create();
 
-    private static final OptionValueExceptionFactory<ConfigException> ERROR_WITHOUT_CONTEXT =
-            OptionValueExceptionFactory.build(ConfigException::new).formatArgumentsTransformer(StandardArgumentsMapper.NONE).create();
+    private static final OptionValueExceptionFactory<JPackageException> ERROR_WITHOUT_CONTEXT =
+            OptionValueExceptionFactory.build(JPackageException::new).formatArgumentsTransformer(StandardArgumentsMapper.NONE).create();
 
-    private static final OptionValueExceptionFactory<ConfigException> ERROR_WITH_VALUE_AND_OPTION_NAME =
-            OptionValueExceptionFactory.build(ConfigException::new).formatArgumentsTransformer(StandardArgumentsMapper.VALUE_AND_NAME).create();
+    private static final OptionValueExceptionFactory<JPackageException> ERROR_WITH_VALUE_AND_OPTION_NAME =
+            OptionValueExceptionFactory.build(JPackageException::new).formatArgumentsTransformer(StandardArgumentsMapper.VALUE_AND_NAME).create();
 
-    private static final OptionValueExceptionFactory<ConfigException> ERROR_WITH_OPTION_NAME_AND_VALUE =
-            OptionValueExceptionFactory.build(ConfigException::new).formatArgumentsTransformer(StandardArgumentsMapper.NAME_AND_VALUE).create();
+    private static final OptionValueExceptionFactory<JPackageException> ERROR_WITH_OPTION_NAME_AND_VALUE =
+            OptionValueExceptionFactory.build(JPackageException::new).formatArgumentsTransformer(StandardArgumentsMapper.NAME_AND_VALUE).create();
 
     private final static Set<OperatingSystem> SUPPORTED_OS = Set.of(
             OperatingSystem.LINUX, OperatingSystem.WINDOWS, OperatingSystem.MACOS);
@@ -157,14 +158,11 @@ public final class StandardOptionValue {
             .toArray(stringListTokenizer())
             .create(toList());
 
-    public final static OptionValue<Path> ICON = pathOption("icon").valuePattern("path")
-            .mutate(launcherProperty())
-            .create();
+    public final static OptionValue<Path> ICON = fileOption("icon").mutate(launcherProperty()).create();
 
     public final static OptionValue<String> COPYRIGHT = stringOption("copyright").create();
 
-    public final static OptionValue<Path> LICENSE_FILE = pathOption("license-file")
-            .valuePattern("path")
+    public final static OptionValue<Path> LICENSE_FILE = fileOption("license-file")
             .validator(StandardValidator.IS_EXISTENT_NOT_DIRECTORY)
             .validatorExceptionFormatString("ERR_LicenseFileNotExit")
             .validatorExceptionFactory(ERROR_WITHOUT_CONTEXT)
@@ -187,37 +185,12 @@ public final class StandardOptionValue {
             .outOfScope(NOT_BUILDING_APP_IMAGE)
             .create(toList());
 
-    public final static OptionValue<List<Path>> FILE_ASSOCIATIONS = pathOption("file-associations")
+    public final static OptionValue<List<Path>> FILE_ASSOCIATIONS = fileOption("file-associations")
             .toArray(pathSeparator())
             .outOfScope(BundlingOperationModifier.BUNDLE_RUNTIME)
             .create(toList());
 
-    private final static class IllegalAddLauncherSyntaxException extends IllegalArgumentException {
-
-        IllegalAddLauncherSyntaxException() {
-        }
-
-        private static final long serialVersionUID = 1L;
-    }
-
-    public final static OptionValue<List<AdditionalLauncher>> ADD_LAUNCHER = option("add-launcher", AdditionalLauncher.class)
-            .valuePattern("name=path")
-            .outOfScope(NOT_BUILDING_APP_IMAGE)
-            .converterExceptionFactory((optionName, optionValue, formatString, cause) -> {
-                final String msgId;
-                if (cause.orElseThrow() instanceof IllegalAddLauncherSyntaxException) {
-                    msgId = "error.paramater-add-launcher-malformed";
-                } else {
-                    msgId = "error.paramater-add-launcher-not-path";
-                }
-                return ERROR_WITH_VALUE_AND_OPTION_NAME.create(optionName, optionValue, msgId, cause);
-            }).converter(value -> {
-                var components = value.split("=", 2);
-                if (components.length != 2) {
-                    throw new IllegalAddLauncherSyntaxException();
-                }
-                return new AdditionalLauncher(components[0], StandardValueConverter.pathConv().convert(components[1]));
-            }).toArray().defaultValue(new AdditionalLauncher[0]).create(toList());
+    public final static OptionValue<List<AdditionalLauncher>> ADD_LAUNCHER = createAddLauncherOption("add-launcher");
 
     public final static OptionValue<Path> TEMP_ROOT = directoryOption("temp")
             .validatorExceptionFactory(ERROR_WITH_VALUE)
@@ -327,9 +300,7 @@ public final class StandardOptionValue {
             .valuePattern("keychain-name")
             .scope(MAC_SIGNING).create();
 
-    public final static OptionValue<Path> MAC_ENTITLEMENTS = pathOption("mac-entitlements")
-            .valuePattern("path")
-            .scope(MAC_SIGNING).create();
+    public final static OptionValue<Path> MAC_ENTITLEMENTS = fileOption("mac-entitlements").scope(MAC_SIGNING).create();
 
     //
     // Windows-specific
@@ -460,9 +431,17 @@ public final class StandardOptionValue {
                 .converterExceptionFormatString("error.paramater-not-path");
     }
 
+    private static OptionSpecBuilder<Path> fileOption(String name) {
+        return pathOption(name)
+                .valuePattern("file path")
+                .validator(StandardValidator.IS_EXISTENT_NOT_DIRECTORY)
+                .validatorExceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME)
+                .validatorExceptionFormatString("error.paramater-not-file");
+    }
+
     private static OptionSpecBuilder<Path> directoryOption(String name) {
         return pathOption(name)
-                .valuePattern("directory")
+                .valuePattern("directory path")
                 .validator(StandardValidator.IS_DIRECTORY)
                 .validatorExceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME)
                 .validatorExceptionFormatString("error.paramater-not-directory");
@@ -510,6 +489,64 @@ public final class StandardOptionValue {
             return Arguments.getArgumentList(str).toArray(String[]::new);
         };
     }
+
+    private static OptionValue<List<AdditionalLauncher>> createAddLauncherOption(String name) {
+        OptionValueConverter<Path> propertyFileConverter = fileOption(name)
+                .create().getSpec().converter().orElseThrow();
+
+        return option(name, AdditionalLauncher.class)
+                .valuePattern("name=path")
+                .outOfScope(NOT_BUILDING_APP_IMAGE)
+                .converterExceptionFactory((optionName, optionValue, formatString, cause) -> {
+                    final var theCause = cause.orElseThrow();
+                    if (theCause instanceof AddLauncherSyntaxException) {
+                        return ERROR_WITH_VALUE_AND_OPTION_NAME.create(optionName,
+                                optionValue, "error.paramater-add-launcher-malformed", cause);
+                    } else if (theCause instanceof AddLauncherInvalidPropertyFile invalidFile) {
+                        return invalidFile;
+                    } else if (theCause instanceof KnownExceptionType) {
+                        return (RuntimeException)theCause;
+                    } else {
+                        return new RuntimeException(theCause);
+                    }
+                }).converter(value -> {
+                    var components = value.split("=", 2);
+                    if (components.length != 2 || components[0].isEmpty() || components[1].isEmpty()) {
+                        throw new AddLauncherSyntaxException();
+                    }
+
+                    final Path propertyFile;
+                    try {
+                        propertyFile = propertyFileConverter.convert(OptionName.of(name),
+                                StringToken.of(value, components[1])).orElseThrow();
+                    } catch (JPackageException ex) {
+                        throw new AddLauncherInvalidPropertyFile(I18N.format(
+                                "error.paramater-add-launcher-not-file", components[1], components[0]));
+                    }
+
+                    return new AdditionalLauncher(components[0], propertyFile);
+                }).toArray().defaultValue(new AdditionalLauncher[0]).create(toList());
+    }
+
+
+    private final static class AddLauncherSyntaxException extends IllegalArgumentException implements KnownExceptionType {
+
+        AddLauncherSyntaxException() {
+        }
+
+        private static final long serialVersionUID = 1L;
+    }
+
+
+    private final static class AddLauncherInvalidPropertyFile extends IllegalArgumentException implements KnownExceptionType {
+
+        AddLauncherInvalidPropertyFile(String msg) {
+            super(msg);
+        }
+
+        private static final long serialVersionUID = 1L;
+    }
+
 
     private final class Arguments {
 
