@@ -27,57 +27,98 @@ package jdk.jpackage.internal;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Optional;
+import jdk.jpackage.internal.model.AppImageLayout;
 
+/**
+ * Build environment.
+ */
 interface BuildEnv {
 
+    /**
+     * Returns root directory for intermediate build files.
+     *
+     * @return the root directory for intermediate build files
+     */
     Path buildRoot();
 
+    /**
+     * Returns <code>true</code> if the build should be verbose output.
+     *
+     * @return <code>true</code> if the build should be verbose output
+     */
     boolean verbose();
 
+    /**
+     * Returns the path of the resource directory or an empty {@link Optional}
+     * instance if none is configured with the build.
+     *
+     * @return the path of the resource directory or an empty {@link Optional}
+     *         instance if non is configured with the build
+     */
     Optional<Path> resourceDir();
 
     /**
-     * Returns path to application image directory.
+     * Returns the path of the app image directory of this build.
      *
-     * The return value is supposed to be used as a parameter for
-     * ApplicationLayout#resolveAt function.
+     * @return the path of the app image directory of this build
      */
     default Path appImageDir() {
-        return buildRoot().resolve("image");
+        return appImageDirLayout().rootDirectory();
     }
 
+    /**
+     * Returns resolved app image layout of the app image directory. The return
+     * layout is resolved at {@link #appImageDir()} path.
+     *
+     * @return the resolved app image layout of the app image directory
+     */
+    AppImageLayout appImageDirLayout();
+
+    /**
+     * Returns a path to a directory for intermediate configuration files.
+     * @return the path to the directory for intermediate configuration files
+     */
     default Path configDir() {
         return buildRoot().resolve("config");
     }
 
+    /**
+     * Creates an {@link OverridableResource} instance for the given resource name.
+     *
+     * @param defaultName the resource name
+     * @return the {@link OverridableResource} instance wrapping a resource with the
+     *         given name
+     */
     OverridableResource createResource(String defaultName);
 
     static BuildEnv withAppImageDir(BuildEnv env, Path appImageDir) {
         return ((Internal.DefaultBuildEnv)env).copyWithAppImageDir(appImageDir);
     }
 
-    static BuildEnv create(Path buildRoot, Optional<Path> resourceDir, boolean verbose, Class<?> resourceLocator) {
-        return new Internal.DefaultBuildEnv(buildRoot, resourceDir, verbose, resourceLocator, Optional.empty());
+    static BuildEnv create(Path buildRoot, Optional<Path> resourceDir, boolean verbose,
+            Class<?> resourceLocator, AppImageLayout appImageLayout) {
+        if (!appImageLayout.isResolved()) {
+            appImageLayout = appImageLayout.resolveAt(buildRoot.resolve("image"));
+        }
+        return new Internal.DefaultBuildEnv(buildRoot, resourceDir, verbose,
+                resourceLocator, appImageLayout);
     }
 
     static final class Internal {
         private static record DefaultBuildEnv(Path buildRoot, Optional<Path> resourceDir,
-                boolean verbose, Class<?> resourceLocator, Optional<Path> optAppImageDir) implements BuildEnv {
+                boolean verbose, Class<?> resourceLocator,
+                AppImageLayout appImageDirLayout) implements BuildEnv {
 
             DefaultBuildEnv {
                 Objects.requireNonNull(buildRoot);
                 Objects.requireNonNull(resourceDir);
                 Objects.requireNonNull(resourceLocator);
-                Objects.requireNonNull(optAppImageDir);
+                Objects.requireNonNull(appImageDirLayout);
             }
 
             DefaultBuildEnv copyWithAppImageDir(Path appImageDir) {
-                return new DefaultBuildEnv(buildRoot, resourceDir, verbose, resourceLocator, Optional.of(appImageDir));
-            }
-
-            @Override
-            public Path appImageDir() {
-                return optAppImageDir.orElseGet(BuildEnv.super::appImageDir);
+                return new DefaultBuildEnv(buildRoot, resourceDir, verbose,
+                        resourceLocator, appImageDirLayout.unresolve().resolveAt(appImageDir));
             }
 
             @Override
