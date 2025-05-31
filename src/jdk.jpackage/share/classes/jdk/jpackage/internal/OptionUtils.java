@@ -22,26 +22,22 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
+package jdk.jpackage.internal;
 
-package jdk.jpackage.internal.model;
+import static jdk.jpackage.internal.cli.StandardOptionValue.MAIN_JAR;
+import static jdk.jpackage.internal.cli.StandardOptionValue.MODULE;
+import static jdk.jpackage.internal.cli.StandardOptionValue.PREDEFINED_APP_IMAGE;
+import static jdk.jpackage.internal.cli.StandardOptionValue.PREDEFINED_RUNTIME_IMAGE;
 
-import java.io.IOException;
-import java.nio.file.Path;
+import jdk.jpackage.internal.cli.Options;
 
+final class OptionUtils {
 
-/**
- * Creates a bundle from the given specification.
- */
-@FunctionalInterface
-public interface BundleCreator<T extends BundleSpec> {
+    static boolean isRuntimeInstaller(Options optionValues) {
+        return PREDEFINED_RUNTIME_IMAGE.containsIn(optionValues) 
+                && !PREDEFINED_APP_IMAGE.containsIn(optionValues)
+                && !MAIN_JAR.containsIn(optionValues) 
+                && !MODULE.containsIn(optionValues);
+    }
 
-    /**
-     * Creates a bundle from the given specification in the given directory.
-     *
-     * @param spec the bundle specification
-     * @param dst the directory where to create the bundle
-     * @throws PackagerException if packaging error occurs
-     * @throws IOException if an I/O error occurs
-     */
-    void create(T spec, Path dst) throws PackagerException, IOException;
 }

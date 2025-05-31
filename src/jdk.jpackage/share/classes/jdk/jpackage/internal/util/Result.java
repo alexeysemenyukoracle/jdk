@@ -28,6 +28,7 @@ import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.StreamSupport;
 
 
 public record Result<T>(Optional<T> value, Collection<? extends Exception> errors) {
@@ -105,5 +106,13 @@ public record Result<T>(Optional<T> value, Collection<? extends Exception> error
 
     public static <T> Result<T> ofError(Exception error) {
         return ofErrors(List.of(error));
+    }
+
+    public static boolean allHaveValues(Iterable<? extends Result<?>> results) {
+        return StreamSupport.stream(results.spliterator(), false).allMatch(Result::hasValue);
+    }
+
+    public static boolean allHaveValues(Result<?>... results) {
+        return allHaveValues(List.of(results));
     }
 }

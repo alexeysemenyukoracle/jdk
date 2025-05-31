@@ -24,52 +24,50 @@
  */
 package jdk.jpackage.internal;
 
+import java.io.Closeable;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Objects;
-import jdk.jpackage.internal.PackagingPipeline.StartupParameters;
-import jdk.jpackage.internal.model.Package;
-import jdk.jpackage.internal.model.PackagerException;
+import jdk.jpackage.internal.cli.Options;
+import jdk.jpackage.internal.cli.StandardOptionValue;
+import jdk.jpackage.internal.util.FileUtils;
 
-abstract class PackagerBuilder<T extends Package, U extends PackagerBuilder<T, U>> {
+final class TempDirectory implements Closeable {
 
-    U pkg(T v) {
-        pkg = v;
-        return thiz();
+    TempDirectory(Options optionValues) {
+        final var tempDir = StandardOptionValue.TEMP_ROOT.findIn(optionValues);
+        if (tempDir.isPresent()) {
+            this.path = tempDir.orElseThrow();
+            this.optionValues = optionValues;
+        } else {
+            try {
+                this.path = Files.createTempDirectory("jdk.jpackage");
+            } catch (IOException ex) {
+                throw new UncheckedIOException(ex);
+            }
+            this.optionValues = optionValues.copyWithDefaultValue(StandardOptionValue.TEMP_ROOT, path);
+        }
+
+        deleteOnClose = tempDir.isEmpty();
     }
 
-    U env(BuildEnv v) {
-        env = v;
-        return thiz();
+    Options optionValues() {
+        return optionValues;
     }
 
-    U outputDir(Path v) {
-        outputDir = v;
-        return thiz();
+    Path path() {
+        return path;
     }
 
-    @SuppressWarnings("unchecked")
-    private U thiz() {
-        return (U)this;
+    @Override
+    public void close() throws IOException {
+        if (deleteOnClose) {
+            FileUtils.deleteRecursive(path);
+        }
     }
 
-    protected abstract void configurePackagingPipeline(PackagingPipeline.Builder pipelineBuilder,
-            StartupParameters startupParameters);
-
-    Path execute(PackagingPipeline.Builder pipelineBuilder) throws PackagerException {
-        Objects.requireNonNull(pkg);
-        Objects.requireNonNull(env);
-        Objects.requireNonNull(outputDir);
-
-        final var startupParameters = pipelineBuilder.createStartupParameters(env, pkg, outputDir);
-
-        configurePackagingPipeline(pipelineBuilder, startupParameters);
-
-        pipelineBuilder.create().execute(startupParameters);
-
-        return outputDir.resolve(pkg.packageFileNameWithSuffix());
-    }
-
-    protected T pkg;
-    protected BuildEnv env;
-    protected Path outputDir;
+    private final Path path;
+    private final Options optionValues;
+    private final boolean deleteOnClose;
 }

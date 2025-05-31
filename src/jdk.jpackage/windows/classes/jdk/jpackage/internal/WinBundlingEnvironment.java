@@ -23,16 +23,13 @@
  * questions.
  */
 
-package jdk.jpackage.internal.cli;
+package jdk.jpackage.internal;
 
+import jdk.jpackage.internal.cli.StandardBundlingOperation;
 
-import jdk.jpackage.internal.model.BundlingOperationDescriptor;
+public final class WinBundlingEnvironment extends AbstractBundlingEnvironment {
 
-/**
- * Bundling operation scope.
- * <p>
- * The scope of bundling operations. E.g., app image or native package bundling.
- */
-interface BundlingOperationOptionScope extends OptionScope {
-    BundlingOperationDescriptor descriptor();
+    public WinBundlingEnvironment() {
+        super(StandardBundlingOperation.CREATE_WIN_EXE.descriptor());
+    }
 }

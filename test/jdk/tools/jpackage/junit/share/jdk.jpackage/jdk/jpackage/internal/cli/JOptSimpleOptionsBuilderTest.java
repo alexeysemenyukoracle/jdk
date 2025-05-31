@@ -58,6 +58,7 @@ import jdk.jpackage.internal.cli.OptionValueConverter.ConverterException;
 import jdk.jpackage.internal.cli.OptionValueExceptionFactory.StandardArgumentsMapper;
 import jdk.jpackage.internal.cli.TestUtils.OptionFailure;
 import jdk.jpackage.internal.cli.TestUtils.TestException;
+import jdk.jpackage.internal.model.BundlingOperationDescriptor;
 import jdk.jpackage.internal.util.Result;
 import jdk.jpackage.test.JUnitUtils.ExceptionAnalizer;
 import org.junit.jupiter.api.Assertions;
@@ -762,7 +763,11 @@ public class JOptSimpleOptionsBuilderTest {
     private static <T> OptionSpecBuilder<T> option(String name, Class<? extends T> valueType) {
         return OptionSpecBuilder.<T>create(valueType)
                 .name(Objects.requireNonNull(name))
-                .scope(new BundlingOperationOptionScope() {})
+                .scope(new BundlingOperationOptionScope() {
+                    @Override
+                    public BundlingOperationDescriptor descriptor() {
+                        throw new AssertionError();
+                    }})
                 .exceptionFactory(UNREACHABLE_EXCEPTION_FACTORY)
                 .exceptionFormatString("");
     }

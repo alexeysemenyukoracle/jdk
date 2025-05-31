@@ -32,48 +32,33 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Map;
+import jdk.jpackage.internal.cli.Options;
+import jdk.jpackage.internal.cli.StandardBundlingOperation;
+import jdk.jpackage.internal.model.BundlingOperationDescriptor;
 import jdk.jpackage.internal.model.ConfigException;
 import jdk.jpackage.internal.model.PackagerException;
 import jdk.jpackage.internal.model.WinExePackage;
 
 @SuppressWarnings("restricted")
-public class WinExeBundler extends AbstractBundler {
+public class WinExeBundler implements Bundler2 {
 
     static {
         System.loadLibrary("jpackage");
     }
 
     @Override
-    public String getName() {
-        return I18N.getString("exe.bundler.name");
+    public BundlingOperationDescriptor operation() {
+        return StandardBundlingOperation.CREATE_WIN_EXE.descriptor();
     }
 
     @Override
-    public String getID() {
-        return "exe";
+    public void createBundle(Options options) {
+        final var wixToolkit = Singleton.WIX_TOOLKIT.orElseThrow();
+        final var app = WinFromOpions.createWinApplication(options);
+        final var pkg = WinFromOpions.createWinMsiPackage(options, app);
+        WinMsiPackager.build().pkg(pkg).wixToolset(wixToolkit).execute();
     }
-
-    @Override
-    public String getBundleType() {
-        return "INSTALLER";
-    }
-
-    @Override
-    public boolean supported(boolean platformInstaller) {
-        return msiBundler.supported(platformInstaller);
-    }
-
-    @Override
-    public boolean isDefault() {
-        return true;
-    }
-
-    @Override
-    public boolean validate(Map<String, ? super Object> params)
-            throws ConfigException {
-        return msiBundler.validate(params);
-    }
-
+    
     @Override
     public Path execute(Map<String, ? super Object> params, Path outdir)
             throws PackagerException {

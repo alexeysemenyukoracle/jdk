@@ -39,7 +39,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
 import jdk.jpackage.internal.PackagingPipeline.PackageTaskID;
-import jdk.jpackage.internal.PackagingPipeline.StartupParameters;
+import jdk.jpackage.internal.PackagingPipeline.PackageStartupParameters;
 import jdk.jpackage.internal.PackagingPipeline.TaskID;
 import jdk.jpackage.internal.model.MacDmgPackage;
 import jdk.jpackage.internal.model.PackagerException;
@@ -83,7 +83,7 @@ record MacDmgPackager(MacDmgPackage pkg, BuildEnv env, Path hdiutil, Path output
 
         @Override
         protected void configurePackagingPipeline(PackagingPipeline.Builder pipelineBuilder,
-                StartupParameters startupParameters) {
+                PackageStartupParameters startupParameters) {
             final var packager = new MacDmgPackager(pkg, startupParameters.packagingEnv(),
                     validatedHdiutil(), outputDir, Optional.ofNullable(setFileUtility));
             packager.applyToPipeline(pipelineBuilder);

@@ -22,13 +22,26 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package jdk.jpackage.internal.model;
+package jdk.jpackage.internal.cli;
+
+import java.util.NoSuchElementException;
+import jdk.jpackage.internal.model.BundlingEnvironment;
+import jdk.jpackage.internal.model.BundlingOperationDescriptor;
 
 /**
- * Generic bundling operation.
- * <p>
- * Bundling operation is comprised of creating of {@link BundleSpec} instance and
- * using it a an input for {@link BundleCreator#create()} method to create a bundle.
+ * CLI bundling environment.
  */
-public interface BundlingOperation {
+public interface CliBundlingEnvironment extends BundlingEnvironment {
+
+    /**
+     * Requests to run a bundling operation denoted with the given descriptor with
+     * the given values of command line options.
+     *
+     * @param op      the descriptor of the requested bundling operation
+     * @param cmdline the validated values of the command line options
+     * @throws NoSuchElementException if the specified descriptor is not one of the
+     *                                items in the list returned by
+     *                                {@link #supportedOperations()} method
+     */
+    void createBundle(BundlingOperationDescriptor op, Options cmdline);
 }

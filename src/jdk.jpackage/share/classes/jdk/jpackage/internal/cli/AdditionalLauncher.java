@@ -28,5 +28,5 @@ package jdk.jpackage.internal.cli;
 import java.nio.file.Path;
 
 
-public record AdditionalLauncher(String name, Path propertyFile) {
+record AdditionalLauncher(String name, Path propertyFile) {
 }

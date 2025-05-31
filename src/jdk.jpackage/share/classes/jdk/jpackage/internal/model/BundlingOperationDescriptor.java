@@ -22,17 +22,34 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
+package jdk.jpackage.internal.model;
 
-package jdk.jpackage.internal.cli;
-
-
-import jdk.jpackage.internal.model.BundlingOperationDescriptor;
+import java.util.Objects;
+import jdk.internal.util.OperatingSystem;
 
 /**
- * Bundling operation scope.
- * <p>
- * The scope of bundling operations. E.g., app image or native package bundling.
+ * Descriptor of a generic bundling operation.
+ *
+ * @param os         the target bundle platform
+ * @param bundleType the target bundle type
  */
-interface BundlingOperationOptionScope extends OptionScope {
-    BundlingOperationDescriptor descriptor();
+public record BundlingOperationDescriptor(OperatingSystem os, String bundleType) {
+    public BundlingOperationDescriptor {
+        Objects.requireNonNull(os);
+        Objects.requireNonNull(bundleType);
+    }
+
+    public BundlingOperationDescriptor(String bundleType) {
+        this(OperatingSystem.current(), bundleType);
+    }
+
+    @Override
+    public String toString() {
+        return os.name() + ":" + bundleType;
+    }
+
+    static BundlingOperationDescriptor valueOf(String str) {
+        final var components = str.split(":");
+        return new BundlingOperationDescriptor(OperatingSystem.valueOf(components[0]), components[1]);
+    }
 }

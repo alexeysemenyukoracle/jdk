@@ -29,6 +29,10 @@ import java.util.Set;
 
 public final class SetBuilder<T> {
 
+    public static <T> SetBuilder<T> build(Class<? extends T> type) {
+        return new SetBuilder<>();
+    }
+
     public SetBuilder<T> set(Collection<? extends T> v) {
         return clear().add(v);
     }

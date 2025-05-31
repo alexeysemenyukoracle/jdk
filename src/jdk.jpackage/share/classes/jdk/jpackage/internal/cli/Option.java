@@ -25,7 +25,14 @@
 
 package jdk.jpackage.internal.cli;
 
+import static java.util.stream.Collectors.toSet;
+import static jdk.jpackage.internal.util.function.ThrowingFunction.toFunction;
+
+import java.lang.reflect.Modifier;
 import java.util.Objects;
+import java.util.Set;
+import java.util.function.Predicate;
+import java.util.stream.Stream;
 
 /**
  * Option identifier associated with option specification.
@@ -42,4 +49,33 @@ interface Option extends OptionIdentifier {
             }
         };
     }
+
+    static Predicate<Option> fromOptionSpecPredicate(Predicate<OptionSpec<?>> p) {
+        return option -> {
+            return p.test(option.getSpec());
+        };
+    }
+
+    /**
+     * Returns public options with option specs defined in the specified class.
+     * <p>
+     * The method uses reflection to get public fields of type {@link OptionValue}
+     * and filters those associated with {@link OptionSpec} instances.
+     *
+     * @param c the target class
+     * @return public options with option specs defined in the specified class
+     */
+    static Set<Option> getPublicOptionsWithSpecs(Class<?> c) {
+        return Stream.of(c.getFields()).filter(f -> {
+            return Modifier.isStatic(f.getModifiers());
+        }).map(f -> {
+            return toFunction(f::get).apply(null);
+        }).filter(OptionValue.class::isInstance)
+                .map(OptionValue.class::cast)
+                .map(OptionValue<?>::id)
+                .filter(Option.class::isInstance)
+                .map(Option.class::cast)
+                .collect(toSet());
+    }
+
 }

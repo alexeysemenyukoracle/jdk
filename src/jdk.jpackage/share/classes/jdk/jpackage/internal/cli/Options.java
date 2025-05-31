@@ -51,7 +51,11 @@ public interface Options {
         return find(id).isPresent();
     }
 
-    default Options setDefaultValue(OptionIdentifier id, Object value) {
+    default <T> Options copyWithDefaultValue(OptionValue<T> option, T value) {
+        return copyWithDefaultValue(option.id(), value);
+    }
+
+    default Options copyWithDefaultValue(OptionIdentifier id, Object value) {
         Objects.requireNonNull(id);
         Objects.requireNonNull(value);
         if (contains(id)) {
@@ -61,7 +65,7 @@ public interface Options {
         }
     }
 
-    default Options setParent(Options other) {
+    default Options copyWithParent(Options other) {
         return concat(this, other);
     }
 

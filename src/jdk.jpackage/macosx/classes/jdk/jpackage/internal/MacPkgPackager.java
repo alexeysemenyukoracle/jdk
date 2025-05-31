@@ -52,7 +52,7 @@ import javax.xml.transform.stream.StreamSource;
 import jdk.internal.util.Architecture;
 import jdk.internal.util.OSVersion;
 import jdk.jpackage.internal.PackagingPipeline.PackageTaskID;
-import jdk.jpackage.internal.PackagingPipeline.StartupParameters;
+import jdk.jpackage.internal.PackagingPipeline.PackageStartupParameters;
 import jdk.jpackage.internal.PackagingPipeline.TaskID;
 import jdk.jpackage.internal.model.MacPkgPackage;
 import jdk.jpackage.internal.model.PackagerException;
@@ -86,7 +86,7 @@ record MacPkgPackager(MacPkgPackage pkg, BuildEnv env, Optional<Services> servic
 
         @Override
         protected void configurePackagingPipeline(PackagingPipeline.Builder pipelineBuilder,
-                StartupParameters startupParameters) {
+                PackageStartupParameters startupParameters) {
             final var packager = new MacPkgPackager(pkg, startupParameters.packagingEnv(), createServices(), outputDir);
             packager.applyToPipeline(pipelineBuilder);
         }

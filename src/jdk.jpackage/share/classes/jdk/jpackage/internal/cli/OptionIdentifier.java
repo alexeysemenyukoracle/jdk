@@ -25,10 +25,23 @@
 
 package jdk.jpackage.internal.cli;
 
+import java.util.Objects;
 
 public interface OptionIdentifier {
 
     static OptionIdentifier createUnique() {
         return new OptionIdentifier() {};
+    }
+
+    static OptionIdentifier of(String id) {
+        return new Details.StringOptionIdentifier(id);
+    }
+
+    static final class Details {
+        private record StringOptionIdentifier(String value) implements OptionIdentifier {
+            StringOptionIdentifier {
+                Objects.requireNonNull(value);
+            }
+        }
     }
 }

@@ -34,8 +34,6 @@ import java.util.spi.ToolProvider;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import jdk.internal.util.OperatingSystem;
-import jdk.jpackage.internal.model.BundleCreator;
-import jdk.jpackage.internal.model.BundlingEnvironment;
 import jdk.jpackage.internal.model.BundlingOperation;
 import jdk.jpackage.internal.util.Result;
 import jdk.jpackage.test.JPackageCommand;
@@ -88,7 +86,7 @@ public class OptionsValidationFailTest {
                     out.append(firstErr.getMessage());
                     firstErr.printStackTrace(err);
                 }).map(builder -> {
-                    return new OptionsProcessor(builder, new BundlingEnvironment() {
+                    return new OptionsProcessor(builder, new CliBundlingEnvironment() {
 
                         @Override
                         public BundlingOperation defaultOperation() {
@@ -113,13 +111,13 @@ public class OptionsValidationFailTest {
                             return supportedBundlingOperations;
                         }
 
-                        @Override
-                        public BundleCreator<?> getBundleCreator(BundlingOperation op) {
-                            throw new UnsupportedOperationException();
-                        }
-
                         private final Set<BundlingOperation> supportedBundlingOperations =
                                 StandardBundlingOperation.ofPlatform(OperatingSystem.current()).collect(Collectors.toSet());
+
+                        @Override
+                        public void createBundle(BundlingOperation op, Options cmdline) {
+                            throw new AssertionError();
+                        }
 
                     }).validate().firstError().map((Exception ex) -> {
                         out.append(ex.getMessage());

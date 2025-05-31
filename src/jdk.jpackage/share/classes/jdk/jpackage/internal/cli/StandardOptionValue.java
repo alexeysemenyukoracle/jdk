@@ -35,9 +35,8 @@ import static jdk.jpackage.internal.cli.StandardBundlingOperation.SIGN_MAC_APP_I
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.fromOptionName;
 import static jdk.jpackage.internal.cli.StandardValueConverter.identityConv;
 import static jdk.jpackage.internal.cli.StandardValueConverter.pathConv;
-import static jdk.jpackage.internal.util.function.ThrowingFunction.toFunction;
+import static jdk.jpackage.internal.cli.StandardValueConverter.uuidConv;
 
-import java.lang.reflect.Modifier;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -45,6 +44,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -185,12 +185,12 @@ public final class StandardOptionValue {
             .outOfScope(NOT_BUILDING_APP_IMAGE)
             .create(toList());
 
-    public final static OptionValue<List<Path>> FILE_ASSOCIATIONS = fileOption("file-associations")
+    final static OptionValue<List<Path>> FILE_ASSOCIATIONS = fileOption("file-associations")
             .toArray(pathSeparator())
             .outOfScope(BundlingOperationModifier.BUNDLE_RUNTIME)
             .create(toList());
 
-    public final static OptionValue<List<AdditionalLauncher>> ADD_LAUNCHER = createAddLauncherOption("add-launcher");
+    final static OptionValue<List<AdditionalLauncher>> ADD_LAUNCHER = createAddLauncherOption("add-launcher");
 
     public final static OptionValue<Path> TEMP_ROOT = directoryOption("temp")
             .validatorExceptionFactory(ERROR_WITH_VALUE)
@@ -328,14 +328,40 @@ public final class StandardOptionValue {
 
     public final static OptionValue<Boolean> WIN_PER_USER_INSTALLATION = booleanOption("win-per-user-install").scope(nativeBundling()).create();
 
-    public final static OptionValue<Boolean> WIN_DIR_CHOOSER = booleanOption("win-dir-chooser").scope(nativeBundling()).create();
+    public final static OptionValue<Boolean> WIN_INSTALLDIR_CHOOSER = booleanOption("win-dir-chooser").scope(nativeBundling()).create();
 
-    public final static OptionValue<String> WIN_UPGRADE_UUID = stringOption("win-upgrade-uuid").scope(nativeBundling()).create();
+    public final static OptionValue<UUID> WIN_UPGRADE_UUID = uuidOption("win-upgrade-uuid").scope(nativeBundling()).create();
 
     public final static OptionValue<Boolean> WIN_CONSOLE_HINT = booleanOption("win-console")
             .outOfScope(NOT_BUILDING_APP_IMAGE)
             .mutate(launcherProperty())
             .create();
+
+
+    //
+    // Synthetic options
+    //
+
+    /**
+     * Processed additional launcher property files.
+     * <p>
+     * Items in the list are in the order "--add-launcher" options appeared on the
+     * command line. Every item in the list has {@link #SOURCE_PROPERY_FILE} option
+     * with the value set to the source property file and {@link #NAME} option with
+     * the value set to the additional launcher name.
+     */
+    public final static OptionValue<List<Options>> ADDITIONAL_LAUNCHERS = OptionValue.create();
+
+    /**
+     * Processed file association property files.
+     * <p>
+     * Items in the list are in the order "--file-associations" options appeared on
+     * the command line. Every item in the list has {@link #SOURCE_PROPERY_FILE}
+     * option with the value set to the source property file.
+     */
+    public final static OptionValue<List<Options>> FA = OptionValue.create();
+
+    public final static OptionValue<Path> SOURCE_PROPERY_FILE = OptionValue.create();
 
     /**
      * Returns options configuring a launcher.
@@ -356,20 +382,12 @@ public final class StandardOptionValue {
     }
 
     /**
-     * Returns all options defined in {@link StandardOptionValue} class.
+     * Returns all options with option specs defined in {@link StandardOptionValue} class.
      *
      * @return all defined options
      */
     static Set<Option> options() {
-        return Stream.of(StandardOptionValue.class.getFields()).filter(f -> {
-            return Modifier.isStatic(f.getModifiers());
-        }).map(f -> {
-            return toFunction(f::get).apply(null);
-        }).filter(OptionValue.class::isInstance)
-                .map(OptionValue.class::cast)
-                .map(OptionValue<?>::id)
-                .map(Option.class::cast)
-                .collect(toSet());
+        return Option.getPublicOptionsWithSpecs(StandardOptionValue.class);
     }
 
     /**
@@ -422,6 +440,13 @@ public final class StandardOptionValue {
 
     private static OptionSpecBuilder<String> stringOption(String name) {
         return option(name, String.class).converter(identityConv());
+    }
+
+    private static OptionSpecBuilder<UUID> uuidOption(String name) {
+        return option(name, UUID.class)
+                .converter(uuidConv())
+                .converterExceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME)
+                .converterExceptionFormatString("error.paramater-not-uuid");
     }
 
     private static OptionSpecBuilder<Path> pathOption(String name) {
@@ -504,8 +529,8 @@ public final class StandardOptionValue {
                                 optionValue, "error.paramater-add-launcher-malformed", cause);
                     } else if (theCause instanceof AddLauncherInvalidPropertyFile invalidFile) {
                         return invalidFile;
-                    } else if (theCause instanceof KnownExceptionType) {
-                        return (RuntimeException)theCause;
+                    } else if (theCause instanceof RuntimeException runtimeEx) {
+                        return runtimeEx;
                     } else {
                         return new RuntimeException(theCause);
                     }

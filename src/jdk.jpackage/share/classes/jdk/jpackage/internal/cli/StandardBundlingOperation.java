@@ -33,14 +33,16 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import jdk.internal.util.OperatingSystem;
+import jdk.jpackage.internal.model.BundlingOperationDescriptor;
 import jdk.jpackage.internal.model.PackageType;
 import jdk.jpackage.internal.model.StandardPackageType;
+import jdk.jpackage.internal.util.SetBuilder;
 
 
 /**
  * Standard jpackage operations.
  */
-enum StandardBundlingOperation implements BundlingOperationOptionScope {
+public enum StandardBundlingOperation implements BundlingOperationOptionScope {
     CREATE_WIN_APP_IMAGE(APP_IMAGE, "^(?!(linux-|mac-|win-exe-|win-msi-))", OperatingSystem.WINDOWS),
     CREATE_LINUX_APP_IMAGE(APP_IMAGE, "^(?!(win-|mac-|linux-rpm-|linux-deb-))", OperatingSystem.LINUX),
     CREATE_MAC_APP_IMAGE(APP_IMAGE, "^(?!(linux-|win-|mac-dmg-|mac-pkg-))", OperatingSystem.MACOS),
@@ -68,7 +70,7 @@ enum StandardBundlingOperation implements BundlingOperationOptionScope {
         return os;
     }
 
-    String packageTypeValue() {
+    public String packageTypeValue() {
         if (packageType.equals(APP_IMAGE)) {
             return "app-image";
         } else {
@@ -76,8 +78,13 @@ enum StandardBundlingOperation implements BundlingOperationOptionScope {
         }
     }
 
-    PackageType packageType() {
+    public PackageType packageType() {
         return packageType;
+    }
+
+    @Override
+    public BundlingOperationDescriptor descriptor() {
+        return new BundlingOperationDescriptor(os(), packageTypeValue());
     }
 
     static Stream<StandardBundlingOperation> ofPlatform(OperatingSystem os) {
@@ -104,14 +111,30 @@ enum StandardBundlingOperation implements BundlingOperationOptionScope {
         return scope.filter(StandardBundlingOperation.class::isInstance).map(StandardBundlingOperation.class::cast);
     }
 
-    static final Set<BundlingOperationOptionScope> WINDOWS = Set.of(
+    static final Set<BundlingOperationOptionScope> WINDOWS_CREATE_BUNDLE = Set.of(
             CREATE_WIN_APP_IMAGE, CREATE_WIN_MSI, CREATE_WIN_EXE);
 
-    static final Set<BundlingOperationOptionScope> LINUX = Set.of(
+    static final Set<BundlingOperationOptionScope> LINUX_CREATE_BUNDLE = Set.of(
             CREATE_LINUX_APP_IMAGE, CREATE_LINUX_RPM, CREATE_LINUX_DEB);
 
-    static final Set<BundlingOperationOptionScope> MACOS = Set.of(
-            CREATE_MAC_APP_IMAGE, CREATE_MAC_DMG, CREATE_MAC_PKG, SIGN_MAC_APP_IMAGE);
+    static final Set<BundlingOperationOptionScope> MACOS_CREATE_BUNDLE = Set.of(
+            CREATE_MAC_APP_IMAGE, CREATE_MAC_DMG, CREATE_MAC_PKG);
+
+    static final Set<BundlingOperationOptionScope> WINDOWS_CREATE_NATIVE = Set.of(
+            CREATE_WIN_MSI, CREATE_WIN_EXE);
+
+    static final Set<BundlingOperationOptionScope> LINUX_CREATE_NATIVE = Set.of(
+            CREATE_LINUX_RPM, CREATE_LINUX_DEB);
+
+    static final Set<BundlingOperationOptionScope> MACOS_CREATE_NATIVE = Set.of(
+            CREATE_MAC_DMG, CREATE_MAC_PKG);
+
+    static final Set<BundlingOperationOptionScope> WINDOWS = WINDOWS_CREATE_BUNDLE;
+
+    static final Set<BundlingOperationOptionScope> LINUX = LINUX_CREATE_BUNDLE;
+
+    static final Set<BundlingOperationOptionScope> MACOS = SetBuilder.build(
+            BundlingOperationOptionScope.class).add(MACOS_CREATE_BUNDLE).add(SIGN_MAC_APP_IMAGE).create();
 
     static final Set<BundlingOperationOptionScope> MAC_SIGNING = MACOS;
 

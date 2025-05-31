@@ -48,6 +48,7 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 import jdk.internal.util.OperatingSystem;
 import jdk.jpackage.internal.model.BundlingEnvironment;
+import jdk.jpackage.internal.model.BundlingOperationDescriptor;
 import jdk.jpackage.internal.model.ConfigException;
 import jdk.jpackage.internal.model.PackageType;
 
@@ -57,7 +58,7 @@ import jdk.jpackage.internal.model.PackageType;
 final class OptionsAnalyzer {
 
     OptionsAnalyzer(Options cmdline, BundlingEnvironment bundlingEnv) {
-        this(cmdline.setDefaultValue(BUNDLING_OPERATION.id(), BUNDLING_OPERATION.findIn(cmdline).or(() -> {
+        this(cmdline.copyWithDefaultValue(BUNDLING_OPERATION, BUNDLING_OPERATION.findIn(cmdline).or(() -> {
             return getBundlingOperation(cmdline, OperatingSystem.current(), bundlingEnv);
         }).orElseThrow()));
     }
@@ -67,6 +68,10 @@ final class OptionsAnalyzer {
         bundlingOperation = BUNDLING_OPERATION.getFrom(cmdline);
         hasAppImage = PREDEFINED_APP_IMAGE.containsIn(cmdline);
         isRuntimeInstaller = isRuntimeInstaller(cmdline);
+    }
+
+    BundlingOperationDescriptor bundlingOperation() {
+        return bundlingOperation.descriptor();
     }
 
     List<? extends Exception> findErrors() {

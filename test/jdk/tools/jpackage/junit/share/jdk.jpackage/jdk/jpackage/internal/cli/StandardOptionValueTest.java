@@ -62,7 +62,7 @@ public class StandardOptionValueTest {
             return Modifier.isStatic(f.getModifiers());
         }).map(f -> {
             return toFunction(f::get).apply(null);
-        }).filter(OptionValue.class::isInstance).count();
+        }).filter(OptionValue.class::isInstance).map(OptionValue.class::cast).filter(ov -> ov.asOption().isPresent()).count();
 
         final var actualOptionCount = options.size();
 

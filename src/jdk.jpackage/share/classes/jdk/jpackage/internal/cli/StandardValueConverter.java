@@ -27,6 +27,7 @@ package jdk.jpackage.internal.cli;
 
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.util.UUID;
 
 
 final class StandardValueConverter {
@@ -39,6 +40,10 @@ final class StandardValueConverter {
         return PATH_CONV;
     }
 
+    static ValueConverter<UUID> uuidConv() {
+        return UUID_CONV;
+    }
+
     private static final ValueConverter<String> IDENTITY_CONV = ValueConverter.create(x -> x, String.class);
     private static final ValueConverter<Path> PATH_CONV = ValueConverter.create(str -> {
         try {
@@ -47,4 +52,5 @@ final class StandardValueConverter {
             throw new IllegalArgumentException(ex);
         }
     }, Path.class);
+    private static final ValueConverter<UUID> UUID_CONV = ValueConverter.create(UUID::fromString, UUID.class);
 }

@@ -60,16 +60,29 @@ final class PackagingPipeline {
     }
 
     void execute(BuildEnv env, Package pkg, Path outputDir) throws PackagerException {
-        execute((StartupParameters)createPackagingTaskContext(env, pkg, outputDir,
+        execute((PackageStartupParameters)createPackagingTaskContext(env, pkg, outputDir,
                 taskConfig, appImageLayoutForPackaging.apply(pkg)));
     }
 
-    void execute(StartupParameters startupParameters) throws PackagerException {
+    void execute(PackageStartupParameters startupParameters) throws PackagerException {
         execute(pkgContextMapper.apply(createTaskContext((PackagingTaskContext)startupParameters)));
     }
 
     interface StartupParameters {
-        BuildEnv packagingEnv();
+        BuildEnv env();
+        AppImageLayout envLayout();
+    }
+
+    interface ApplicationStartupParameters extends StartupParameters {
+        Application app();
+        default ApplicationLayout envLayout() {
+            return app().asApplicationLayout().orElseThrow();
+        }
+    }
+
+    interface PackageStartupParameters extends StartupParameters {
+        Package pkg();
+        Path outputDir();
     }
 
     interface TaskAction {
@@ -287,7 +300,12 @@ final class PackagingPipeline {
             return taskGraphSnapshot;
         }
 
-        StartupParameters createStartupParameters(BuildEnv env, Package pkg, Path outputDir) {
+        PackageStartupParameters createStartupParameters(BuildEnv env, Package pkg, Path outputDir) {
+            return createPackagingTaskContext(env, pkg, outputDir, taskConfig,
+                    validatedAppImageLayoutForPackaging().apply(pkg));
+        }
+        
+        ApplicationStartupParameters createStartupParameters(BuildEnv env, Application app) {
             return createPackagingTaskContext(env, pkg, outputDir, taskConfig,
                     validatedAppImageLayoutForPackaging().apply(pkg));
         }
@@ -416,8 +434,8 @@ final class PackagingPipeline {
     }
 
     private TaskContext createTaskContext(PackagingTaskContext packagingContext) {
-        final var pkgEnv = BuildEnv.withAppImageDir(packagingContext.env.env(), packagingContext.srcAppImage.path());
-        return new DefaultTaskContext(taskGraph, pkgEnv, packagingContext.env.pkg.app(),
+        final var pkgEnv = BuildEnv.withAppImageDir(packagingContext.env(), packagingContext.srcAppImage.path());
+        return new DefaultTaskContext(taskGraph, pkgEnv, packagingContext.pkg().app(),
                 packagingContext.srcAppImage.asApplicationLayout(), Optional.of(packagingContext));
     }
 
@@ -489,17 +507,32 @@ final class PackagingPipeline {
         }
     }
 
-    private record PackagingTaskContext(PackageBuildEnv<Package, AppImageLayout> env,
-            AppImageDesc srcAppImage) implements TaskContext, StartupParameters {
+    private record PackagingTaskContext(PackageBuildEnv<Package, AppImageLayout> cfg,
+            AppImageDesc srcAppImage) implements TaskContext, PackageStartupParameters {
 
         PackagingTaskContext {
-            Objects.requireNonNull(env);
+            Objects.requireNonNull(cfg);
             Objects.requireNonNull(srcAppImage);
         }
 
         @Override
-        public BuildEnv packagingEnv() {
-            return env.env;
+        public BuildEnv env() {
+            return cfg.env();
+        }
+
+        @Override
+        public Package pkg() {
+            return cfg.pkg();
+        }
+
+        @Override
+        public AppImageLayout envLayout() {
+            return cfg.envLayout();
+        }
+
+        @Override
+        public Path outputDir() {
+            return cfg.outputDir();
         }
 
         @Override
@@ -516,22 +549,22 @@ final class PackagingPipeline {
         @Override
         public void execute(TaskAction taskAction) throws IOException, PackagerException {
             if (taskAction instanceof PackageTaskAction<?, ?>) {
-                ((PackageTaskAction<Package, AppImageLayout>)taskAction).execute(env);
+                ((PackageTaskAction<Package, AppImageLayout>)taskAction).execute(cfg);
             } else if (taskAction instanceof CopyAppImageTaskAction<?>) {
-                ((CopyAppImageTaskAction<Package>)taskAction).execute(env.pkg(),
-                        srcAppImage, new AppImageDesc(env.envLayout(), env.env().appImageDir()));
+                ((CopyAppImageTaskAction<Package>)taskAction).execute(cfg.pkg(),
+                        srcAppImage, new AppImageDesc(envLayout(), env().appImageDir()));
             } else {
                 throw new IllegalArgumentException();
             }
         }
 
         AppImageBuildEnv<Application, AppImageLayout> appImageBuildEnv() {
-            return env.appImageBuildEnv();
+            return cfg.appImageBuildEnv();
         }
     }
 
     private record DefaultTaskContext(FixedDAG<TaskID> taskGraph, BuildEnv env, Application app,
-            Optional<ApplicationLayout> appLayout, Optional<PackagingTaskContext> pkg) implements TaskContext {
+            Optional<ApplicationLayout> appLayout, Optional<PackagingTaskContext> pkg) implements TaskContext, ApplicationStartupParameters {
 
         DefaultTaskContext {
             Objects.requireNonNull(taskGraph);
@@ -539,6 +572,13 @@ final class PackagingPipeline {
             Objects.requireNonNull(app);
             Objects.requireNonNull(appLayout);
             Objects.requireNonNull(pkg);
+            if (appLayout.isEmpty() == pkg.isEmpty()) {
+                
+            }
+        }
+
+        DefaultTaskContext(FixedDAG<TaskID> taskGraph, BuildEnv env, Application app) {
+            this();
         }
 
         @Override
