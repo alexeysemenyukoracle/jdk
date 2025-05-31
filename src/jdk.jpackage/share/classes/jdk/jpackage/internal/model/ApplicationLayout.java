@@ -24,6 +24,7 @@
  */
 package jdk.jpackage.internal.model;
 
+import static jdk.jpackage.internal.util.PathUtils.relativizeNullablePath;
 import static jdk.jpackage.internal.util.PathUtils.resolveNullablePath;
 
 import java.nio.file.Path;
@@ -43,6 +44,24 @@ public interface ApplicationLayout extends AppImageLayout, ApplicationLayoutMixi
     @Override
     default ApplicationLayout resolveAt(Path root) {
         return buildFrom(this).resolveAt(root).create();
+    }
+
+    @Override
+    default ApplicationLayout unresolve() {
+        if (isResolved()) {
+            return buildFrom(this).unresolve().create();
+        } else {
+            return this;
+        }
+    }
+
+    @Override
+    default ApplicationLayout emptyRootDirectory() {
+        if (isResolved()) {
+            return buildFrom(this).rootDirectory("").create();
+        } else {
+            return this;
+        }
     }
 
     /**
@@ -121,6 +140,17 @@ public interface ApplicationLayout extends AppImageLayout, ApplicationLayoutMixi
             appModsDirectory(resolveNullablePath(base, appModsDirectory));
             desktopIntegrationDirectory(resolveNullablePath(base, desktopIntegrationDirectory));
             contentDirectory(resolveNullablePath(base, contentDirectory));
+            return this;
+        }
+
+        public Builder unresolve() {
+            launchersDirectory(relativizeNullablePath(rootDirectory, launchersDirectory));
+            appDirectory(relativizeNullablePath(rootDirectory, appDirectory));
+            runtimeDirectory(relativizeNullablePath(rootDirectory, runtimeDirectory));
+            appModsDirectory(relativizeNullablePath(rootDirectory, appModsDirectory));
+            desktopIntegrationDirectory(relativizeNullablePath(rootDirectory, desktopIntegrationDirectory));
+            contentDirectory(relativizeNullablePath(rootDirectory, contentDirectory));
+            rootDirectory("");
             return this;
         }
 

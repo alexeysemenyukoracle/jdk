@@ -51,6 +51,10 @@ public final class PathUtils {
         return Optional.ofNullable(path).map(base::resolve).orElse(null);
     }
 
+    public static Path relativizeNullablePath(Path base, Path path) {
+        return Optional.ofNullable(path).map(base::relativize).orElse(null);
+    }
+
     public static Path normalizedAbsolutePath(Path path) {
         if (path != null) {
             return path.normalize().toAbsolutePath();

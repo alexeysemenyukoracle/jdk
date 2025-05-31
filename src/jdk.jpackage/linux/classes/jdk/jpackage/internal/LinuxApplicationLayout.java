@@ -24,6 +24,7 @@
  */
 package jdk.jpackage.internal;
 
+import static jdk.jpackage.internal.util.PathUtils.relativizeNullablePath;
 import static jdk.jpackage.internal.util.PathUtils.resolveNullablePath;
 
 import java.nio.file.Path;
@@ -42,5 +43,24 @@ interface LinuxApplicationLayout extends ApplicationLayout, LinuxApplicationLayo
     default LinuxApplicationLayout resolveAt(Path root) {
         return create(ApplicationLayout.super.resolveAt(root),
                 resolveNullablePath(root, libAppLauncher()));
+    }
+
+    @Override
+    default LinuxApplicationLayout emptyRootDirectory() {
+        if (isResolved()) {
+            return create(ApplicationLayout.super.emptyRootDirectory(), libAppLauncher());
+        } else {
+            return this;
+        }
+    }
+
+    @Override
+    default LinuxApplicationLayout unresolve() {
+        if (isResolved()) {
+            return create(ApplicationLayout.super.unresolve(),
+                    relativizeNullablePath(rootDirectory(), libAppLauncher()));
+        } else {
+            return this;
+        }
     }
 }

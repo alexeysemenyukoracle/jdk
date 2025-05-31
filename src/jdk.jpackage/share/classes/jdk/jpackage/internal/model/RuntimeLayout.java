@@ -25,6 +25,7 @@
 package jdk.jpackage.internal.model;
 
 import static jdk.jpackage.internal.util.PathUtils.resolveNullablePath;
+import static jdk.jpackage.internal.util.PathUtils.relativizeNullablePath;
 
 import java.nio.file.Path;
 import jdk.jpackage.internal.util.CompositeProxy;
@@ -41,6 +42,15 @@ public interface RuntimeLayout extends AppImageLayout {
     default RuntimeLayout resolveAt(Path root) {
         return create(new AppImageLayout.Stub(resolveNullablePath(root, rootDirectory()),
                 resolveNullablePath(root, runtimeDirectory())));
+    }
+
+    @Override
+    default RuntimeLayout unresolve() {
+        if (isResolved()) {
+            return create(new AppImageLayout.Stub(relativizeNullablePath(rootDirectory(), runtimeDirectory())));
+        } else {
+            return this;
+        }
     }
 
     /**

@@ -24,6 +24,7 @@
  */
 package jdk.jpackage.internal;
 
+import static jdk.jpackage.internal.util.PathUtils.relativizeNullablePath;
 import static jdk.jpackage.internal.util.PathUtils.resolveNullablePath;
 
 import java.nio.file.Path;
@@ -42,5 +43,24 @@ interface MacApplicationLayout extends ApplicationLayout, MacApplicationLayoutMi
     default MacApplicationLayout resolveAt(Path root) {
         return create(ApplicationLayout.super.resolveAt(root),
                 resolveNullablePath(root, runtimeRootDirectory()));
+    }
+
+    @Override
+    default MacApplicationLayout emptyRootDirectory() {
+        if (isResolved()) {
+            return create(ApplicationLayout.super.emptyRootDirectory(), runtimeRootDirectory());
+        } else {
+            return this;
+        }
+    }
+
+    @Override
+    default MacApplicationLayout unresolve() {
+        if (isResolved()) {
+            return create(ApplicationLayout.super.unresolve(),
+                    relativizeNullablePath(rootDirectory(), runtimeRootDirectory()));
+        } else {
+            return this;
+        }
     }
 }
