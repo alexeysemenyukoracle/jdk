@@ -23,22 +23,31 @@
 
 package jdk.jpackage.internal;
 
+import static jdk.jpackage.internal.util.function.ThrowingConsumer.toConsumer;
+import static jdk.jpackage.internal.util.function.ThrowingSupplier.toSupplier;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import jdk.jpackage.internal.PackagingPipeline.BuildApplicationTaskID;
+import jdk.jpackage.internal.PackagingPipeline.CopyAppImageTaskID;
+import jdk.jpackage.internal.PackagingPipeline.PackageTaskID;
 import jdk.jpackage.internal.PackagingPipeline.PrimaryTaskID;
+import jdk.jpackage.internal.PackagingPipeline.TaskID;
 import jdk.jpackage.internal.model.AppImageLayout;
 import jdk.jpackage.internal.model.Application;
 import jdk.jpackage.internal.model.ApplicationLayout;
@@ -47,6 +56,8 @@ import jdk.jpackage.internal.model.Package;
 import jdk.jpackage.internal.model.PackageType;
 import jdk.jpackage.internal.model.PackagerException;
 import jdk.jpackage.internal.model.RuntimeBuilder;
+import jdk.jpackage.internal.model.RuntimeLayout;
+import jdk.jpackage.internal.util.CompositeProxy;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -76,6 +87,18 @@ public class PackagingPipelineTest {
         }
 
         assertEquals(app.appImageDirName(), env.appImageDir().getFileName());
+
+        var executedTaskActions = dryRun(builder, toConsumer(_ -> {
+            builder.create().execute(env, app);
+        }));
+
+        List<TaskID> expectedActions = new ArrayList<>();
+        if (app.runtimeBuilder().isPresent()) {
+            expectedActions.add(BuildApplicationTaskID.RUNTIME);
+        }
+        expectedActions.addAll(List.of(BuildApplicationTaskID.LAUNCHERS, BuildApplicationTaskID.CONTENT));
+
+        assertEquals(expectedActions, executedTaskActions);
     }
 
     @Test
@@ -122,70 +145,218 @@ public class PackagingPipelineTest {
         });
 
         assertEquals(Path.of("c"), dstEnv.appImageDir().getFileName());
+
+        var executedTaskActions = dryRun(builder, toConsumer(_ -> {
+            builder.create().execute(dstEnv, dstApp);
+        }));
+
+        assertEquals(List.of(PrimaryTaskID.BUILD_APPLICATION_IMAGE), executedTaskActions);
     }
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    void testBuildPackage(boolean transformLayout, @TempDir Path workDir) throws ConfigException, PackagerException, IOException {
+    void testBuildPackage(boolean overrideLayout, @TempDir Path workDir) throws ConfigException, PackagerException, IOException {
 
         final var outputDir = workDir.resolve("bundles");
-        final var pkg = createPackage(createApp(TEST_LAYOUT_1, TestRuntimeBuilder.INSTANCE));
+        final var pkg = buildPackage(createApp(TEST_LAYOUT_1, TestRuntimeBuilder.INSTANCE)).create();
         final var env = buildEnv(workDir.resolve("build")).appImageDirFor(pkg).create();
 
-        buildPipeline().create().execute(env, pkg, outputDir);
+        final var builder = buildPipeline();
+        if (overrideLayout) {
+            builder.appImageLayoutForPackaging(_ -> TEST_LAYOUT_2);
+        }
 
-        final var expected = createTestPackageFileContents(env.appImageDirLayout());
+        // Will create an app image in `env.appImageDir()` directory
+        // with `pkg.packageLayout()` layout or `TEST_LAYOUT_2`.
+        // Will convert the created app image into a package.
+        builder.create().execute(env, pkg, outputDir);
+
+        final String expected;
+        if (overrideLayout) {
+            expected = createTestPackageFileContents(TEST_LAYOUT_2.resolveAt(env.appImageDir()));
+        } else {
+            expected = createTestPackageFileContents(env.appImageDirLayout());
+        }
+
         final var actual = Files.readString(outputDir.resolve(pkg.packageFileNameWithSuffix()));
 
         assertEquals(expected, actual);
+        System.out.println(String.format("testBuildPackage(%s):\n---\n%s\n---", overrideLayout, actual));
+
+        var executedTaskActions = dryRun(builder, toConsumer(_ -> {
+            builder.create().execute(env, pkg, outputDir);
+        }));
+
+        assertEquals(List.of(BuildApplicationTaskID.RUNTIME, BuildApplicationTaskID.LAUNCHERS,
+                BuildApplicationTaskID.CONTENT, PackageTaskID.RUN_POST_IMAGE_USER_SCRIPT,
+                PrimaryTaskID.PACKAGE), executedTaskActions);
     }
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    void testBuildRuntimeInstaller(boolean transformLayout, @TempDir Path workDir) throws ConfigException, PackagerException {
+    void testBuildRuntimeInstaller(boolean transformLayout, @TempDir Path workDir) throws ConfigException, PackagerException, IOException {
+
+        // Create a runtime image in `env.appImageDir()` directory.
+        final var env = buildEnv(workDir.resolve("build"))
+                .appImageLayout(RuntimeLayout.DEFAULT)
+                .appImageDir(workDir.resolve("rt"))
+                .create();
+        TestRuntimeBuilder.INSTANCE.create(env.appImageDirLayout());
+
+        final var pkgBuilder = buildPackage(createApp(RuntimeLayout.DEFAULT));
+        if (transformLayout) {
+            // Use a custom package app image layout with the default installation directory.
+            pkgBuilder.packageLayout(TEST_LAYOUT_2.resolveAt(pkgBuilder.create().relativeInstallDir()).emptyRootDirectory());
+        }
+
+        createAndVerifyPackage(buildPipeline(), pkgBuilder.create(), env, workDir.resolve("bundles"),
+                String.format("testBuildRuntimeInstaller(%s)", transformLayout),
+                CopyAppImageTaskID.COPY, PackageTaskID.RUN_POST_IMAGE_USER_SCRIPT, PrimaryTaskID.PACKAGE);
     }
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    void testBuildPackageFromExternalAppImage(boolean transformLayout) throws ConfigException, PackagerException {
+    void testBuildPackageFromExternalAppImage(boolean transformLayout, @TempDir Path workDir) throws ConfigException, PackagerException, IOException {
 
+        final var env = setupBuildEnvForExternalAppImage(workDir);
+
+        final var pkgBuilder = buildPackage(createApp(TEST_LAYOUT_1)).predefinedAppImage(env.appImageDir());
+        if (transformLayout) {
+            // Use a custom package app image layout with the default installation directory.
+            pkgBuilder.packageLayout(TEST_LAYOUT_2.resolveAt(pkgBuilder.create().relativeInstallDir()).emptyRootDirectory());
+        }
+
+        createAndVerifyPackage(buildPipeline(), pkgBuilder.create(), env, workDir.resolve("bundles"),
+                String.format("testBuildPackageFromExternalAppImage(%s)", transformLayout),
+                CopyAppImageTaskID.COPY, PackageTaskID.RUN_POST_IMAGE_USER_SCRIPT, PrimaryTaskID.PACKAGE);
     }
 
-    @ParameterizedTest
-    @ValueSource(booleans = {true, false})
-    void testBuildPackageFromExternalAppImageNoCopy(boolean transformLayout) throws ConfigException, PackagerException {
+    @Test
+    void testBuildPackageFromExternalAppImageWithoutExternalAppImage(@TempDir Path workDir) throws ConfigException, PackagerException, IOException {
 
+        final var env = setupBuildEnvForExternalAppImage(workDir);
+        final var pkg = buildPackage(createApp(TEST_LAYOUT_1)).create();
+        final var pipeline = buildPipeline().create();
+
+        assertThrowsExactly(UnsupportedOperationException.class, () -> pipeline.execute(env, pkg, workDir));
     }
 
-    private static Application createApp(ApplicationLayout appLayout) {
-        return createApp(appLayout, Optional.empty());
+    private static BuildEnv setupBuildEnvForExternalAppImage(Path workDir) throws ConfigException {
+        // Create an app image in `env.appImageDir()` directory.
+        final var env = buildEnv(workDir.resolve("build"))
+                .appImageLayout(TEST_LAYOUT_1.resolveAt(Path.of("a/b/c/d")).emptyRootDirectory())
+                .appImageDir(workDir.resolve("app-image"))
+                .create();
+        TestRuntimeBuilder.INSTANCE.create(env.appImageDirLayout());
+        TestLauncher.INSTANCE.create((ApplicationLayout)env.appImageDirLayout());
+
+        return env;
     }
 
-    private static Application createApp(ApplicationLayout appLayout, RuntimeBuilder runtimeBuilder) {
-        return createApp(appLayout, Optional.of(runtimeBuilder));
+    private static void createAndVerifyPackage(PackagingPipeline.Builder builder, Package pkg,
+            BuildEnv env, Path outputDir, String logMsgHeader, TaskID... expectedExecutedTaskActions) throws PackagerException, IOException {
+        Objects.requireNonNull(logMsgHeader);
+
+        final var startupParameters = builder.createStartupParameters(env, pkg, outputDir);
+
+        assertNotSameAppImageDirs(env, startupParameters.packagingEnv());
+
+        // Will create an app image in `startupParameters.packagingEnv().appImageDir()` directory
+        // with `pkg.packageLayout()` layout using an app image (runtime image) from `env.appImageDir()` as input.
+        // Will convert the created app image into a package.
+        // Will not overwrite the contents of `env.appImageDir()` directory.
+        builder.create().execute(startupParameters);
+
+        final var expected = createTestPackageFileContents(
+                pkg.packageLayout().resolveAt(startupParameters.packagingEnv().appImageDir()));
+
+        final var actual = Files.readString(outputDir.resolve(pkg.packageFileNameWithSuffix()));
+
+        assertEquals(expected, actual);
+        System.out.println(String.format("%s:\n---\n%s\n---", logMsgHeader, actual));
+
+        var actualExecutedTaskActions = dryRun(builder, toConsumer(_ -> {
+            builder.create().execute(startupParameters);
+        }));
+
+        assertEquals(List.of(expectedExecutedTaskActions), actualExecutedTaskActions);
     }
 
-    private static Application createApp(ApplicationLayout appLayout, Optional<RuntimeBuilder> runtimeBuilder) {
-        Objects.requireNonNull(appLayout);
+
+    public static List<PackagingPipeline.TaskID> dryRun(PackagingPipeline.Builder builder,
+            Consumer<PackagingPipeline.Builder> callback) {
+
+        List<PackagingPipeline.TaskID> executedTaskActions = new ArrayList<>();
+        builder.configuredTasks().filter(PackagingPipeline.Builder.TaskBuilder::hasAction).forEach(taskBuilder -> {
+            var taskId = taskBuilder.task();
+            taskBuilder.action(() -> {
+                executedTaskActions.add(taskId);
+            }).add();
+        });
+
+        callback.accept(builder);
+
+        return executedTaskActions;
+    }
+
+    private static Application createApp(AppImageLayout appImageLayout) {
+        return createApp(appImageLayout, Optional.empty());
+    }
+
+    private static Application createApp(AppImageLayout appImageLayout, RuntimeBuilder runtimeBuilder) {
+        return createApp(appImageLayout, Optional.of(runtimeBuilder));
+    }
+
+    private static Application createApp(AppImageLayout appImageLayout, Optional<RuntimeBuilder> runtimeBuilder) {
+        Objects.requireNonNull(appImageLayout);
         Objects.requireNonNull(runtimeBuilder);
 
         return new Application.Stub("foo", "My app", "1.0", "Acme", "copyright",
-                Optional.empty(), List.of(), appLayout, runtimeBuilder, List.of(), Map.of());
+                Optional.empty(), List.of(), appImageLayout, runtimeBuilder, List.of(), Map.of());
     }
 
-    private static Package createPackage(Application app) {
-        return createPackage(app, Optional.empty());
+
+    private static final class PackageBuilder {
+        PackageBuilder(Application app) {
+            this.app = Objects.requireNonNull(app);
+        }
+
+        Package create() {
+            var pkg = new Package.Stub(app, new PackageType() {}, "the-package",
+                    "My package", "1.0", Optional.empty(), Optional.empty(),
+                    Optional.ofNullable(predefinedAppImage), TEST_INSTALL_DIR);
+
+            if (pkgLayout != null) {
+                return CompositeProxy.build()
+                        // Need this because PackageWithCustomPackageLayout and
+                        // PackageWithCustomPackageLayoutMixin interfaces are package-private.
+                        .invokeTunnel(CompositeProxyTunnel.INSTANCE)
+                        .create(PackageWithCustomPackageLayout.class, pkg,
+                                new PackageWithCustomPackageLayoutMixin.Stub(pkgLayout));
+            } else {
+                return pkg;
+            }
+        }
+
+        PackageBuilder packageLayout(AppImageLayout v) {
+            pkgLayout = v;
+            return this;
+        }
+
+        PackageBuilder predefinedAppImage(Path v) {
+            predefinedAppImage = v;
+            return this;
+        }
+
+
+        private AppImageLayout pkgLayout;
+        private Path predefinedAppImage;
+        private final Application app;
     }
 
-    private static Package createPackage(Application app, Path predefinedAppImage) {
-        return createPackage(app, Optional.of(predefinedAppImage));
-    }
 
-    private static Package createPackage(Application app, Optional<Path> predefinedAppImage) {
-        Objects.requireNonNull(app);
-        Objects.requireNonNull(predefinedAppImage);
-        return new Package.Stub(app, new PackageType() {}, "the-package", "My package",
-                "1.0", Optional.empty(), Optional.empty(), predefinedAppImage, TEST_INSTALL_DIR);
+    private static PackageBuilder buildPackage(Application app) {
+        return new PackageBuilder(app);
     }
 
     private static BuildEnvBuilder buildEnv(Path rootDir) {
@@ -194,6 +365,7 @@ public class PackagingPipelineTest {
 
     private static PackagingPipeline.Builder buildPipeline() {
         return PackagingPipeline.buildStandard()
+                // Disable building the app image file (.jpackage.xml) as we don't have launchers in the test app.
                 .task(BuildApplicationTaskID.APP_IMAGE_FILE).noaction().add()
                 .task(BuildApplicationTaskID.LAUNCHERS).applicationAction(cfg -> {
                     TestLauncher.INSTANCE.create(cfg.resolvedLayout());
@@ -209,8 +381,22 @@ public class PackagingPipelineTest {
     private static String createTestPackageFileContents(AppImageLayout pkgLayout) throws IOException {
         var root = pkgLayout.rootDirectory();
         try (var walk = Files.walk(root)) {
-            return walk.sorted().map(root::relativize).map(Path::toString).collect(Collectors.joining("\n"));
+            return walk.sorted().map(path -> {
+                var relativePath = root.relativize(path);
+                if (Files.isRegularFile(path)) {
+                    return String.format("%s[%s]", relativePath, toSupplier(() -> Files.readString(path)).get());
+                } else {
+                    return relativePath.toString();
+                }
+            }).collect(Collectors.joining("\n"));
         }
+    }
+
+    private static void assertNotSameAppImageDirs(BuildEnv a, BuildEnv b) {
+        assertNotEquals(a.appImageDir(), b.appImageDir());
+        assertEquals(a.buildRoot(), b.buildRoot());
+        assertEquals(a.configDir(), b.configDir());
+        assertEquals(a.resourceDir(), b.resourceDir());
     }
 
 
@@ -270,6 +456,19 @@ public class PackagingPipelineTest {
         private final static String CONTENT = "this is the launcher";
 
         static final TestLauncher INSTANCE = new TestLauncher();
+    }
+
+
+    interface PackageWithCustomPackageLayout extends Package, PackageWithCustomPackageLayoutMixin {
+        @Override
+        AppImageLayout packageLayout();
+    }
+
+    interface PackageWithCustomPackageLayoutMixin {
+        AppImageLayout packageLayout();
+
+        record Stub(AppImageLayout packageLayout) implements PackageWithCustomPackageLayoutMixin {
+        }
     }
 
 
