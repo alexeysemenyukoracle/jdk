@@ -443,7 +443,9 @@ final class PackagingPipeline {
         Objects.requireNonNull(env);
         Objects.requireNonNull(outputDir);
         Objects.requireNonNull(taskConfig);
-        Objects.requireNonNull(appImageLayoutForPackaging);
+        if (appImageLayoutForPackaging.isResolved()) {
+            throw new IllegalArgumentException();
+        }
 
         final AppImageDesc srcAppImageDesc;
         final AppImageDesc dstAppImageDesc;
@@ -453,16 +455,22 @@ final class PackagingPipeline {
             srcAppImageDesc = new AppImageDesc(appImageLayoutForPackaging, env.appImageDir());
             dstAppImageDesc = srcAppImageDesc;
         } else {
-            srcAppImageDesc = new AppImageDesc(pkg.app().imageLayout(), pkg.predefinedAppImage().orElseGet(() -> {
+            srcAppImageDesc = pkg.predefinedAppImage().map(predefinedAppImage -> {
+                if (predefinedAppImage.equals(env.appImageDir())) {
+                    return env.appImageDesc();
+                } else {
+                    return new AppImageDesc(pkg.appImageLayout(), predefinedAppImage);
+                }
+            }).orElseGet(() -> {
                 // No predefined app image and no runtime builder.
                 // This should be runtime packaging.
                 if (pkg.isRuntimeInstaller()) {
-                    return env.appImageDir();
+                    return env.appImageDesc();
                 } else {
                     // Can't create app image without runtime builder.
                     throw new UnsupportedOperationException();
                 }
-            }));
+            });
 
             if (taskConfig.get(CopyAppImageTaskID.COPY).action().isEmpty()) {
                 // "copy app image" task action is undefined indicating
@@ -616,11 +624,7 @@ final class PackagingPipeline {
         Objects.requireNonNull(config);
         return () -> {
             if (config.action.isPresent() && context.test(id)) {
-                try {
-                    context.execute(config.action.orElseThrow());
-                } catch (ExceptionBox ex) {
-                    throw ExceptionBox.rethrowUnchecked(ex);
-                }
+                context.execute(config.action.orElseThrow());
             }
             return null;
         };
