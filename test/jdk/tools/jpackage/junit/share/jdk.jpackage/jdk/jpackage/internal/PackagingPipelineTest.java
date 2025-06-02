@@ -127,7 +127,7 @@ public class PackagingPipelineTest {
                     assertSame(dstApp, cfg.app());
                     assertEquals(dstEnv.appImageDir(), cfg.env().appImageDirLayout().rootDirectory());
                     assertFalse(Files.exists(dstEnv.appImageDir()));
-                    PackagingPipeline.copyAppImage(srcEnv.appImageDesc(), cfg.env().appImageDesc(), false);
+                    PackagingPipeline.copyAppImage(srcEnv.appImageDirLayout(), cfg.env().appImageDirLayout(), false);
                 }).add();
 
         // Disable the default "build application image" actions of the tasks which

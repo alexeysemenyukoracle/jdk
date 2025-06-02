@@ -206,8 +206,8 @@ final class MacPackagingPipeline {
         }).get();
     }
 
-    private static void copyAppImage(MacPackage pkg, AppImageDesc srcAppImage,
-            AppImageDesc dstAppImage) throws IOException {
+    private static void copyAppImage(MacPackage pkg, AppImageLayout srcAppImage,
+            AppImageLayout dstAppImage) throws IOException {
         PackagingPipeline.copyAppImage(srcAppImage, dstAppImage, !pkg.predefinedAppImageSigned().orElse(false));
     }
 

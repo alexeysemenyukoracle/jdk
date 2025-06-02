@@ -136,7 +136,7 @@ final class PackagingPipeline {
 
     @FunctionalInterface
     interface CopyAppImageTaskAction<T extends Package> extends TaskAction {
-        void execute(T pkg, AppImageDesc srcAppImage, AppImageDesc dstAppImage) throws IOException, PackagerException;
+        void execute(T pkg, AppImageLayout srcAppImage, AppImageLayout dstAppImage) throws IOException, PackagerException;
     }
 
     @FunctionalInterface
@@ -390,21 +390,20 @@ final class PackagingPipeline {
         return builder;
     }
 
-    static void copyAppImage(Package pkg, AppImageDesc srcAppImage, AppImageDesc dstAppImage) throws IOException {
+    static void copyAppImage(Package pkg, AppImageLayout srcAppImage, AppImageLayout dstAppImage) throws IOException {
         copyAppImage(srcAppImage, dstAppImage, true);
     }
 
-    static void copyAppImage(AppImageDesc srcAppImage, AppImageDesc dstAppImage,
+    static void copyAppImage(AppImageLayout srcAppImage, AppImageLayout dstAppImage,
             boolean removeAppImageFile) throws IOException {
-        final var srcLayout = srcAppImage.resolvedAppImagelayout();
-        final var srcLayoutPathGroup = AppImageLayout.toPathGroup(srcLayout);
+        final var srcLayoutPathGroup = AppImageLayout.toPathGroup(srcAppImage);
 
-        if (removeAppImageFile && srcLayout instanceof ApplicationLayout appLayout) {
+        if (removeAppImageFile && srcAppImage instanceof ApplicationLayout appLayout) {
             // Copy app layout omitting application image info file.
             srcLayoutPathGroup.ghostPath(AppImageFile.getPathInAppImage(appLayout));
         }
 
-        srcLayoutPathGroup.copy(AppImageLayout.toPathGroup(dstAppImage.resolvedAppImagelayout()), LinkOption.NOFOLLOW_LINKS);
+        srcLayoutPathGroup.copy(AppImageLayout.toPathGroup(dstAppImage), LinkOption.NOFOLLOW_LINKS);
     }
 
     static void runPostAppImageUserScript(PackageBuildEnv<Package, AppImageLayout> env) throws IOException {
@@ -432,9 +431,15 @@ final class PackagingPipeline {
     }
 
     private TaskContext createTaskContext(PackagingTaskContext packagingContext) {
-        final var pkgEnv = BuildEnv.withAppImageDir(packagingContext.env.env(), packagingContext.srcAppImage.path());
+        final var pkgEnv = BuildEnv.withAppImageDir(packagingContext.env.env(), packagingContext.srcAppImage.rootDirectory());
+        final Optional<ApplicationLayout> appLayout;
+        if (packagingContext.srcAppImage.unresolve() instanceof ApplicationLayout al) {
+            appLayout = Optional.of(al);
+        } else {
+            appLayout = Optional.empty();
+        }
         return new DefaultTaskContext(taskGraph, pkgEnv, packagingContext.env.pkg.app(),
-                packagingContext.srcAppImage.asApplicationLayout(), Optional.of(packagingContext));
+                appLayout, Optional.of(packagingContext));
     }
 
     private static PackagingTaskContext createPackagingTaskContext(BuildEnv env, Package pkg,
@@ -447,25 +452,25 @@ final class PackagingPipeline {
             throw new IllegalArgumentException();
         }
 
-        final AppImageDesc srcAppImageDesc;
-        final AppImageDesc dstAppImageDesc;
+        final AppImageLayout srcAppImageDesc;
+        final AppImageLayout dstAppImageDesc;
         if (pkg.app().runtimeBuilder().isPresent()) {
             // Runtime builder is present, will build application image.
             // appImageDir() should point to a directory where the application image will be created.
-            srcAppImageDesc = new AppImageDesc(appImageLayoutForPackaging, env.appImageDir());
+            srcAppImageDesc = appImageLayoutForPackaging.resolveAt(env.appImageDir());
             dstAppImageDesc = srcAppImageDesc;
         } else {
             srcAppImageDesc = pkg.predefinedAppImage().map(predefinedAppImage -> {
                 if (predefinedAppImage.equals(env.appImageDir())) {
-                    return env.appImageDesc();
+                    return env.appImageDirLayout();
                 } else {
-                    return new AppImageDesc(pkg.appImageLayout(), predefinedAppImage);
+                    return pkg.appImageLayout().resolveAt(predefinedAppImage);
                 }
             }).orElseGet(() -> {
                 // No predefined app image and no runtime builder.
                 // This should be runtime packaging.
                 if (pkg.isRuntimeInstaller()) {
-                    return env.appImageDesc();
+                    return env.appImageDirLayout();
                 } else {
                     // Can't create app image without runtime builder.
                     throw new UnsupportedOperationException();
@@ -477,12 +482,12 @@ final class PackagingPipeline {
                 // the package will use provided app image as-is.
                 dstAppImageDesc = srcAppImageDesc;
             } else {
-                dstAppImageDesc = new AppImageDesc(appImageLayoutForPackaging, env.buildRoot().resolve("image"));
+                dstAppImageDesc = appImageLayoutForPackaging.resolveAt(env.buildRoot().resolve("image"));
             }
         }
 
         final var pkgEnv = new PackageBuildEnv<>(
-                BuildEnv.withAppImageDir(env, dstAppImageDesc.path()), pkg, dstAppImageDesc.appImageLayout(), outputDir);
+                BuildEnv.withAppImageDir(env, dstAppImageDesc.rootDirectory()), pkg, dstAppImageDesc.unresolve(), outputDir);
 
         return new PackagingTaskContext(pkgEnv, srcAppImageDesc);
     }
@@ -514,7 +519,7 @@ final class PackagingPipeline {
     }
 
     private record PackagingTaskContext(PackageBuildEnv<Package, AppImageLayout> env,
-            AppImageDesc srcAppImage) implements TaskContext, StartupParameters {
+            AppImageLayout srcAppImage) implements TaskContext, StartupParameters {
 
         PackagingTaskContext {
             Objects.requireNonNull(env);
@@ -543,7 +548,7 @@ final class PackagingPipeline {
                 ((PackageTaskAction<Package, AppImageLayout>)taskAction).execute(env);
             } else if (taskAction instanceof CopyAppImageTaskAction<?>) {
                 ((CopyAppImageTaskAction<Package>)taskAction).execute(env.pkg(),
-                        srcAppImage, new AppImageDesc(env.envLayout(), env.env().appImageDir()));
+                        srcAppImage, env.envLayout().resolveAt(env.env().appImageDir()));
             } else {
                 throw new IllegalArgumentException();
             }
