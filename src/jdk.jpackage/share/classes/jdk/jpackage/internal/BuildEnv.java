@@ -91,6 +91,10 @@ interface BuildEnv {
      */
     OverridableResource createResource(String defaultName);
 
+    default AppImageDesc appImageDesc() {
+        return new AppImageDesc(appImageDirLayout().unresolve(), appImageDirLayout().rootDirectory());
+    }
+
     static BuildEnv withAppImageDir(BuildEnv env, Path appImageDir) {
         return ((Internal.DefaultBuildEnv)env).copyWithAppImageDir(appImageDir);
     }

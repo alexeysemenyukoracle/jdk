@@ -197,7 +197,7 @@ public interface Package extends BundleSpec {
      * @see #installedPackageLayout
      */
     default AppImageLayout packageLayout() {
-        return appImageLayout().resolveAt(relativeInstallDir());
+        return appImageLayout().resolveAt(relativeInstallDir()).emptyRootDirectory();
     }
 
     /**
@@ -235,7 +235,7 @@ public interface Package extends BundleSpec {
         return asStandardPackageType().map(stdType -> {
             switch (stdType) {
                 case LINUX_DEB, LINUX_RPM, MAC_DMG, MAC_PKG -> {
-                    return packageLayout().resolveAt(Path.of("/"));
+                    return packageLayout().resolveAt(Path.of("/")).emptyRootDirectory();
                 }
                 case WIN_EXE, WIN_MSI -> {
                     return packageLayout();
