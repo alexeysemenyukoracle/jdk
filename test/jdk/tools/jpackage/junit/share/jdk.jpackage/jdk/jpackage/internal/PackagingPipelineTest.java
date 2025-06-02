@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import jdk.jpackage.internal.PackagingPipeline.BuildApplicationTaskID;
@@ -61,6 +62,7 @@ import jdk.jpackage.internal.util.CompositeProxy;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 
@@ -155,7 +157,7 @@ public class PackagingPipelineTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    void testBuildPackage(boolean overrideLayout, @TempDir Path workDir) throws ConfigException, PackagerException, IOException {
+    void testCreatePackage(boolean overrideLayout, @TempDir Path workDir) throws ConfigException, PackagerException, IOException {
 
         final var outputDir = workDir.resolve("bundles");
         final var pkg = buildPackage(createApp(TEST_LAYOUT_1, TestRuntimeBuilder.INSTANCE)).create();
@@ -181,7 +183,7 @@ public class PackagingPipelineTest {
         final var actual = Files.readString(outputDir.resolve(pkg.packageFileNameWithSuffix()));
 
         assertEquals(expected, actual);
-        System.out.println(String.format("testBuildPackage(%s):\n---\n%s\n---", overrideLayout, actual));
+        System.out.println(String.format("testCreatePackage(%s):\n---\n%s\n---", overrideLayout, actual));
 
         var executedTaskActions = dryRun(builder, toConsumer(_ -> {
             builder.create().execute(env, pkg, outputDir);
@@ -194,7 +196,7 @@ public class PackagingPipelineTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    void testBuildRuntimeInstaller(boolean transformLayout, @TempDir Path workDir) throws ConfigException, PackagerException, IOException {
+    void testCreateRuntimeInstaller(boolean transformLayout, @TempDir Path workDir) throws ConfigException, PackagerException, IOException {
 
         // Create a runtime image in `env.appImageDir()` directory.
         final var env = buildEnv(workDir.resolve("build"))
@@ -210,29 +212,62 @@ public class PackagingPipelineTest {
         }
 
         createAndVerifyPackage(buildPipeline(), pkgBuilder.create(), env, workDir.resolve("bundles"),
-                String.format("testBuildRuntimeInstaller(%s)", transformLayout),
+                String.format("testCreateRuntimeInstaller(%s)", transformLayout),
                 CopyAppImageTaskID.COPY, PackageTaskID.RUN_POST_IMAGE_USER_SCRIPT, PrimaryTaskID.PACKAGE);
     }
 
+    private enum ExternalAppImageMode {
+        COPY_FROM_BUILD_ENV_APP_IMAGE,
+        COPY,
+        TRANSFORM_FROM_BUILD_ENV_APP_IMAGE,
+        TRANSFORM;
+
+        final static Set<ExternalAppImageMode> ALL_TRANSFORM = Set.of(
+                TRANSFORM_FROM_BUILD_ENV_APP_IMAGE, TRANSFORM);
+
+        final static Set<ExternalAppImageMode> ENV_APP_IMAGE = Set.of(
+                COPY_FROM_BUILD_ENV_APP_IMAGE, TRANSFORM_FROM_BUILD_ENV_APP_IMAGE);
+    }
+
     @ParameterizedTest
-    @ValueSource(booleans = {true, false})
-    void testBuildPackageFromExternalAppImage(boolean transformLayout, @TempDir Path workDir) throws ConfigException, PackagerException, IOException {
+    @EnumSource(ExternalAppImageMode.class)
+    void testCreatePackageFromExternalAppImage(ExternalAppImageMode mode, @TempDir Path workDir) throws ConfigException, PackagerException, IOException {
 
-        final var env = setupBuildEnvForExternalAppImage(workDir);
+        final var appLayout = TEST_LAYOUT_1.resolveAt(Path.of("boom")).emptyRootDirectory();
 
-        final var pkgBuilder = buildPackage(createApp(TEST_LAYOUT_1)).predefinedAppImage(env.appImageDir());
-        if (transformLayout) {
+        final BuildEnv env;
+        final Path predefinedAppImage;
+        if (ExternalAppImageMode.ENV_APP_IMAGE.contains(mode)) {
+            // External app image is stored in the build env app image directory.
+            env = setupBuildEnvForExternalAppImage(workDir);
+            predefinedAppImage = env.appImageDir();
+        } else {
+            // External app image is stored outside of the build env app image directory
+            // and should have the same layout as the app's app image layout.
+            env = buildEnv(workDir.resolve("build"))
+                    .appImageDir(workDir)
+                    // Always need some app image layout.
+                    .appImageLayout(new AppImageLayout.Stub(Path.of("")))
+                    .create();
+            final var externalAppImageLayout = appLayout.resolveAt(workDir.resolve("app-image"));
+            TestRuntimeBuilder.INSTANCE.create(externalAppImageLayout);
+            TestLauncher.INSTANCE.create(externalAppImageLayout);
+            predefinedAppImage = externalAppImageLayout.rootDirectory();
+        }
+
+        final var pkgBuilder = buildPackage(createApp(appLayout)).predefinedAppImage(predefinedAppImage);
+        if (ExternalAppImageMode.ALL_TRANSFORM.contains(mode)) {
             // Use a custom package app image layout with the default installation directory.
             pkgBuilder.packageLayout(TEST_LAYOUT_2.resolveAt(pkgBuilder.create().relativeInstallDir()).emptyRootDirectory());
         }
 
         createAndVerifyPackage(buildPipeline(), pkgBuilder.create(), env, workDir.resolve("bundles"),
-                String.format("testBuildPackageFromExternalAppImage(%s)", transformLayout),
+                String.format("testCreatePackageFromExternalAppImage(%s)", mode),
                 CopyAppImageTaskID.COPY, PackageTaskID.RUN_POST_IMAGE_USER_SCRIPT, PrimaryTaskID.PACKAGE);
     }
 
     @Test
-    void testBuildPackageFromExternalAppImageWithoutExternalAppImage(@TempDir Path workDir) throws ConfigException, PackagerException, IOException {
+    void testCreatePackageFromExternalAppImageWithoutExternalAppImage(@TempDir Path workDir) throws ConfigException, PackagerException, IOException {
 
         final var env = setupBuildEnvForExternalAppImage(workDir);
         final var pkg = buildPackage(createApp(TEST_LAYOUT_1)).create();
@@ -244,7 +279,7 @@ public class PackagingPipelineTest {
     private static BuildEnv setupBuildEnvForExternalAppImage(Path workDir) throws ConfigException {
         // Create an app image in `env.appImageDir()` directory.
         final var env = buildEnv(workDir.resolve("build"))
-                .appImageLayout(TEST_LAYOUT_1.resolveAt(Path.of("a/b/c/d")).emptyRootDirectory())
+                .appImageLayout(TEST_LAYOUT_1.resolveAt(Path.of("a/b/c")).emptyRootDirectory())
                 .appImageDir(workDir.resolve("app-image"))
                 .create();
         TestRuntimeBuilder.INSTANCE.create(env.appImageDirLayout());
@@ -310,6 +345,9 @@ public class PackagingPipelineTest {
     private static Application createApp(AppImageLayout appImageLayout, Optional<RuntimeBuilder> runtimeBuilder) {
         Objects.requireNonNull(appImageLayout);
         Objects.requireNonNull(runtimeBuilder);
+        if (appImageLayout.isResolved()) {
+            throw new IllegalArgumentException();
+        }
 
         return new Application.Stub("foo", "My app", "1.0", "Acme", "copyright",
                 Optional.empty(), List.of(), appImageLayout, runtimeBuilder, List.of(), Map.of());
@@ -473,7 +511,7 @@ public class PackagingPipelineTest {
 
 
     private final static ApplicationLayout TEST_LAYOUT_1 = ApplicationLayout.build()
-            .launchersDirectory("")
+            .launchersDirectory("launchers")
             .appDirectory("")
             .runtimeDirectory("runtime")
             .appModsDirectory("")
@@ -482,9 +520,9 @@ public class PackagingPipelineTest {
             .create();
 
     private final static ApplicationLayout TEST_LAYOUT_2 = ApplicationLayout.build()
-            .launchersDirectory("launchers")
-            .appDirectory("app")
-            .runtimeDirectory("foo/runtime")
+            .launchersDirectory("q/launchers")
+            .appDirectory("")
+            .runtimeDirectory("qqq/runtime")
             .appModsDirectory("")
             .contentDirectory("")
             .desktopIntegrationDirectory("")
