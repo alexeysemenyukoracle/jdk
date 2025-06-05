@@ -72,9 +72,7 @@ public class MacAppBundler extends AppImageBundler {
         if (StandardBundlerParam.getPredefinedAppImage(params) != null) {
             if (!Optional.ofNullable(
                     SIGN_BUNDLE.fetchFrom(params)).orElse(Boolean.FALSE)) {
-                throw new ConfigException(
-                        I18N.getString("error.app-image.mac-sign.required"),
-                        null);
+                throw I18N.buildConfigException("error.app-image.mac-sign.required").create();
             }
         }
     }
