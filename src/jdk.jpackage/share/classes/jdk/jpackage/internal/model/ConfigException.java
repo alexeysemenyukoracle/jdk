@@ -46,7 +46,7 @@ import jdk.jpackage.internal.util.StringBundle;
  *         .create();
  * }
  */
-public class ConfigException extends Exception {
+public class ConfigException extends RuntimeException implements KnownExceptionType {
     private static final long serialVersionUID = 1L;
     private final String advice;
 
