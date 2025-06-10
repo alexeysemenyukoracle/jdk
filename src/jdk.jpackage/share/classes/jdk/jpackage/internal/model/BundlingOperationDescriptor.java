@@ -24,12 +24,32 @@
  */
 package jdk.jpackage.internal.model;
 
+import java.util.Objects;
+import jdk.internal.util.OperatingSystem;
+
 /**
- * Generic bundling operation.
- * <p>
- * Bundling operation is comprised of creating of {@link BundleSpec} instance
- * and using it as an input for {@link BundleCreator#create()} method to create
- * a bundle.
+ * Descriptor of a generic bundling operation.
+ *
+ * @param os         the target bundle platform
+ * @param bundleType the target bundle type
  */
-public interface BundlingOperation {
+public record BundlingOperationDescriptor(OperatingSystem os, String bundleType) {
+    public BundlingOperationDescriptor {
+        Objects.requireNonNull(os);
+        Objects.requireNonNull(bundleType);
+    }
+
+    public BundlingOperationDescriptor(String bundleType) {
+        this(OperatingSystem.current(), bundleType);
+    }
+
+    @Override
+    public String toString() {
+        return os.name() + ":" + bundleType;
+    }
+
+    public static BundlingOperationDescriptor valueOf(String str) {
+        final var components = str.split(":");
+        return new BundlingOperationDescriptor(OperatingSystem.valueOf(components[0]), components[1]);
+    }
 }
