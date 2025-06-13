@@ -24,6 +24,7 @@
  */
 package jdk.jpackage.internal;
 
+import static jdk.jpackage.internal.cli.StandardOptionValue.BUNDLING_OPERATION_DESCRIPTOR;
 import static jdk.jpackage.internal.cli.StandardOptionValue.DEST;
 import static jdk.jpackage.internal.cli.StandardOptionValue.MAIN_JAR;
 import static jdk.jpackage.internal.cli.StandardOptionValue.MODULE;
@@ -32,17 +33,22 @@ import static jdk.jpackage.internal.cli.StandardOptionValue.PREDEFINED_RUNTIME_I
 
 import java.nio.file.Path;
 import jdk.jpackage.internal.cli.Options;
+import jdk.jpackage.internal.cli.StandardBundlingOperation;
 
 final class OptionUtils {
 
     static boolean isRuntimeInstaller(Options optionValues) {
-        return PREDEFINED_RUNTIME_IMAGE.containsIn(optionValues) 
+        return PREDEFINED_RUNTIME_IMAGE.containsIn(optionValues)
                 && !PREDEFINED_APP_IMAGE.containsIn(optionValues)
-                && !MAIN_JAR.containsIn(optionValues) 
+                && !MAIN_JAR.containsIn(optionValues)
                 && !MODULE.containsIn(optionValues);
     }
 
     static Path outputDir(Options optionValues) {
         return DEST.getFrom(optionValues);
+    }
+
+    static StandardBundlingOperation bundlingOperation(Options optionValues) {
+        return StandardBundlingOperation.valueOf(BUNDLING_OPERATION_DESCRIPTOR.getFrom(optionValues)).orElseThrow();
     }
 }
