@@ -27,23 +27,23 @@ package jdk.jpackage.internal;
 import static java.util.stream.Collectors.toMap;
 import static jdk.jpackage.internal.JLinkRuntimeBuilder.ensureBaseModuleInModulePath;
 import static jdk.jpackage.internal.OptionUtils.isRuntimeInstaller;
-import static jdk.jpackage.internal.cli.StandardOptionValue.ABOUT_URL;
-import static jdk.jpackage.internal.cli.StandardOptionValue.ADDITIONAL_LAUNCHERS;
-import static jdk.jpackage.internal.cli.StandardOptionValue.ADD_MODULES;
-import static jdk.jpackage.internal.cli.StandardOptionValue.APP_CONTENT;
-import static jdk.jpackage.internal.cli.StandardOptionValue.APP_VERSION;
-import static jdk.jpackage.internal.cli.StandardOptionValue.COPYRIGHT;
-import static jdk.jpackage.internal.cli.StandardOptionValue.DESCRIPTION;
-import static jdk.jpackage.internal.cli.StandardOptionValue.INPUT;
-import static jdk.jpackage.internal.cli.StandardOptionValue.INSTALL_DIR;
-import static jdk.jpackage.internal.cli.StandardOptionValue.JLINK_OPTIONS;
-import static jdk.jpackage.internal.cli.StandardOptionValue.LAUNCHER_AS_SERVICE;
-import static jdk.jpackage.internal.cli.StandardOptionValue.LICENSE_FILE;
-import static jdk.jpackage.internal.cli.StandardOptionValue.MODULE_PATH;
-import static jdk.jpackage.internal.cli.StandardOptionValue.NAME;
-import static jdk.jpackage.internal.cli.StandardOptionValue.PREDEFINED_APP_IMAGE;
-import static jdk.jpackage.internal.cli.StandardOptionValue.PREDEFINED_RUNTIME_IMAGE;
-import static jdk.jpackage.internal.cli.StandardOptionValue.VENDOR;
+import static jdk.jpackage.internal.cli.StandardOption.ABOUT_URL;
+import static jdk.jpackage.internal.cli.StandardOption.ADDITIONAL_LAUNCHERS;
+import static jdk.jpackage.internal.cli.StandardOption.ADD_MODULES;
+import static jdk.jpackage.internal.cli.StandardOption.APP_CONTENT;
+import static jdk.jpackage.internal.cli.StandardOption.APP_VERSION;
+import static jdk.jpackage.internal.cli.StandardOption.COPYRIGHT;
+import static jdk.jpackage.internal.cli.StandardOption.DESCRIPTION;
+import static jdk.jpackage.internal.cli.StandardOption.INPUT;
+import static jdk.jpackage.internal.cli.StandardOption.INSTALL_DIR;
+import static jdk.jpackage.internal.cli.StandardOption.JLINK_OPTIONS;
+import static jdk.jpackage.internal.cli.StandardOption.LAUNCHER_AS_SERVICE;
+import static jdk.jpackage.internal.cli.StandardOption.LICENSE_FILE;
+import static jdk.jpackage.internal.cli.StandardOption.MODULE_PATH;
+import static jdk.jpackage.internal.cli.StandardOption.NAME;
+import static jdk.jpackage.internal.cli.StandardOption.PREDEFINED_APP_IMAGE;
+import static jdk.jpackage.internal.cli.StandardOption.PREDEFINED_RUNTIME_IMAGE;
+import static jdk.jpackage.internal.cli.StandardOption.VENDOR;
 
 import java.util.HashMap;
 import java.util.List;
@@ -129,13 +129,13 @@ final class FromOptions {
 
         final var appBuilder = new ApplicationBuilder();
 
-        NAME.copyInto(optionValues, appBuilder::name);
-        DESCRIPTION.copyInto(optionValues, appBuilder::description);
-        APP_VERSION.copyInto(optionValues, appBuilder::version);
-        VENDOR.copyInto(optionValues, appBuilder::vendor);
-        COPYRIGHT.copyInto(optionValues, appBuilder::copyright);
-        INPUT.copyInto(optionValues, appBuilder::srcDir);
-        APP_CONTENT.copyInto(optionValues, appBuilder::contentDirs);
+        NAME.ifPresentIn(optionValues, appBuilder::name);
+        DESCRIPTION.ifPresentIn(optionValues, appBuilder::description);
+        APP_VERSION.ifPresentIn(optionValues, appBuilder::version);
+        VENDOR.ifPresentIn(optionValues, appBuilder::vendor);
+        COPYRIGHT.ifPresentIn(optionValues, appBuilder::copyright);
+        INPUT.ifPresentIn(optionValues, appBuilder::srcDir);
+        APP_CONTENT.ifPresentIn(optionValues, appBuilder::contentDirs);
 
         final var isRuntimeInstaller = isRuntimeInstaller(optionValues);
 
@@ -182,7 +182,7 @@ final class FromOptions {
                             .map(Optional::orElseThrow).toList();
                     final var jlinkOptionsBuilder = runtimeBuilderBuilder.forNewRuntime(startupInfos);
                     ADD_MODULES.findIn(optionValues).map(Set::copyOf).ifPresent(jlinkOptionsBuilder::addModules);
-                    JLINK_OPTIONS.copyInto(optionValues, jlinkOptionsBuilder::options);
+                    JLINK_OPTIONS.ifPresentIn(optionValues, jlinkOptionsBuilder::options);
                     jlinkOptionsBuilder.appy();
                 });
 
@@ -197,13 +197,13 @@ final class FromOptions {
 
         final var builder = new PackageBuilder(app, type);
 
-        NAME.copyInto(optionValues, builder::name);
-        DESCRIPTION.copyInto(optionValues, builder::description);
-        APP_VERSION.copyInto(optionValues, builder::version);
-        ABOUT_URL.copyInto(optionValues, builder::aboutURL);
-        LICENSE_FILE.copyInto(optionValues, builder::licenseFile);
-        PREDEFINED_APP_IMAGE.copyInto(optionValues, builder::predefinedAppImage);
-        INSTALL_DIR.copyInto(optionValues, builder::installDir);
+        NAME.ifPresentIn(optionValues, builder::name);
+        DESCRIPTION.ifPresentIn(optionValues, builder::description);
+        APP_VERSION.ifPresentIn(optionValues, builder::version);
+        ABOUT_URL.ifPresentIn(optionValues, builder::aboutURL);
+        LICENSE_FILE.ifPresentIn(optionValues, builder::licenseFile);
+        PREDEFINED_APP_IMAGE.ifPresentIn(optionValues, builder::predefinedAppImage);
+        INSTALL_DIR.ifPresentIn(optionValues, builder::installDir);
 
         return builder;
     }

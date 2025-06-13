@@ -24,12 +24,12 @@
  */
 package jdk.jpackage.internal;
 
-import static jdk.jpackage.internal.cli.StandardOptionValue.BUNDLING_OPERATION_DESCRIPTOR;
-import static jdk.jpackage.internal.cli.StandardOptionValue.DEST;
-import static jdk.jpackage.internal.cli.StandardOptionValue.MAIN_JAR;
-import static jdk.jpackage.internal.cli.StandardOptionValue.MODULE;
-import static jdk.jpackage.internal.cli.StandardOptionValue.PREDEFINED_APP_IMAGE;
-import static jdk.jpackage.internal.cli.StandardOptionValue.PREDEFINED_RUNTIME_IMAGE;
+import static jdk.jpackage.internal.cli.StandardOption.BUNDLING_OPERATION_DESCRIPTOR;
+import static jdk.jpackage.internal.cli.StandardOption.DEST;
+import static jdk.jpackage.internal.cli.StandardOption.MAIN_JAR;
+import static jdk.jpackage.internal.cli.StandardOption.MODULE;
+import static jdk.jpackage.internal.cli.StandardOption.PREDEFINED_APP_IMAGE;
+import static jdk.jpackage.internal.cli.StandardOption.PREDEFINED_RUNTIME_IMAGE;
 
 import java.nio.file.Path;
 import jdk.jpackage.internal.cli.Options;

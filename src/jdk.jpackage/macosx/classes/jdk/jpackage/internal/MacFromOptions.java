@@ -28,21 +28,21 @@ import static jdk.jpackage.internal.FromOptions.buildApplicationBuilder;
 import static jdk.jpackage.internal.FromOptions.createPackageBuilder;
 import static jdk.jpackage.internal.MacPackagingPipeline.APPLICATION_LAYOUT;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.SIGN_MAC_APP_IMAGE;
-import static jdk.jpackage.internal.cli.StandardOptionValue.ICON;
-import static jdk.jpackage.internal.cli.StandardOptionValue.MAC_APP_CATEGORY;
-import static jdk.jpackage.internal.cli.StandardOptionValue.MAC_APP_IMAGE_SIGN_IDENTITY;
-import static jdk.jpackage.internal.cli.StandardOptionValue.MAC_APP_STORE;
-import static jdk.jpackage.internal.cli.StandardOptionValue.MAC_BUNDLE_IDENTIFIER;
-import static jdk.jpackage.internal.cli.StandardOptionValue.MAC_BUNDLE_NAME;
-import static jdk.jpackage.internal.cli.StandardOptionValue.MAC_BUNDLE_SIGNING_PREFIX;
-import static jdk.jpackage.internal.cli.StandardOptionValue.MAC_DMG_CONTENT;
-import static jdk.jpackage.internal.cli.StandardOptionValue.MAC_ENTITLEMENTS;
-import static jdk.jpackage.internal.cli.StandardOptionValue.MAC_INSTALLER_SIGN_IDENTITY;
-import static jdk.jpackage.internal.cli.StandardOptionValue.MAC_SIGN;
-import static jdk.jpackage.internal.cli.StandardOptionValue.MAC_SIGNING_KEYCHAIN;
-import static jdk.jpackage.internal.cli.StandardOptionValue.MAC_SIGNING_KEY_NAME;
-import static jdk.jpackage.internal.cli.StandardOptionValue.PREDEFINED_APP_IMAGE;
-import static jdk.jpackage.internal.cli.StandardOptionValue.PREDEFINED_RUNTIME_IMAGE;
+import static jdk.jpackage.internal.cli.StandardOption.ICON;
+import static jdk.jpackage.internal.cli.StandardOption.MAC_APP_CATEGORY;
+import static jdk.jpackage.internal.cli.StandardOption.MAC_APP_IMAGE_SIGN_IDENTITY;
+import static jdk.jpackage.internal.cli.StandardOption.MAC_APP_STORE;
+import static jdk.jpackage.internal.cli.StandardOption.MAC_BUNDLE_IDENTIFIER;
+import static jdk.jpackage.internal.cli.StandardOption.MAC_BUNDLE_NAME;
+import static jdk.jpackage.internal.cli.StandardOption.MAC_BUNDLE_SIGNING_PREFIX;
+import static jdk.jpackage.internal.cli.StandardOption.MAC_DMG_CONTENT;
+import static jdk.jpackage.internal.cli.StandardOption.MAC_ENTITLEMENTS;
+import static jdk.jpackage.internal.cli.StandardOption.MAC_INSTALLER_SIGN_IDENTITY;
+import static jdk.jpackage.internal.cli.StandardOption.MAC_SIGN;
+import static jdk.jpackage.internal.cli.StandardOption.MAC_SIGNING_KEYCHAIN;
+import static jdk.jpackage.internal.cli.StandardOption.MAC_SIGNING_KEY_NAME;
+import static jdk.jpackage.internal.cli.StandardOption.PREDEFINED_APP_IMAGE;
+import static jdk.jpackage.internal.cli.StandardOption.PREDEFINED_RUNTIME_IMAGE;
 import static jdk.jpackage.internal.model.MacPackage.RUNTIME_BUNDLE_LAYOUT;
 import static jdk.jpackage.internal.model.StandardPackageType.MAC_DMG;
 import static jdk.jpackage.internal.model.StandardPackageType.MAC_PKG;
@@ -87,7 +87,7 @@ final class MacFromOptions {
 
         final var pkgBuilder = new MacDmgPackageBuilder(superPkgBuilder);
 
-        MAC_DMG_CONTENT.copyInto(optionValues, pkgBuilder::dmgContent);
+        MAC_DMG_CONTENT.ifPresentIn(optionValues, pkgBuilder::dmgContent);
 
         return pkgBuilder.create();
     }
@@ -117,7 +117,7 @@ final class MacFromOptions {
 
         if (sign) {
             final var signingIdentityBuilder = createSigningIdentityBuilder(optionValues);
-            MAC_INSTALLER_SIGN_IDENTITY.copyInto(optionValues, signingIdentityBuilder::signingIdentity);
+            MAC_INSTALLER_SIGN_IDENTITY.ifPresentIn(optionValues, signingIdentityBuilder::signingIdentity);
             MAC_SIGNING_KEY_NAME.findIn(optionValues).ifPresent(userName -> {
                 final StandardCertificateSelector domain;
                 if (appStore) {
@@ -180,14 +180,14 @@ final class MacFromOptions {
 
         final var appBuilder = new MacApplicationBuilder(app);
 
-        PREDEFINED_APP_IMAGE.copyInto(optionValues, predefinedAppImage -> {
+        PREDEFINED_APP_IMAGE.ifPresentIn(optionValues, predefinedAppImage -> {
             appBuilder.externalInfoPlistFile(predefinedAppImage.resolve("Contents/Info.plist"));
         });
 
-        ICON.copyInto(optionValues, appBuilder::icon);
-        MAC_BUNDLE_NAME.copyInto(optionValues, appBuilder::bundleName);
-        MAC_BUNDLE_IDENTIFIER.copyInto(optionValues, appBuilder::bundleIdentifier);
-        MAC_APP_CATEGORY.copyInto(optionValues, appBuilder::category);
+        ICON.ifPresentIn(optionValues, appBuilder::icon);
+        MAC_BUNDLE_NAME.ifPresentIn(optionValues, appBuilder::bundleName);
+        MAC_BUNDLE_IDENTIFIER.ifPresentIn(optionValues, appBuilder::bundleIdentifier);
+        MAC_APP_CATEGORY.ifPresentIn(optionValues, appBuilder::category);
 
         final boolean sign;
         final boolean appStore;
@@ -205,7 +205,7 @@ final class MacFromOptions {
 
         if (sign) {
             final var signingIdentityBuilder = createSigningIdentityBuilder(optionValues);
-            MAC_APP_IMAGE_SIGN_IDENTITY.copyInto(optionValues, signingIdentityBuilder::signingIdentity);
+            MAC_APP_IMAGE_SIGN_IDENTITY.ifPresentIn(optionValues, signingIdentityBuilder::signingIdentity);
             MAC_SIGNING_KEY_NAME.findIn(optionValues).ifPresent(userName -> {
                 final StandardCertificateSelector domain;
                 if (appStore) {
@@ -223,9 +223,9 @@ final class MacFromOptions {
             }
 
             app.mainLauncher().flatMap(Launcher::startupInfo).ifPresent(signingBuilder::signingIdentifierPrefix);
-            MAC_BUNDLE_SIGNING_PREFIX.copyInto(optionValues, signingBuilder::signingIdentifierPrefix);
+            MAC_BUNDLE_SIGNING_PREFIX.ifPresentIn(optionValues, signingBuilder::signingIdentifierPrefix);
 
-            MAC_ENTITLEMENTS.copyInto(optionValues, signingBuilder::entitlements);
+            MAC_ENTITLEMENTS.ifPresentIn(optionValues, signingBuilder::entitlements);
 
             appBuilder.signingBuilder(signingBuilder);
         }
@@ -271,15 +271,15 @@ final class MacFromOptions {
 
         final var builder = new MacFileAssociationBuilder();
 
-        StandardFaOption.MAC_CFBUNDLETYPEROLE.copyInto(optionValues, builder::cfBundleTypeRole);
-        StandardFaOption.MAC_LSHANDLERRANK.copyInto(optionValues, builder::lsHandlerRank);
-        StandardFaOption.MAC_NSSTORETYPEKEY.copyInto(optionValues, builder::nsPersistentStoreTypeKey);
-        StandardFaOption.MAC_NSDOCUMENTCLASS.copyInto(optionValues, builder::nsDocumentClass);
-        StandardFaOption.MAC_LSTYPEISPACKAGE.copyInto(optionValues, builder::lsTypeIsPackage);
-        StandardFaOption.MAC_LSDOCINPLACE.copyInto(optionValues, builder::lsSupportsOpeningDocumentsInPlace);
-        StandardFaOption.MAC_UIDOCBROWSER.copyInto(optionValues, builder::uiSupportsDocumentBrowser);
-        StandardFaOption.MAC_NSEXPORTABLETYPES.copyInto(optionValues, builder::nsExportableTypes);
-        StandardFaOption.MAC_UTTYPECONFORMSTO.copyInto(optionValues, builder::utTypeConformsTo);
+        StandardFaOption.MAC_CFBUNDLETYPEROLE.ifPresentIn(optionValues, builder::cfBundleTypeRole);
+        StandardFaOption.MAC_LSHANDLERRANK.ifPresentIn(optionValues, builder::lsHandlerRank);
+        StandardFaOption.MAC_NSSTORETYPEKEY.ifPresentIn(optionValues, builder::nsPersistentStoreTypeKey);
+        StandardFaOption.MAC_NSDOCUMENTCLASS.ifPresentIn(optionValues, builder::nsDocumentClass);
+        StandardFaOption.MAC_LSTYPEISPACKAGE.ifPresentIn(optionValues, builder::lsTypeIsPackage);
+        StandardFaOption.MAC_LSDOCINPLACE.ifPresentIn(optionValues, builder::lsSupportsOpeningDocumentsInPlace);
+        StandardFaOption.MAC_UIDOCBROWSER.ifPresentIn(optionValues, builder::uiSupportsDocumentBrowser);
+        StandardFaOption.MAC_NSEXPORTABLETYPES.ifPresentIn(optionValues, builder::nsExportableTypes);
+        StandardFaOption.MAC_UTTYPECONFORMSTO.ifPresentIn(optionValues, builder::utTypeConformsTo);
 
         return toFunction(builder::create).apply(fa);
     }

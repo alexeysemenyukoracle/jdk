@@ -29,19 +29,19 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import jdk.jpackage.internal.cli.Options;
-import jdk.jpackage.internal.cli.StandardOptionValue;
+import jdk.jpackage.internal.cli.StandardOption;
 import jdk.jpackage.internal.util.FileUtils;
 
 final class TempDirectory implements Closeable {
 
     TempDirectory(Options optionValues) throws IOException {
-        final var tempDir = StandardOptionValue.TEMP_ROOT.findIn(optionValues);
+        final var tempDir = StandardOption.TEMP_ROOT.findIn(optionValues);
         if (tempDir.isPresent()) {
             this.path = tempDir.orElseThrow();
             this.optionValues = optionValues;
         } else {
             this.path = Files.createTempDirectory("jdk.jpackage");
-            this.optionValues = optionValues.copyWithDefaultValue(StandardOptionValue.TEMP_ROOT, path);
+            this.optionValues = optionValues.copyWithDefaultValue(StandardOption.TEMP_ROOT, path);
         }
 
         deleteOnClose = tempDir.isEmpty();

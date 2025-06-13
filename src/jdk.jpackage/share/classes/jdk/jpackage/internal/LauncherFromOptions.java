@@ -24,20 +24,20 @@
  */
 package jdk.jpackage.internal;
 
-import static jdk.jpackage.internal.cli.StandardOptionValue.APPCLASS;
-import static jdk.jpackage.internal.cli.StandardOptionValue.ARGUMENTS;
-import static jdk.jpackage.internal.cli.StandardOptionValue.DESCRIPTION;
-import static jdk.jpackage.internal.cli.StandardOptionValue.FA;
-import static jdk.jpackage.internal.cli.StandardOptionValue.ICON;
-import static jdk.jpackage.internal.cli.StandardOptionValue.INPUT;
-import static jdk.jpackage.internal.cli.StandardOptionValue.JAVA_OPTIONS;
-import static jdk.jpackage.internal.cli.StandardOptionValue.LAUNCHER_AS_SERVICE;
-import static jdk.jpackage.internal.cli.StandardOptionValue.MAIN_JAR;
-import static jdk.jpackage.internal.cli.StandardOptionValue.MODULE;
-import static jdk.jpackage.internal.cli.StandardOptionValue.MODULE_PATH;
-import static jdk.jpackage.internal.cli.StandardOptionValue.NAME;
-import static jdk.jpackage.internal.cli.StandardOptionValue.PREDEFINED_APP_IMAGE;
-import static jdk.jpackage.internal.cli.StandardOptionValue.PREDEFINED_RUNTIME_IMAGE;
+import static jdk.jpackage.internal.cli.StandardOption.APPCLASS;
+import static jdk.jpackage.internal.cli.StandardOption.ARGUMENTS;
+import static jdk.jpackage.internal.cli.StandardOption.DESCRIPTION;
+import static jdk.jpackage.internal.cli.StandardOption.FA;
+import static jdk.jpackage.internal.cli.StandardOption.ICON;
+import static jdk.jpackage.internal.cli.StandardOption.INPUT;
+import static jdk.jpackage.internal.cli.StandardOption.JAVA_OPTIONS;
+import static jdk.jpackage.internal.cli.StandardOption.LAUNCHER_AS_SERVICE;
+import static jdk.jpackage.internal.cli.StandardOption.MAIN_JAR;
+import static jdk.jpackage.internal.cli.StandardOption.MODULE;
+import static jdk.jpackage.internal.cli.StandardOption.MODULE_PATH;
+import static jdk.jpackage.internal.cli.StandardOption.NAME;
+import static jdk.jpackage.internal.cli.StandardOption.PREDEFINED_APP_IMAGE;
+import static jdk.jpackage.internal.cli.StandardOption.PREDEFINED_RUNTIME_IMAGE;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -84,22 +84,22 @@ final class LauncherFromOptions {
     Launcher create(Options optionValues) {
         final var builder = new LauncherBuilder().defaultIconResourceName(defaultIconResourceName());
 
-        DESCRIPTION.copyInto(optionValues, builder::description);
+        DESCRIPTION.ifPresentIn(optionValues, builder::description);
         builder.icon(toLauncherIcon(ICON.findIn(optionValues).orElse(null)));
-        LAUNCHER_AS_SERVICE.copyInto(optionValues, builder::isService);
-        NAME.copyInto(optionValues, builder::name);
+        LAUNCHER_AS_SERVICE.ifPresentIn(optionValues, builder::isService);
+        NAME.ifPresentIn(optionValues, builder::name);
 
         if (PREDEFINED_APP_IMAGE.findIn(optionValues).isEmpty()) {
             final var startupInfoBuilder = new LauncherStartupInfoBuilder2();
 
-            INPUT.copyInto(optionValues, startupInfoBuilder::inputDir);
-            ARGUMENTS.copyInto(optionValues, startupInfoBuilder::defaultParameters);
-            JAVA_OPTIONS.copyInto(optionValues, startupInfoBuilder::javaOptions);
-            MAIN_JAR.copyInto(optionValues, startupInfoBuilder::mainJar);
-            APPCLASS.copyInto(optionValues, startupInfoBuilder::mainClassName);
-            MODULE.copyInto(optionValues, startupInfoBuilder::moduleName);
-            MODULE_PATH.copyInto(optionValues, startupInfoBuilder::modulePath);
-            PREDEFINED_RUNTIME_IMAGE.copyInto(optionValues, startupInfoBuilder::predefinedRuntimeImage);
+            INPUT.ifPresentIn(optionValues, startupInfoBuilder::inputDir);
+            ARGUMENTS.ifPresentIn(optionValues, startupInfoBuilder::defaultParameters);
+            JAVA_OPTIONS.ifPresentIn(optionValues, startupInfoBuilder::javaOptions);
+            MAIN_JAR.ifPresentIn(optionValues, startupInfoBuilder::mainJar);
+            APPCLASS.ifPresentIn(optionValues, startupInfoBuilder::mainClassName);
+            MODULE.ifPresentIn(optionValues, startupInfoBuilder::moduleName);
+            MODULE_PATH.ifPresentIn(optionValues, startupInfoBuilder::modulePath);
+            PREDEFINED_RUNTIME_IMAGE.ifPresentIn(optionValues, startupInfoBuilder::predefinedRuntimeImage);
 
             builder.startupInfo(startupInfoBuilder.create());
         }
@@ -111,10 +111,10 @@ final class LauncherFromOptions {
 
             final var faGroupBuilder = FileAssociationGroup.build();
 
-            StandardFaOption.DESCRIPTION.copyInto(faOptionValues, faGroupBuilder::description);
-            StandardFaOption.ICON.copyInto(faOptionValues, faGroupBuilder::icon);
-            StandardFaOption.EXTENSIONS.copyInto(faOptionValues, faGroupBuilder::extensions);
-            StandardFaOption.CONTENT_TYPE.copyInto(faOptionValues, faGroupBuilder::mimeTypes);
+            StandardFaOption.DESCRIPTION.ifPresentIn(faOptionValues, faGroupBuilder::description);
+            StandardFaOption.ICON.ifPresentIn(faOptionValues, faGroupBuilder::icon);
+            StandardFaOption.EXTENSIONS.ifPresentIn(faOptionValues, faGroupBuilder::extensions);
+            StandardFaOption.CONTENT_TYPE.ifPresentIn(faOptionValues, faGroupBuilder::mimeTypes);
 
             faGroupBuilderMutator().ifPresent(mutator -> {
                 mutator.accept(faGroupBuilder, builder);

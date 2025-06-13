@@ -29,6 +29,7 @@ import static jdk.jpackage.internal.MacFromOptions.createMacDmgPackage;
 import static jdk.jpackage.internal.MacFromOptions.createMacPkgPackage;
 import static jdk.jpackage.internal.MacPackagingPipeline.APPLICATION_LAYOUT;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.CREATE_MAC_APP_IMAGE;
+import static jdk.jpackage.internal.cli.StandardBundlingOperation.SIGN_MAC_APP_IMAGE;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.CREATE_MAC_DMG;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.CREATE_MAC_PKG;
 
@@ -44,6 +45,7 @@ public class MacBundlingEnvironment extends DefaultBundlingEnvironment {
     public MacBundlingEnvironment() {
         super(build()
                 .defaultOperation(CREATE_MAC_DMG)
+                .bundler(SIGN_MAC_APP_IMAGE, MacBundlingEnvironment::createAppImage)
                 .bundler(CREATE_MAC_APP_IMAGE, MacBundlingEnvironment::createAppImage)
                 .bundler(CREATE_MAC_DMG, LazyLoad::dmgSysEnv, MacBundlingEnvironment::createDmdPackage)
                 .bundler(CREATE_MAC_PKG, MacBundlingEnvironment::createPkgPackage));

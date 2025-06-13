@@ -28,18 +28,18 @@ import static java.util.stream.Collectors.toSet;
 import static jdk.jpackage.internal.FromOptions.buildApplicationBuilder;
 import static jdk.jpackage.internal.FromOptions.createPackageBuilder;
 import static jdk.jpackage.internal.WinPackagingPipeline.APPLICATION_LAYOUT;
-import static jdk.jpackage.internal.cli.StandardOptionValue.ICON;
-import static jdk.jpackage.internal.cli.StandardOptionValue.RESOURCE_DIR;
-import static jdk.jpackage.internal.cli.StandardOptionValue.WIN_CONSOLE_HINT;
-import static jdk.jpackage.internal.cli.StandardOptionValue.WIN_HELP_URL;
-import static jdk.jpackage.internal.cli.StandardOptionValue.WIN_INSTALLDIR_CHOOSER;
-import static jdk.jpackage.internal.cli.StandardOptionValue.WIN_MENU_GROUP;
-import static jdk.jpackage.internal.cli.StandardOptionValue.WIN_MENU_HINT;
-import static jdk.jpackage.internal.cli.StandardOptionValue.WIN_PER_USER_INSTALLATION;
-import static jdk.jpackage.internal.cli.StandardOptionValue.WIN_SHORTCUT_HINT;
-import static jdk.jpackage.internal.cli.StandardOptionValue.WIN_SHORTCUT_PROMPT;
-import static jdk.jpackage.internal.cli.StandardOptionValue.WIN_UPDATE_URL;
-import static jdk.jpackage.internal.cli.StandardOptionValue.WIN_UPGRADE_UUID;
+import static jdk.jpackage.internal.cli.StandardOption.ICON;
+import static jdk.jpackage.internal.cli.StandardOption.RESOURCE_DIR;
+import static jdk.jpackage.internal.cli.StandardOption.WIN_CONSOLE_HINT;
+import static jdk.jpackage.internal.cli.StandardOption.WIN_HELP_URL;
+import static jdk.jpackage.internal.cli.StandardOption.WIN_INSTALLDIR_CHOOSER;
+import static jdk.jpackage.internal.cli.StandardOption.WIN_MENU_GROUP;
+import static jdk.jpackage.internal.cli.StandardOption.WIN_MENU_HINT;
+import static jdk.jpackage.internal.cli.StandardOption.WIN_PER_USER_INSTALLATION;
+import static jdk.jpackage.internal.cli.StandardOption.WIN_SHORTCUT_HINT;
+import static jdk.jpackage.internal.cli.StandardOption.WIN_SHORTCUT_PROMPT;
+import static jdk.jpackage.internal.cli.StandardOption.WIN_UPDATE_URL;
+import static jdk.jpackage.internal.cli.StandardOption.WIN_UPGRADE_UUID;
 import static jdk.jpackage.internal.model.StandardPackageType.WIN_MSI;
 import static jdk.jpackage.internal.model.WinLauncherMixin.WinShortcut.WIN_SHORTCUT_DESKTOP;
 import static jdk.jpackage.internal.model.WinLauncherMixin.WinShortcut.WIN_SHORTCUT_START_MENU;
@@ -87,20 +87,20 @@ final class WinFromOpions {
 
         final var pkgBuilder = new WinMsiPackageBuilder(superPkgBuilder);
 
-        WIN_HELP_URL.copyInto(optionValues, pkgBuilder::helpURL);
+        WIN_HELP_URL.ifPresentIn(optionValues, pkgBuilder::helpURL);
         pkgBuilder.isSystemWideInstall(!WIN_PER_USER_INSTALLATION.getFrom(optionValues));
-        WIN_MENU_GROUP.copyInto(optionValues, pkgBuilder::startMenuGroupName);
-        WIN_UPDATE_URL.copyInto(optionValues, pkgBuilder::updateURL);
-        WIN_INSTALLDIR_CHOOSER.copyInto(optionValues, pkgBuilder::withInstallDirChooser);
-        WIN_SHORTCUT_PROMPT.copyInto(optionValues, pkgBuilder::withShortcutPrompt);
+        WIN_MENU_GROUP.ifPresentIn(optionValues, pkgBuilder::startMenuGroupName);
+        WIN_UPDATE_URL.ifPresentIn(optionValues, pkgBuilder::updateURL);
+        WIN_INSTALLDIR_CHOOSER.ifPresentIn(optionValues, pkgBuilder::withInstallDirChooser);
+        WIN_SHORTCUT_PROMPT.ifPresentIn(optionValues, pkgBuilder::withShortcutPrompt);
 
         if (app.isService()) {
-            RESOURCE_DIR.copyInto(optionValues, resourceDir -> {
+            RESOURCE_DIR.ifPresentIn(optionValues, resourceDir -> {
                 pkgBuilder.serviceInstaller(resourceDir.resolve("service-installer.exe"));
             });
         }
 
-        WIN_UPGRADE_UUID.copyInto(optionValues, pkgBuilder::upgradeCode);
+        WIN_UPGRADE_UUID.ifPresentIn(optionValues, pkgBuilder::upgradeCode);
 
         return pkgBuilder.create();
     }
@@ -111,7 +111,7 @@ final class WinFromOpions {
 
         final var pkgBuilder = new WinExePackageBuilder(msiPkg);
 
-        ICON.copyInto(optionValues, pkgBuilder::icon);
+        ICON.ifPresentIn(optionValues, pkgBuilder::icon);
 
         return pkgBuilder.create();
     }

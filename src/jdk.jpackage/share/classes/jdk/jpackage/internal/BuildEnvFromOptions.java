@@ -24,11 +24,11 @@
  */
 package jdk.jpackage.internal;
 
-import static jdk.jpackage.internal.cli.StandardOptionValue.PREDEFINED_APP_IMAGE;
-import static jdk.jpackage.internal.cli.StandardOptionValue.PREDEFINED_RUNTIME_IMAGE;
-import static jdk.jpackage.internal.cli.StandardOptionValue.RESOURCE_DIR;
-import static jdk.jpackage.internal.cli.StandardOptionValue.TEMP_ROOT;
-import static jdk.jpackage.internal.cli.StandardOptionValue.VERBOSE;
+import static jdk.jpackage.internal.cli.StandardOption.PREDEFINED_APP_IMAGE;
+import static jdk.jpackage.internal.cli.StandardOption.PREDEFINED_RUNTIME_IMAGE;
+import static jdk.jpackage.internal.cli.StandardOption.RESOURCE_DIR;
+import static jdk.jpackage.internal.cli.StandardOption.TEMP_ROOT;
+import static jdk.jpackage.internal.cli.StandardOption.VERBOSE;
 
 import java.nio.file.Path;
 import java.util.Objects;
@@ -81,8 +81,8 @@ final class BuildEnvFromOptions {
 
         final var builder = new BuildEnvBuilder(TEMP_ROOT.getFrom(optionValues));
 
-        RESOURCE_DIR.copyInto(optionValues, builder::resourceDir);
-        VERBOSE.copyInto(optionValues, builder::verbose);
+        RESOURCE_DIR.ifPresentIn(optionValues, builder::resourceDir);
+        VERBOSE.ifPresentIn(optionValues, builder::verbose);
 
         if (app.isRuntime()) {
             var path = PREDEFINED_RUNTIME_IMAGE.getFrom(optionValues);
