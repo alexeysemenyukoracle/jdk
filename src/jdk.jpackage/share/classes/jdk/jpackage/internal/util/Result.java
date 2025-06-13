@@ -22,6 +22,7 @@
  */
 package jdk.jpackage.internal.util;
 
+import static jdk.jpackage.internal.util.function.ExceptionBox.rethrowUnchecked;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -45,7 +46,7 @@ public record Result<T>(Optional<T> value, Collection<? extends Exception> error
 
     public T orElseThrow() {
         firstError().ifPresent(ex -> {
-            throw RuntimeException.class.cast(ex);
+            rethrowUnchecked(ex);
         });
         return value.orElseThrow();
     }
