@@ -25,7 +25,7 @@
 package jdk.jpackage.internal;
 
 import static java.util.stream.Collectors.toSet;
-import static jdk.jpackage.internal.FromOptions.createApplicationBuilder;
+import static jdk.jpackage.internal.FromOptions.buildApplicationBuilder;
 import static jdk.jpackage.internal.FromOptions.createPackageBuilder;
 import static jdk.jpackage.internal.WinPackagingPipeline.APPLICATION_LAYOUT;
 import static jdk.jpackage.internal.cli.StandardOptionValue.ICON;
@@ -57,9 +57,9 @@ final class WinFromOpions {
 
     static WinApplication createWinApplication(Options optionValues) {
 
-        final var launcherFromOptions = new LauncherFromOptions();
+        final var launcherFromOptions = new LauncherFromOptions().faWithDefaultDescription();
 
-        final var app = createApplicationBuilder(optionValues, toFunction(launcherOptionValues -> {
+        final var app = buildApplicationBuilder().create(optionValues, toFunction(launcherOptionValues -> {
 
             final var launcher = launcherFromOptions.create(launcherOptionValues);
 
@@ -79,7 +79,9 @@ final class WinFromOpions {
         return WinApplication.create(app);
     }
 
-    static WinMsiPackage createWinMsiPackage(Options optionValues, WinApplication app) {
+    static WinMsiPackage createWinMsiPackage(Options optionValues) {
+
+        final var app = createWinApplication(optionValues);
 
         final var superPkgBuilder = createPackageBuilder(optionValues, app, WIN_MSI);
 
@@ -103,7 +105,9 @@ final class WinFromOpions {
         return pkgBuilder.create();
     }
 
-    static WinExePackage createWinExePackage(Options optionValues, WinMsiPackage msiPkg) {
+    static WinExePackage createWinExePackage(Options optionValues) {
+
+        final var msiPkg = createWinMsiPackage(optionValues);
 
         final var pkgBuilder = new WinExePackageBuilder(msiPkg);
 

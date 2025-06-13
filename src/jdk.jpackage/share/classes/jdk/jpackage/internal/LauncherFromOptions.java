@@ -41,15 +41,15 @@ import static jdk.jpackage.internal.cli.StandardOptionValue.PREDEFINED_RUNTIME_I
 
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.stream.IntStream;
 import jdk.internal.util.OperatingSystem;
 import jdk.jpackage.internal.FileAssociationGroup.FileAssociationException;
 import jdk.jpackage.internal.FileAssociationGroup.FileAssociationNoExtensionsException;
 import jdk.jpackage.internal.FileAssociationGroup.FileAssociationNoMimesException;
-import jdk.jpackage.internal.cli.FileAssociationOptionValue;
+import jdk.jpackage.internal.cli.StandardFaOption;
 import jdk.jpackage.internal.cli.Options;
 import jdk.jpackage.internal.model.CustomLauncherIcon;
 import jdk.jpackage.internal.model.DefaultLauncherIcon;
@@ -57,14 +57,28 @@ import jdk.jpackage.internal.model.FileAssociation;
 import jdk.jpackage.internal.model.Launcher;
 import jdk.jpackage.internal.model.LauncherIcon;
 
-record LauncherFromOptions(Optional<BiFunction<FileAssociation, Options, FileAssociation>> faExtension) {
-
-    LauncherFromOptions {
-        Objects.requireNonNull(faExtension);
-    }
+final class LauncherFromOptions {
 
     LauncherFromOptions() {
-        this(Optional.empty());
+    }
+
+    LauncherFromOptions faGroupBuilderMutator(BiConsumer<FileAssociationGroup.Builder, LauncherBuilder> v) {
+        faGroupBuilderMutator = v;
+        return this;
+    }
+
+    LauncherFromOptions faMapper(BiFunction<Options, FileAssociation, FileAssociation> v) {
+        faMapper = v;
+        return this;
+    }
+
+    LauncherFromOptions faWithDefaultDescription() {
+        return faGroupBuilderMutator((faGroupBuilder, launcherBuilder) -> {
+            if (faGroupBuilder.description().isEmpty()) {
+                var description = String.format("%s association", launcherBuilder.create().name());
+                faGroupBuilder.description(description);
+            }
+        });
     }
 
     Launcher create(Options optionValues) {
@@ -77,7 +91,7 @@ record LauncherFromOptions(Optional<BiFunction<FileAssociation, Options, FileAss
 
         if (PREDEFINED_APP_IMAGE.findIn(optionValues).isEmpty()) {
             final var startupInfoBuilder = new LauncherStartupInfoBuilder2();
-            
+
             INPUT.copyInto(optionValues, startupInfoBuilder::inputDir);
             ARGUMENTS.copyInto(optionValues, startupInfoBuilder::defaultParameters);
             JAVA_OPTIONS.copyInto(optionValues, startupInfoBuilder::javaOptions);
@@ -86,7 +100,7 @@ record LauncherFromOptions(Optional<BiFunction<FileAssociation, Options, FileAss
             MODULE.copyInto(optionValues, startupInfoBuilder::moduleName);
             MODULE_PATH.copyInto(optionValues, startupInfoBuilder::modulePath);
             PREDEFINED_RUNTIME_IMAGE.copyInto(optionValues, startupInfoBuilder::predefinedRuntimeImage);
-            
+
             builder.startupInfo(startupInfoBuilder.create());
         }
 
@@ -97,17 +111,14 @@ record LauncherFromOptions(Optional<BiFunction<FileAssociation, Options, FileAss
 
             final var faGroupBuilder = FileAssociationGroup.build();
 
-            if (OperatingSystem.current() == OperatingSystem.MACOS) {
-                FileAssociationOptionValue.DESCRIPTION.copyInto(faOptionValues, faGroupBuilder::description);
-            } else {
-                faGroupBuilder.description(FileAssociationOptionValue.DESCRIPTION.findIn(faOptionValues).orElseGet(() -> {
-                    return String.format("%s association", builder.create().name());
-                }));
-            }
+            StandardFaOption.DESCRIPTION.copyInto(faOptionValues, faGroupBuilder::description);
+            StandardFaOption.ICON.copyInto(faOptionValues, faGroupBuilder::icon);
+            StandardFaOption.EXTENSIONS.copyInto(faOptionValues, faGroupBuilder::extensions);
+            StandardFaOption.CONTENT_TYPE.copyInto(faOptionValues, faGroupBuilder::mimeTypes);
 
-            FileAssociationOptionValue.ICON.copyInto(faOptionValues, faGroupBuilder::icon);
-            FileAssociationOptionValue.EXTENSIONS.copyInto(faOptionValues, faGroupBuilder::extensions);
-            FileAssociationOptionValue.CONTENT_TYPE.copyInto(faOptionValues, faGroupBuilder::mimeTypes);
+            faGroupBuilderMutator().ifPresent(mutator -> {
+                mutator.accept(faGroupBuilder, builder);
+            });
 
             final var faID = idx + 1;
 
@@ -127,16 +138,23 @@ record LauncherFromOptions(Optional<BiFunction<FileAssociation, Options, FileAss
                 throw new UnsupportedOperationException(ex);
             }
 
-            if (faExtension.isPresent()) {
+            return faMapper().map(mapper -> {
                 return new FileAssociationGroup(faGroup.items().stream().map(fa -> {
-                    return faExtension.get().apply(fa, faOptionValues);
+                    return mapper.apply(faOptionValues, fa);
                 }).toList());
-            } else {
-                return faGroup;
-            }
+            }).orElse(faGroup);
+
         }).toList();
 
         return builder.faGroups(faGroups).create();
+    }
+
+    private Optional<BiConsumer<FileAssociationGroup.Builder, LauncherBuilder>> faGroupBuilderMutator() {
+        return Optional.ofNullable(faGroupBuilderMutator);
+    }
+
+    private Optional<BiFunction<Options, FileAssociation, FileAssociation>> faMapper() {
+        return Optional.ofNullable(faMapper);
     }
 
     private static LauncherIcon toLauncherIcon(Path launcherIconPath) {
@@ -165,4 +183,7 @@ record LauncherFromOptions(Optional<BiFunction<FileAssociation, Options, FileAss
             }
         }
     }
+
+    private BiConsumer<FileAssociationGroup.Builder, LauncherBuilder> faGroupBuilderMutator;
+    private BiFunction<Options, FileAssociation, FileAssociation> faMapper;
 }

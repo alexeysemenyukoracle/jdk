@@ -50,6 +50,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import jdk.jpackage.internal.cli.OptionIdentifier;
 import jdk.jpackage.internal.cli.Options;
@@ -57,6 +59,7 @@ import jdk.jpackage.internal.model.Application;
 import jdk.jpackage.internal.model.ApplicationLaunchers;
 import jdk.jpackage.internal.model.ApplicationLayout;
 import jdk.jpackage.internal.model.ExternalApplication.LauncherInfo;
+import jdk.jpackage.internal.model.FileAssociation;
 import jdk.jpackage.internal.model.JPackageException;
 import jdk.jpackage.internal.model.Launcher;
 import jdk.jpackage.internal.model.LauncherModularStartupInfo;
@@ -65,15 +68,64 @@ import jdk.jpackage.internal.model.RuntimeLayout;
 
 final class FromOptions {
 
-    static ApplicationBuilder createApplicationBuilder(Options optionValues,
-            Function<Options, Launcher> launcherMapper,
-            ApplicationLayout appLayout) {
-        return createApplicationBuilder(optionValues, launcherMapper, appLayout, Optional.of(RuntimeLayout.DEFAULT));
+    static ApplicationBuilderBuilder buildApplicationBuilder() {
+        return new ApplicationBuilderBuilder();
     }
 
-    static ApplicationBuilder createApplicationBuilder(Options optionValues,
+
+    final static class ApplicationBuilderBuilder {
+
+        private ApplicationBuilderBuilder() {
+        }
+
+        ApplicationBuilder create(Options optionValues,
+                Function<Options, Launcher> launcherMapper, ApplicationLayout appLayout) {
+
+            final Optional<RuntimeLayout> thePredefinedRuntimeLayout;
+            if (PREDEFINED_RUNTIME_IMAGE.containsIn(optionValues)) {
+                thePredefinedRuntimeLayout = Optional.ofNullable(
+                        predefinedRuntimeLayout).or(() -> Optional.of(RuntimeLayout.DEFAULT));
+            } else {
+                thePredefinedRuntimeLayout = Optional.empty();
+            }
+
+            return createApplicationBuilder(
+                    optionValues,
+                    launcherMapper,
+                    appLayout,
+                    Optional.ofNullable(runtimeLayout).orElse(RuntimeLayout.DEFAULT),
+                    thePredefinedRuntimeLayout);
+        }
+
+        /**
+         * Sets the layout of the predefined runtime image.
+         * @param v the layout of the predefined runtime image. Null is permitted.
+         * @return this
+         */
+        ApplicationBuilderBuilder predefinedRuntimeLayout(RuntimeLayout v) {
+            predefinedRuntimeLayout = v;
+            return this;
+        }
+
+        /**
+         * Sets the layout of a runtime bundle.
+         * @param v the layout of a runtime bundle. Null is permitted.
+         * @return this
+         */
+        ApplicationBuilderBuilder runtimeLayout(RuntimeLayout v) {
+            runtimeLayout = v;
+            return this;
+        }
+
+        private RuntimeLayout runtimeLayout;
+        private RuntimeLayout predefinedRuntimeLayout;
+    }
+
+
+    private static ApplicationBuilder createApplicationBuilder(Options optionValues,
             Function<Options, Launcher> launcherMapper,
-            ApplicationLayout appLayout, Optional<RuntimeLayout> predefinedRuntimeLayout) {
+            ApplicationLayout appLayout, RuntimeLayout runtimeLayout,
+            Optional<RuntimeLayout> predefinedRuntimeLayout) {
 
         final var appBuilder = new ApplicationBuilder();
 
