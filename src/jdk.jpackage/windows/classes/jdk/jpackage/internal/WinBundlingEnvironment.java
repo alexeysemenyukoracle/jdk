@@ -42,13 +42,13 @@ public class WinBundlingEnvironment extends DefaultBundlingEnvironment {
         super(build()
                 .defaultOperation(CREATE_WIN_EXE)
                 .bundler(CREATE_WIN_APP_IMAGE, WinBundlingEnvironment::createAppImage)
-                .bundler(CREATE_WIN_EXE, Singleton::sysEnv, WinBundlingEnvironment::createExePackage)
-                .bundler(CREATE_WIN_MSI, Singleton::sysEnv, WinBundlingEnvironment::createMsiPackage));
+                .bundler(CREATE_WIN_EXE, LazyLoad::sysEnv, WinBundlingEnvironment::createExePackage)
+                .bundler(CREATE_WIN_MSI, LazyLoad::sysEnv, WinBundlingEnvironment::createMsiPackage));
     }
 
     private static void createMsiPackage(Options optionValues, WinSystemEnvironment sysEnv) {
 
-        final var pkg = createWinMsiPackage(optionValues, createWinApplication(optionValues));
+        final var pkg = createWinMsiPackage(optionValues);
 
         traceWixToolset(sysEnv);
 
@@ -63,8 +63,7 @@ public class WinBundlingEnvironment extends DefaultBundlingEnvironment {
 
     private static void createExePackage(Options optionValues, WinSystemEnvironment sysEnv) {
 
-        final var pkg = createWinExePackage(optionValues, createWinMsiPackage(optionValues,
-                createWinApplication(optionValues)));
+        final var pkg = createWinExePackage(optionValues);
 
         final var env = buildEnv().create(optionValues, pkg);
 
@@ -107,7 +106,7 @@ public class WinBundlingEnvironment extends DefaultBundlingEnvironment {
         }
     }
 
-    private static final class Singleton {
+    private static final class LazyLoad {
 
         static Result<WinSystemEnvironment> sysEnv() {
             return SYS_ENV;
