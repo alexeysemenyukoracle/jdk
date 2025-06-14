@@ -32,24 +32,22 @@ import jdk.internal.util.OperatingSystem;
  *
  * @param os         the target bundle platform
  * @param bundleType the target bundle type
+ * @param verb       the action to be applied to the target bundle
  */
-public record BundlingOperationDescriptor(OperatingSystem os, String bundleType) {
+public record BundlingOperationDescriptor(OperatingSystem os, String bundleType, String verb) {
     public BundlingOperationDescriptor {
         Objects.requireNonNull(os);
         Objects.requireNonNull(bundleType);
-    }
-
-    public BundlingOperationDescriptor(String bundleType) {
-        this(OperatingSystem.current(), bundleType);
+        Objects.requireNonNull(verb);
     }
 
     @Override
     public String toString() {
-        return os.name() + ":" + bundleType;
+        return os.name() + ":" + verb + ":" + bundleType;
     }
 
     public static BundlingOperationDescriptor valueOf(String str) {
         final var components = str.split(":");
-        return new BundlingOperationDescriptor(OperatingSystem.valueOf(components[0]), components[1]);
+        return new BundlingOperationDescriptor(OperatingSystem.valueOf(components[0]), components[1], components[2]);
     }
 }
