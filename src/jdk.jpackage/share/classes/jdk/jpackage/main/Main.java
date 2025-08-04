@@ -89,7 +89,12 @@ public class Main {
             } else if (hasVersion(newArgs)) {
                 Log.info(System.getProperty("java.version"));
             } else {
-                return jdk.jpackage.internal.cli.Main.main(newArgs);
+                Arguments arguments = new Arguments(newArgs);
+                if (!arguments.processArguments()) {
+                    // processArguments() will log error message if failed.
+                    return 1;
+                }
+                jdk.jpackage.internal.cli.Main.main(newArgs);
             }
             return 0;
         } finally {
