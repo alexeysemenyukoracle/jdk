@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,7 +22,6 @@
  */
 package jdk.jpackage.test;
 
-import static jdk.jpackage.internal.util.function.ThrowingBiConsumer.toBiConsumer;
 import static jdk.jpackage.internal.util.function.ThrowingConsumer.toConsumer;
 import static jdk.jpackage.test.AdditionalLauncher.forEachAdditionalLauncher;
 import static jdk.jpackage.test.PackageType.LINUX;
@@ -45,7 +44,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import jdk.jpackage.internal.util.PathUtils;
 import jdk.jpackage.internal.util.function.ThrowingRunnable;
-import jdk.jpackage.test.AdditionalLauncher.PropertyFile;
 import jdk.jpackage.test.LauncherVerifier.Action;
 
 public final class LauncherAsServiceVerifier {
@@ -193,11 +191,11 @@ public final class LauncherAsServiceVerifier {
             launcherNames.add(null);
         }
 
-        forEachAdditionalLauncher(cmd, toBiConsumer((launcherName, propFilePath) -> {
+        forEachAdditionalLauncher(cmd, (launcherName, propFilePath) -> {
             if (new PropertyFile(propFilePath).findBooleanProperty("launcher-as-service").orElse(false)) {
                 launcherNames.add(launcherName);
             }
-        }));
+        });
 
         return launcherNames;
     }

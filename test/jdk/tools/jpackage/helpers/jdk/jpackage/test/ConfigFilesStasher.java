@@ -29,7 +29,6 @@ import static jdk.jpackage.test.ApplicationLayout.platformAppImage;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -218,14 +217,10 @@ final class ConfigFilesStasher {
         withServices[0] = cmd.hasArgument("--launcher-as-service");
         if (!withServices[0]) {
             AdditionalLauncher.forEachAdditionalLauncher(cmd, (launcherName, propertyFilePath) -> {
-                try {
-                    final var launcherAsService = new AdditionalLauncher.PropertyFile(propertyFilePath)
-                            .findBooleanProperty("launcher-as-service").orElse(false);
-                    if (launcherAsService) {
-                        withServices[0] = true;
-                    }
-                } catch (IOException ex) {
-                    throw new UncheckedIOException(ex);
+                final var launcherAsService = new PropertyFile(propertyFilePath)
+                        .findBooleanProperty("launcher-as-service").orElse(false);
+                if (launcherAsService) {
+                    withServices[0] = true;
                 }
             });
         }
