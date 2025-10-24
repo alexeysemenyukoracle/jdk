@@ -226,7 +226,7 @@ final class FromOptions {
         // Additional launcher should:
         //  - Use description from the main launcher by default.
         //
-        var mainLauncherDefaults = Options.of(Map.of(DESCRIPTION.id(), mainLauncher.description()));
+        var mainLauncherDefaults = Options.of(Map.of(DESCRIPTION, mainLauncher.description()));
 
         var additionalLaunchers = launchers.stream().map(launcherOptions -> {
             return launcherOptions.copyWithParent(mainLauncherDefaults);

@@ -36,7 +36,7 @@ import static jdk.jpackage.internal.cli.StandardOption.PREDEFINED_APP_IMAGE;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import jdk.jpackage.internal.cli.OptionIdentifier;
+import jdk.jpackage.internal.cli.WithOptionIdentifier;
 import jdk.jpackage.internal.cli.Options;
 import jdk.jpackage.internal.model.ApplicationLayout;
 import jdk.jpackage.internal.model.ExternalApplication;
@@ -54,17 +54,17 @@ record OptionsTransformer(Options mainOptions, Optional<ExternalApplication> ext
 
     Options appOptions() {
         return externalApp.map(ea -> {
-            var overrideOptions = Map.<OptionIdentifier, Object>of(
-                    NAME.id(), ea.getAppName(),
-                    APPCLASS.id(), ea.getMainClass(),
-                    APP_VERSION.id(), ea.getAppVersion(),
-                    ADDITIONAL_LAUNCHERS.id(), ea.getAddLaunchers().stream().map(li -> {
+            var overrideOptions = Map.<WithOptionIdentifier, Object>of(
+                    NAME, ea.getAppName(),
+                    APPCLASS, ea.getMainClass(),
+                    APP_VERSION, ea.getAppVersion(),
+                    ADDITIONAL_LAUNCHERS, ea.getAddLaunchers().stream().map(li -> {
                         return Options.concat(li.extra(), Options.of(Map.of(
-                                NAME.id(), li.name(),
-                                LAUNCHER_AS_SERVICE.id(), li.service(),
+                                NAME, li.name(),
+                                LAUNCHER_AS_SERVICE, li.service(),
                                 // This should prevent the code building the Launcher instance
                                 // from the Options object from trying to create a startup info object.
-                                PREDEFINED_APP_IMAGE.id(), PREDEFINED_APP_IMAGE.getFrom(mainOptions),
+                                PREDEFINED_APP_IMAGE, PREDEFINED_APP_IMAGE.getFrom(mainOptions),
                                 //
                                 // For backward compatibility, descriptions of the additional
                                 // launchers in the predefined app image will be set to
@@ -74,7 +74,7 @@ record OptionsTransformer(Options mainOptions, Optional<ExternalApplication> ext
                                 // All launchers in the predefined app image will have the same description.
                                 // This is wrong and should be revised.
                                 //
-                                DESCRIPTION.id(), DESCRIPTION.findIn(mainOptions).orElseGet(ea::getLauncherName)
+                                DESCRIPTION, DESCRIPTION.findIn(mainOptions).orElseGet(ea::getLauncherName)
                             )));
                     }).toList()
             );
@@ -83,7 +83,7 @@ record OptionsTransformer(Options mainOptions, Optional<ExternalApplication> ext
                     ea.getExtra(),
                     // Remove icon if any from the application/launcher options.
                     // If the icon is specified in the main options, it for the installer.
-                    mainOptions.copyWithout(ICON)
+                    mainOptions.copyWithout(ICON.id())
             );
         }).orElse(mainOptions);
     }

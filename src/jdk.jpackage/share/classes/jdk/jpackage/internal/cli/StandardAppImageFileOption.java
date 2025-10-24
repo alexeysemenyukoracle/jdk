@@ -46,11 +46,15 @@ public final class StandardAppImageFileOption {
     }
 
 
-    public record AppImageFileOption<T>(OptionIdentifier id, OptionSpec<T> spec) {
+    public record AppImageFileOption<T>(WithOptionIdentifier withId, OptionSpec<T> spec) {
 
         public AppImageFileOption {
-            Objects.requireNonNull(id);
+            Objects.requireNonNull(withId);
             Objects.requireNonNull(spec);
+        }
+
+        public OptionIdentifier id() {
+            return withId.id();
         }
 
         public String propertyName() {
@@ -182,13 +186,12 @@ public final class StandardAppImageFileOption {
         return Options.of(properties.entrySet().stream().map(e -> {
             return Optional.ofNullable(activeOptions.get(e.getKey())).map(option -> {
                 var optionSpec = context.mapOptionSpec(option.spec());
-                return Map.entry(option.id(), optionSpec.converter().orElseThrow().convert(optionSpec.name(), StringToken.of(e.getValue())).orElseThrow());
+                return Map.entry(option.withId(), optionSpec.converter().orElseThrow().convert(optionSpec.name(), StringToken.of(e.getValue())).orElseThrow());
             });
         }).filter(Optional::isPresent).map(Optional::get).collect(toMap(Map.Entry::getKey, Map.Entry::getValue)));
     }
 
     private static <T> AppImageFileOption<T> create(OptionValue<T> optionValue, OptionSpecBuilder<T> specBuilder) {
-        return new AppImageFileOption<>(optionValue.id(), specBuilder.createOptionSpec());
+        return new AppImageFileOption<>(optionValue, specBuilder.createOptionSpec());
     }
 }
-

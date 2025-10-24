@@ -25,30 +25,24 @@
 
 package jdk.jpackage.internal.cli;
 
-import static java.util.stream.Collectors.toSet;
-
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 
 /**
- * R/O collection of objects associated with identifiers.
+ * R/O collection of objects associated with option identifiers.
  * <p>
  * Use {@link OptionValue} for typed access of the stored objects.
  */
 public sealed interface Options permits
         JOptSimpleOptionsBuilder.ExtendedOptions,
-        Options.Internal.MapOptions,
-        Options.Internal.ConcatenatedOptions,
-        Options.Internal.FilteredOptions {
+        DefaultOptions {
 
     Optional<Object> find(OptionIdentifier id);
 
@@ -60,17 +54,13 @@ public sealed interface Options permits
         return find(id).isPresent();
     }
 
-    default <T> Options copyWithDefaultValue(OptionValue<T> option, T value) {
-        return copyWithDefaultValue(option.id(), value);
-    }
-
-    default Options copyWithDefaultValue(OptionIdentifier id, Object value) {
-        Objects.requireNonNull(id);
+    default Options copyWithDefaultValue(WithOptionIdentifier withId, Object value) {
+        Objects.requireNonNull(withId);
         Objects.requireNonNull(value);
-        if (contains(id)) {
+        if (contains(withId.id())) {
             return this;
         } else {
-            return concat(this, of(Map.of(id, value)));
+            return copyWithParent(of(Map.of(withId, value)));
         }
     }
 
@@ -81,12 +71,11 @@ public sealed interface Options permits
     /**
      * Creates a copy of this instance without the given option identifiers.
      * <p>
-     * {@link #contains(OptionIdentifier)} called on the returned instance with any
-     * of the given identifiers will return {@code false}.
-     * {@link #contains(OptionName)} called on the returned instance with any name
-     * returned by {@link OptionSpec#name()}} method called on option specifications
-     * of identifiers of type {@code Option} from the given identifier array will
-     * return {@code false}.
+     * {@link #contains(OptionIdentifier)} called on the return instance with any of
+     * the given identifiers will return {@code false}.
+     * {@link #contains(OptionName)} called on the return instance with any option
+     * name of option specifications associated with given identifiers will return
+     * {@code false}.
      *
      * @param ids the identifiers to exclude
      * @return a copy of this instance without the given option identifiers
@@ -98,42 +87,14 @@ public sealed interface Options permits
     /**
      * Creates a copy of this instance without the given option identifiers.
      * <p>
-     * Same as {@link #contains(OptionIdentifier...)} but takes an
+     * Same as {@link #copyWithout(OptionIdentifier...)} but takes an
      * {@code Iterable<OptionIdentifier>} instead of an {@code OptionIdentifier[]}.
      *
      * @param ids the identifiers to exclude
      * @return a copy of this instance without the given option identifiers
      */
-    default Options copyWithout(Iterable<OptionIdentifier> ids) {
-        return Internal.copyWithout(this, StreamSupport.stream(ids.spliterator(), false));
-    }
-
-    /**
-     * Creates a copy of this instance without the given option values.
-     * <p>
-     * Same as {@link #contains(OptionIdentifier...)} but takes
-     * {@code OptionValue[]} instead of {@code OptionIdentifier[]}.
-     *
-     * @param ids the option values whose identifiers to exclude
-     * @return a copy of this instance without the identifiers of the given option
-     *         values
-     */
-    default Options copyWithout(OptionValue<?>... options) {
-        return copyWithoutValues(List.of(options));
-    }
-
-    /**
-     * Creates a copy of this instance without the given option values.
-     * <p>
-     * Same as {@link #contains(OptionIdentifier...)} but takes
-     * {@code Iterable<OptionValue<?>>} instead of {@code OptionIdentifier[]}.
-     *
-     * @param ids the option values whose identifiers to exclude
-     * @return a copy of this instance without the identifiers of the given option
-     *         values
-     */
-    default Options copyWithoutValues(Iterable<OptionValue<?>> options) {
-        return Internal.copyWithout(this, StreamSupport.stream(options.spliterator(), false).map(OptionValue::id));
+    default Options copyWithout(Iterable<? extends OptionIdentifier> ids) {
+        return toDefaultOptions(this).copyWithout(StreamSupport.stream(ids.spliterator(), false));
     }
 
     /**
@@ -146,130 +107,46 @@ public sealed interface Options permits
         }));
     }
 
-    public static Options of(Map<OptionIdentifier, Object> map) {
-        return new Internal.MapOptions(map);
+    /**
+     * Creates {@code Options} instance from the map of objects with option
+     * identifiers and associated option values.
+     *
+     * @param map the map of objects with option identifiers and associated option
+     *            values
+     * @return a new {@code Options} instance
+     */
+    public static Options of(Map<WithOptionIdentifier, Object> map) {
+        return new DefaultOptions(map);
+    }
+
+    /**
+     * Creates {@code Options} instance from the map of option identifiers and
+     * associated option values.
+     * <p>
+     * Similar to {@link #of(Map)} method, but {@link #contains(OptionName)} called
+     * on the return instance will always return {@code false}.
+     *
+     * @param map the map of option identifiers and associated option values
+     * @return a new {@code Options} instance
+     */
+    public static Options ofIDs(Map<OptionIdentifier, Object> map) {
+        return new DefaultOptions(map.entrySet().stream().collect(Collectors.toMap(e -> {
+            return new WithOptionIdentifierStub(e.getKey());
+        }, Map.Entry::getValue)));
     }
 
     public static Options concat(Options... options) {
-        return new Internal.ConcatenatedOptions(options);
+        return Stream.of(options).map(Options::toDefaultOptions).reduce(DefaultOptions.EMPTY, DefaultOptions::add);
     }
 
-
-    static final class Internal {
-
-        private Internal() {
-        }
-
-        private static Set<OptionName> optionNames(Stream<? extends OptionIdentifier> options) {
-            return options
-                    .filter(Option.class::isInstance)
-                    .map(Option.class::cast)
-                    .map(Option::getSpec)
-                    .map(OptionSpec::names)
-                    .flatMap(Collection::stream)
-                    .collect(toSet());
-        }
-
-        private static Options copyWithout(Options options, Stream<? extends OptionIdentifier> ids) {
-            return new FilteredOptions(options, ids.collect(toSet()));
-        }
-
-
-        static final class MapOptions implements Options {
-
-            MapOptions(Map<OptionIdentifier, Object> values) {
-                this.values = Map.copyOf(values);
-                optionNames = optionNames(values.keySet().stream());
+    private static DefaultOptions toDefaultOptions(Options v) {
+        switch (Objects.requireNonNull(v)) {
+            case DefaultOptions u -> {
+                return u;
             }
-
-            @Override
-            public Optional<Object> find(OptionIdentifier id) {
-                return Optional.ofNullable(values.get(id));
+            case JOptSimpleOptionsBuilder.ExtendedOptions<?> u -> {
+                return u.toDefaultOptions();
             }
-
-            @Override
-            public boolean contains(OptionName optionName) {
-                return optionNames.contains(Objects.requireNonNull(optionName));
-            }
-
-            @Override
-            public Set<? extends OptionIdentifier> ids() {
-                return values.keySet();
-            }
-
-            private final Map<OptionIdentifier, Object> values;
-            private final Set<OptionName> optionNames;
-        }
-
-
-        static final class ConcatenatedOptions implements Options {
-
-            ConcatenatedOptions(Options... options) {
-                this.values = List.of(options);
-            }
-
-            @Override
-            public Optional<Object> find(OptionIdentifier id) {
-                Objects.requireNonNull(id);
-                return values.stream().map(o -> {
-                    return o.find(id);
-                }).filter(Optional::isPresent).map(Optional::orElseThrow).findFirst();
-            }
-
-            @Override
-            public boolean contains(OptionName optionName) {
-                Objects.requireNonNull(optionName);
-                return values.stream().anyMatch(v -> {
-                    return v.contains(optionName);
-                });
-            }
-
-            @Override
-            public Set<? extends OptionIdentifier> ids() {
-                return values.stream().map(Options::ids).flatMap(Collection::stream).collect(toSet());
-            }
-
-            private final List<Options> values;
-        }
-
-
-        static final class FilteredOptions implements Options {
-
-            FilteredOptions(Options options, Set<? extends OptionIdentifier> excludes) {
-                this.options = Objects.requireNonNull(options);
-
-                includes = StreamSupport.stream(options.ids().spliterator(), false)
-                        .filter(Predicate.not(excludes::contains))
-                        .collect(toSet());
-                optionNames = optionNames(includes.stream());
-            }
-
-            @Override
-            public Optional<Object> find(OptionIdentifier id) {
-                if (includes.contains(Objects.requireNonNull(id))) {
-                    return options.find(id);
-                } else {
-                    return Optional.empty();
-                }
-            }
-
-            @Override
-            public boolean contains(OptionName optionName) {
-                if (optionNames.contains(Objects.requireNonNull(optionName))) {
-                    return options.contains(optionName);
-                } else {
-                    return false;
-                }
-            }
-
-            @Override
-            public Set<? extends OptionIdentifier> ids() {
-                return includes;
-            }
-
-            private final Options options;
-            private final Set<? extends OptionIdentifier> includes;
-            private final Set<OptionName> optionNames;
         }
     }
 }

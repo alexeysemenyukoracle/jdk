@@ -22,10 +22,12 @@
  */
 package jdk.jpackage.internal.cli;
 
+import static jdk.jpackage.internal.cli.WithOptionIdentifier.stub;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,12 +40,12 @@ import org.junit.jupiter.api.Test;
 public class OptionsTest {
 
     @Test
-    public void test_of() {
+    public void test_ofIDs() {
         var fooID = OptionIdentifier.createUnique();
         var barID = OptionIdentifier.createUnique();
         var buzID = OptionIdentifier.createUnique();
 
-        var options = Options.of(Map.of(fooID, "Hello", barID, 100));
+        var options = Options.ofIDs(Map.of(fooID, "Hello", barID, 100));
 
         expect().add(fooID, "Hello").add(barID, 100).apply(options);
         assertFalse(options.find(buzID).isPresent());
@@ -66,7 +68,7 @@ public class OptionsTest {
         var barID = dummyOption("bar");
         var buzID = OptionIdentifier.createUnique();
 
-        var options = Options.of(Map.of(fooID, "Hello", barID, 100));
+        var options = Options.of(Map.of(stub(fooID), "Hello", barID, 100));
 
         expect().add(fooID, "Hello").add(barID, 100).apply(options);
         assertFalse(options.find(buzID).isPresent());
@@ -78,8 +80,8 @@ public class OptionsTest {
         var idA = OptionIdentifier.createUnique();
         var idB = OptionIdentifier.createUnique();
 
-        var a = Options.of(Map.of(idA, "Foo", idB, true));
-        var b = Options.concat(Options.of(Map.of(idA, "Foo")), Options.of(Map.of(idB, true)));
+        var a = Options.ofIDs(Map.of(idA, "Foo", idB, true));
+        var b = Options.concat(Options.ofIDs(Map.of(idA, "Foo")), Options.ofIDs(Map.of(idB, true)));
 
         assertEquals(a.toMap(), b.toMap());
     }
@@ -89,7 +91,7 @@ public class OptionsTest {
         var fooID = OptionIdentifier.createUnique();
         var barOV = OptionValue.build().spec(dummyOptionSpec("bar")).create();
 
-        var options = Options.of(Map.of(fooID, "Hello"));
+        var options = Options.ofIDs(Map.of(fooID, "Hello"));
         var expected = expect().add(fooID, "Hello");
 
         expected.apply(options);
@@ -97,6 +99,7 @@ public class OptionsTest {
 
         options = options.copyWithDefaultValue(barOV, 89);
         expected.add(barOV, 89).apply(options);
+
     }
 
     @Test
@@ -104,7 +107,7 @@ public class OptionsTest {
         var fooID = OptionIdentifier.createUnique();
         var barOV = OptionValue.build().spec(dummyOptionSpec("bar")).create();
 
-        var options = Options.of(Map.of(fooID, "Hello", barOV.id(), 89));
+        var options = Options.of(Map.of(stub(fooID), "Hello", barOV, 89));
         var expected = expect().add(fooID, "Hello").add(barOV, 89);
 
         expected.apply(options);
@@ -117,7 +120,7 @@ public class OptionsTest {
         var fooID = OptionIdentifier.createUnique();
         var barID = dummyOption("bar");
 
-        var options = Options.of(Map.of(fooID, "Hello"));
+        var options = Options.ofIDs(Map.of(fooID, "Hello"));
         expect().add(fooID, "Hello").apply(options);
         assertFalse(options.contains(barID.getSpec().name()));
 
@@ -134,7 +137,10 @@ public class OptionsTest {
         var c = dummyOption("bar", "b");
         var d = dummyOption("str", "s", "q");
 
-        var options = Options.of(Map.of(a, "Hello", b, 189, c, Set.of(78, "56"), d, List.of(100)));
+        var options = Options.concat(
+                Options.ofIDs(Map.of(a, "Hello", b, 189)),
+                Options.of(Map.of(c, Set.of(78, "56"), d, List.of(100)))
+        );
 
         expect().add(a, "Hello").add(b, 189).add(c, Set.of(78, "56")).add(d, List.of(100)).apply(options);
 
@@ -154,11 +160,11 @@ public class OptionsTest {
         var a = OptionValue.build().spec(dummyOptionSpec("bar", "b")).create();
         var b = OptionValue.build().spec(dummyOptionSpec("str", "s", "q")).create();
 
-        var options = Options.of(Map.of(a.id(), "Hello", b.id(), 189));
+        var options = Options.of(Map.of(a, "Hello", b, 189));
 
         expect().add(a.id(), "Hello").add(b.id(), 189).apply(options);
 
-        var without = options.copyWithout(a);
+        var without = options.copyWithout(a.id());
 
         expect().add(b.id(), 189).apply(without);
 
@@ -194,7 +200,10 @@ public class OptionsTest {
         var fooID = OptionIdentifier.createUnique();
         var barID = dummyOption("bar");
 
-        var options = Options.of(Map.of(fooID, "Hello", barID, 137));
+        var options = Options.concat(
+                Options.ofIDs(Map.of(fooID, "Hello")),
+                Options.of(Map.of(barID, 137))
+        );
         var expected = expect().add(fooID, "Hello").add(barID, 137);
         expected.apply(options);
 
@@ -232,23 +241,31 @@ public class OptionsTest {
         }
 
         ExpectedOptions add(OptionValue<?> ov, Object expectedValue) {
+            ov.asOption().map(Option::getSpec).map(OptionSpec::names).ifPresent(names -> {
+                expectedOptionNames.put(ov.id(), names);
+            });
             return add(ov.id(), expectedValue);
+        }
+
+        ExpectedOptions add(Option o, Object expectedValue) {
+            expectedOptionNames.put(o.id(), o.getSpec().names());
+            return add(o.id(), expectedValue);
         }
 
         void apply(Options options) {
             for (var e : expected.entrySet()) {
                 assertEquals(e.getValue(), options.find(e.getKey()).orElseThrow());
-                if (e.getKey() instanceof Option option) {
-                    for (var name : option.getSpec().names()) {
-                        assertTrue(options.contains(name));
-                    }
-                }
             }
+
+            expectedOptionNames.values().stream().flatMap(Collection::stream).forEach(optionName -> {
+                assertTrue(options.contains(optionName));
+            });
 
             assertEquals(expected, options.toMap());
             assertEquals(expected.keySet(), options.ids());
         }
 
         private final Map<OptionIdentifier, Object> expected = new HashMap<>();
+        private final Map<OptionIdentifier, Collection<OptionName>> expectedOptionNames = new HashMap<>();
     }
 }

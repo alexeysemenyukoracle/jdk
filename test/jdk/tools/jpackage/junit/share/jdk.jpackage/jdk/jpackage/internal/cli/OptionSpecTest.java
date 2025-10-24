@@ -163,7 +163,7 @@ public class OptionSpecTest {
 
         final Options options;
         if (found) {
-            options = Options.of(Map.of(OptionValue.<String>build().spec(spec).create().id(), 100));
+            options = Options.of(Map.of(OptionValue.<String>build().spec(spec).create(), 100));
         } else {
             options = Options.of(Map.of());
         }

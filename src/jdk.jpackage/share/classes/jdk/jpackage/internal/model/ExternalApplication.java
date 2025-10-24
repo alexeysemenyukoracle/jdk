@@ -101,7 +101,7 @@ public interface ExternalApplication {
         }
 
         public LauncherInfo(Options options) {
-            this(NAME.getFrom(options), LAUNCHER_AS_SERVICE.getFrom(options), options.copyWithout(NAME, LAUNCHER_AS_SERVICE));
+            this(NAME.getFrom(options), LAUNCHER_AS_SERVICE.getFrom(options), options.copyWithout(NAME.id(), LAUNCHER_AS_SERVICE.id()));
         }
 
         /**
@@ -114,7 +114,7 @@ public interface ExternalApplication {
          * @return the {@code Options} representation of this instance
          */
         public Options asOptions() {
-            return Options.concat(Options.of(Map.of(NAME.id(), name, LAUNCHER_AS_SERVICE.id(), service)), extra);
+            return Options.concat(Options.of(Map.of(NAME, name, LAUNCHER_AS_SERVICE, service)), extra);
         }
     }
 
@@ -127,7 +127,7 @@ public interface ExternalApplication {
         var appVersion = APP_VERSION.getFrom(appOptions);
         var appName = NAME.getFrom(appOptions);
         var mainClass = APPCLASS.getFrom(appOptions);
-        var extra = appOptions.copyWithout(APP_VERSION, NAME, APPCLASS);
+        var extra = appOptions.copyWithout(APP_VERSION.id(), NAME.id(), APPCLASS.id());
 
         return new ExternalApplication() {
 

@@ -330,9 +330,46 @@ final class JOptSimpleOptionsBuilder {
 
 
     sealed interface ExtendedOptions<T extends ExtendedOptions<T>> extends Options {
+
+        /**
+         * Returns a copy of this instance with the specified options excluded.
+         * <p>
+         * {@link #find(OptionIdentifier)} method called on the return object with
+         * option identifier from the {@code excludes} collection will return an empty
+         * {@code Optional} instance.
+         * <p>
+         * {@link #contains(OptionName)} and {@link #contains(OptionIdentifier)} methods
+         * called on the return object with option name from the {@code excludes}
+         * collection will return {@code false}.
+         * <p>
+         * {@link #detectedOptions()} method called on the return object will return the
+         * list without option names from the {@code excludes} collection.
+         *
+         * @param excludes the collection of options to exclude from the return instance
+         * @return the copy of this instance with the specified options excluded
+         */
         T copyWithExcludes(Collection<Option> excludes);
+
+        /**
+         * Gets the list of command line tokens not linked to any option in the order
+         * they appear on the command line.
+         *
+         * @return Gets the list of command line tokens not linked to any option in the
+         *         order they appear on the command line
+         */
         List<String> nonOptionArguments();
+
+        /**
+         * Gets the list of names of detected options in the order they appear on the
+         * command line. A name will appear in the list as many times as the
+         * corresponding option on the command line.
+         *
+         * @return the list of names of detected options in the order they appear on the
+         *         command line
+         */
         List<OptionName> detectedOptions();
+
+        DefaultOptions toDefaultOptions();
     }
 
 
@@ -392,6 +429,20 @@ final class JOptSimpleOptionsBuilder {
         }
 
         @Override
+        public DefaultOptions toDefaultOptions() {
+            if (redirects.isEmpty()) {
+                return options.toDefaultOptions();
+            } else {
+                var defaultOptions = options.toDefaultOptions();
+                return new DefaultOptions(redirects.entrySet().stream().map(optionRedirect -> {
+                    return Map.entry(
+                            optionRedirect.getKey(),
+                            defaultOptions.find(optionRedirect.getValue()).orElseThrow());
+                }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)), defaultOptions.optionNames()::contains);
+            }
+        }
+
+        @Override
         public RedirectedOptions<T> copyWithExcludes(Collection<Option> excludes) {
             if (redirects.isEmpty()) {
                 return new RedirectedOptions<>(options.copyWithExcludes(excludes), redirects);
@@ -428,7 +479,7 @@ final class JOptSimpleOptionsBuilder {
             this.optionMap = optionMap.entrySet().stream().filter(e -> {
                 return !Collections.disjoint(optionNames, e.getKey().getSpec().names());
             }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-            assertNoUnexpectedOptionNames(optionMap, optionNames);
+            assertNoUnexpectedOptionNames(optionMap.keySet(), optionNames);
         }
 
         private UntypedOptions(UntypedOptions other, Collection<Option> excludes) {
@@ -457,6 +508,13 @@ final class JOptSimpleOptionsBuilder {
             return optionSet.specs().stream().flatMap(joptSpec -> {
                 return joptSpec.options().stream().map(OptionName::new);
             }).filter(optionNames::contains).toList();
+        }
+
+        @Override
+        public DefaultOptions toDefaultOptions() {
+            return new DefaultOptions(optionMap.keySet().stream().collect(Collectors.toMap(x -> x, option -> {
+                return find(option).get();
+            })), optionNames::contains);
         }
 
         Result<TypedOptions> toTypedOptions() {
@@ -800,19 +858,24 @@ final class JOptSimpleOptionsBuilder {
                 List<OptionName> detectedOptions,
                 List<String> nonOptionArguments) {
 
-            this.values = Objects.requireNonNull(values);
-            this.optionNames = Objects.requireNonNull(optionNames);
+            this(new DefaultOptions(values, optionNames::contains), detectedOptions, nonOptionArguments);
+            assertNoUnexpectedOptionNames(values.keySet(), optionNames);
+            assertNoUnexpectedOptionNames(values.keySet(), detectedOptions);
+        }
+
+        TypedOptions(
+                DefaultOptions options,
+                List<OptionName> detectedOptions,
+                List<String> nonOptionArguments) {
+
+            this.options = Objects.requireNonNull(options);
             this.nonOptionArguments = Objects.requireNonNull(nonOptionArguments);
             this.detectedOptions = Objects.requireNonNull(detectedOptions);
-            assertNoUnexpectedOptionNames(values, optionNames);
-            assertNoUnexpectedOptionNames(values, detectedOptions);
+            assertNoUnexpectedOptionNames(options.withOptionIdentifierSet(), detectedOptions);
         }
 
         private TypedOptions(TypedOptions other, Collection<Option> excludes) {
-            this(other.values.entrySet().stream().filter(e -> {
-                return !excludes.contains(e.getKey());
-            }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)),
-                    applyExcludes(other.optionNames, excludes, HashSet::new),
+            this(other.options.copyWithout(excludes.stream()),
                     applyExcludes(other.detectedOptions, excludes, ArrayList::new),
                     other.nonOptionArguments());
         }
@@ -834,21 +897,25 @@ final class JOptSimpleOptionsBuilder {
 
         @Override
         public Set<? extends OptionIdentifier> ids() {
-            return values.keySet();
+            return options.ids();
         }
 
         @Override
         public Optional<Object> find(OptionIdentifier id) {
-            return Optional.ofNullable(values.get(id));
+            return options.find(id);
         }
 
         @Override
         public boolean contains(OptionName optionName) {
-            return optionNames.contains(optionName);
+            return options.contains(optionName);
         }
 
-        private final Map<Option, Object> values;
-        private final Set<OptionName> optionNames;
+        @Override
+        public DefaultOptions toDefaultOptions() {
+            return options;
+        }
+
+        private final DefaultOptions options;
         private final List<String> nonOptionArguments;
         private final List<OptionName> detectedOptions;
     }
@@ -862,8 +929,9 @@ final class JOptSimpleOptionsBuilder {
         return newOptionNames;
     }
 
-    private static void assertNoUnexpectedOptionNames(Map<Option, ?> optionMap, Collection<OptionName> optionNames) {
-        final var allowedOptionNames = optionMap.keySet().stream()
+    private static void assertNoUnexpectedOptionNames(Set<? extends WithOptionIdentifier> options, Collection<OptionName> optionNames) {
+        final var allowedOptionNames = options.stream()
+                .map(Option.class::cast)
                 .map(Option::getSpec)
                 .map(OptionSpec::names)
                 .flatMap(Collection::stream)

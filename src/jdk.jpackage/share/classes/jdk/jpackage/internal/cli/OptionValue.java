@@ -34,7 +34,7 @@ import java.util.function.Function;
  *
  * @param <T> option value type.
  */
-public sealed interface OptionValue<T> {
+public sealed interface OptionValue<T> extends WithOptionIdentifier {
 
     OptionIdentifier id();
 

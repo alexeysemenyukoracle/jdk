@@ -77,7 +77,7 @@ public class OptionValueTest {
 
         assertNull(value[0]);
 
-        option.ifPresentIn(Options.of(Map.of(option.id(), "bar")), v -> {
+        option.ifPresentIn(Options.of(Map.of(option, "bar")), v -> {
             value[0] = v;
         });
 
@@ -128,7 +128,7 @@ public class OptionValueTest {
 
         assertEquals(100, option.getFrom(EMPTY_OPTIONS));
 
-        assertEquals(300, option.getFrom(Options.of(Map.of(option.id(), 300))));
+        assertEquals(300, option.getFrom(Options.of(Map.of(option, 300))));
     }
 
     @Test
@@ -140,7 +140,7 @@ public class OptionValueTest {
 
         assertEquals(100, option.getFrom(EMPTY_OPTIONS));
 
-        assertEquals(300, option.getFrom(Options.of(Map.of(option.id(), 300))));
+        assertEquals(300, option.getFrom(Options.of(Map.of(option, 300))));
     }
 
     @Test
@@ -150,7 +150,7 @@ public class OptionValueTest {
 
         assertFalse(option.containsIn(EMPTY_OPTIONS));
 
-        assertEquals(300, option.getFrom(Options.of(Map.of(option.id(), "300"))));
+        assertEquals(300, option.getFrom(Options.of(Map.of(option, "300"))));
     }
 
     @Test
@@ -160,7 +160,7 @@ public class OptionValueTest {
 
         assertFalse(listOption.containsIn(EMPTY_OPTIONS));
 
-        assertEquals(List.of(300), listOption.getFrom(Options.of(Map.of(listOption.id(), 300))));
+        assertEquals(List.of(300), listOption.getFrom(Options.of(Map.of(listOption, 300))));
     }
 
     @Test
@@ -176,7 +176,7 @@ public class OptionValueTest {
         assertEquals(List.of("abc"), listOption.getFrom(EMPTY_OPTIONS));
         assertEquals("abc", option.getFrom(EMPTY_OPTIONS));
 
-        var options = Options.of(Map.of(option.id(), "Hello"));
+        var options = Options.of(Map.of(option, "Hello"));
 
         assertEquals(List.of("Hello"), listOption.getFrom(options));
         assertEquals("Hello", option.getFrom(options));
@@ -187,7 +187,7 @@ public class OptionValueTest {
 
         OptionValue<String> option = build(String.class, "foo").create();
 
-        var options = Options.of(Map.of(option.id(), new Object()));
+        var options = Options.of(Map.of(option, new Object()));
 
         // OptionValue.contains() should work regardless the type of its value stored in Options object.
         assertTrue(option.containsIn(options));
@@ -202,10 +202,10 @@ public class OptionValueTest {
         var anotherOption = OptionValue.create();
 
         assertFalse(option.containsIn(EMPTY_OPTIONS));
-        assertFalse(option.containsIn(Options.of(Map.of(anotherOption.id(), ""))));
+        assertFalse(option.containsIn(Options.of(Map.of(anotherOption, ""))));
 
-        assertTrue(option.containsIn(Options.of(Map.of(option.id(), new int[10]))));
-        assertTrue(option.containsIn(Options.of(Map.of(option.id(), new Object()))));
+        assertTrue(option.containsIn(Options.of(Map.of(option, new int[10]))));
+        assertTrue(option.containsIn(Options.of(Map.of(option, new Object()))));
     }
 
     private static <T> OptionSpecBuilder<T> build(Class<? extends T> type, String name) {

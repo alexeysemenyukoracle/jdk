@@ -98,7 +98,7 @@ final class OptionsProcessor {
 
         // Validate the bundling operation.
         final var bundlingOperationResult = validateBundlingOperation(analyzer.bundlingOperation()).map(op -> {
-            return Map.entry(StandardOption.BUNDLING_OPERATION_DESCRIPTOR.id(), op);
+            return Map.entry(StandardOption.BUNDLING_OPERATION_DESCRIPTOR, op);
         });
 
         bundlingOperationResult.peekErrors(allErrors::addAll);
@@ -131,13 +131,13 @@ final class OptionsProcessor {
                     .orElseGet(Stream::of).map(addLauncherStr -> {
                         return addLauncherStr.split("=", 2)[0];
                     }).map(addLauncherName -> {
-                        return Options.of(Map.of(StandardOption.NAME.id(), addLauncherName));
+                        return Options.of(Map.of(StandardOption.NAME, addLauncherName));
                     }).toArray(Options[]::new);
 
-            Map<OptionIdentifier, Object> options = new HashMap<>();
-            options.put(ADD_LAUNCHER_INTERNAL.id(), addLaunchers);
+            Map<WithOptionIdentifier, Object> options = new HashMap<>();
+            options.put(ADD_LAUNCHER_INTERNAL, addLaunchers);
             untypedOptions.find(StandardOption.NAME.id()).ifPresent(strArray -> {
-                options.put(StandardOption.NAME.id(), ((String[])strArray)[0]);
+                options.put(StandardOption.NAME, ((String[])strArray)[0]);
             });
 
             var result = validateAdditionalLaunchers(Options.of(options));
@@ -148,16 +148,16 @@ final class OptionsProcessor {
                 .map(ValidatedOptions::options)
                 .map(this::validateAdditionalLaunchers).map(result -> {
                     return result.map(addLaunchers -> {
-                        return Map.entry(ADDITIONAL_LAUNCHERS.id(), addLaunchers);
+                        return Map.entry(ADDITIONAL_LAUNCHERS, addLaunchers);
                     });
                 }).orElseGet(() -> {
-                    return Result.ofValue(Map.entry(ADDITIONAL_LAUNCHERS.id(), List.of()));
+                    return Result.ofValue(Map.entry(ADDITIONAL_LAUNCHERS, List.of()));
                 });
 
         validatedAddLaunchersResult.peekErrors(allErrors::addAll);
 
         final var validatedFaResult = Result.ofValue(Map.entry(
-                StandardOption.FILE_ASSOCIATIONS.id(),
+                StandardOption.FILE_ASSOCIATIONS,
                 validatedOptionsResult.value()
                         .map(ValidatedOptions::options)
                         .map(FILE_ASSOCIATIONS_INTERNAL::getFrom)
@@ -182,7 +182,7 @@ final class OptionsProcessor {
         } else {
             // No errors.
             // Add synthesized option values and return the result.
-            final Map<OptionIdentifier, Object> extra = Stream.of(
+            final Map<WithOptionIdentifier, Object> extra = Stream.of(
                     bundlingOperationResult,
                     validatedAddLaunchersResult,
                     validatedFaResult
@@ -192,7 +192,7 @@ final class OptionsProcessor {
                 return new ValidatedOptions(
                         Options.concat(
                                 Options.of(extra),
-                                validatedOptions.options().copyWithout(ADD_LAUNCHER_INTERNAL, FILE_ASSOCIATIONS_INTERNAL)),
+                                validatedOptions.options().copyWithout(ADD_LAUNCHER_INTERNAL.id(), FILE_ASSOCIATIONS_INTERNAL.id())),
                         validatedOptions.bundlingOperation());
             });
         }
@@ -289,7 +289,7 @@ final class OptionsProcessor {
                     var localContext = context.forFile(addLauncher.propertyFile());
                     var optionValues = processPropertyFile(addLauncher.propertyFile(), options, Optional.of(localContext::mapOptionSpec));
                     return optionValues.map(o -> {
-                        return o.copyWithParent(Options.of(Map.of(StandardOption.NAME.id(), addLauncher.name())));
+                        return o.copyWithParent(Options.of(Map.of(StandardOption.NAME, addLauncher.name())));
                     });
                 }, StandardOption.ADD_LAUNCHER_INTERNAL.getSpec()));
             } else if (optionSpec.name().equals(StandardOption.FILE_ASSOCIATIONS_INTERNAL.getSpec().name())) {
@@ -354,7 +354,7 @@ final class OptionsProcessor {
 
                 return Options.concat(
                         addLauncherOptionValues,
-                        cmdline.copyWithoutValues(excludes));
+                        cmdline.copyWithout(excludes.stream().map(WithOptionIdentifier::id).toList()));
             }).toList());
         }
     }

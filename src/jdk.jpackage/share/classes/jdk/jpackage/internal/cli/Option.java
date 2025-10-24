@@ -38,7 +38,13 @@ import java.util.stream.Stream;
 /**
  * Option identifier associated with option specification.
  */
-sealed interface Option extends OptionIdentifier {
+sealed interface Option extends OptionIdentifier, WithOptionIdentifier {
+
+    @Override
+    default public OptionIdentifier id() {
+        return this;
+    }
+
     OptionSpec<?> getSpec();
 
     static Option create(OptionSpec<?> spec) {

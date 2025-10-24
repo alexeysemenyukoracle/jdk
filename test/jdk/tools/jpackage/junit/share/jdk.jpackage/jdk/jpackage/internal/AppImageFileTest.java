@@ -52,6 +52,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import jdk.internal.util.OperatingSystem;
+import jdk.jpackage.internal.cli.WithOptionIdentifier;
 import jdk.jpackage.internal.cli.OptionIdentifier;
 import jdk.jpackage.internal.cli.Options;
 import jdk.jpackage.internal.cli.StandardAppImageFileOption.AppImageFileOption;
@@ -183,9 +184,9 @@ public class AppImageFileTest {
         ExternalApplication createExternalApplication() {
             var mainLauncher = createMaunLauncher();
             var appOptions = Options.concat(Options.of(Map.of(
-                    APP_VERSION.id(), version,
-                    NAME.id(), mainLauncher.name(),
-                    APPCLASS.id(), mainLauncher.startupInfo().orElseThrow().qualifiedClassName())), extra.asObjectValues());
+                    APP_VERSION, version,
+                    NAME, mainLauncher.name(),
+                    APPCLASS, mainLauncher.startupInfo().orElseThrow().qualifiedClassName())), extra.asObjectValues());
             return ExternalApplication.create(
                     appOptions,
                     addLauncherBuilders.stream()
@@ -276,7 +277,7 @@ public class AppImageFileTest {
             }
 
             <T> ExtraPropertyBuilder add(AppImageFileOption<T> option, T value) {
-                objValues.put(option.id(), Objects.requireNonNull(value));
+                objValues.put(option.withId(), Objects.requireNonNull(value));
                 return this;
             }
 
@@ -289,7 +290,7 @@ public class AppImageFileTest {
             }
 
             private Map<String, String> stringValues = new HashMap<>();
-            private Map<OptionIdentifier, Object> objValues = new HashMap<>();
+            private Map<WithOptionIdentifier, Object> objValues = new HashMap<>();
         }
 
 
