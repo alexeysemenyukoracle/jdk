@@ -29,6 +29,7 @@ import static jdk.jpackage.internal.util.PathUtils.normalizedAbsolutePathString;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.System.Logger.Level;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -40,6 +41,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import jdk.jpackage.internal.PackagingPipeline.PackageTaskID;
 import jdk.jpackage.internal.PackagingPipeline.TaskID;
+import jdk.jpackage.internal.model.Logger;
 import jdk.jpackage.internal.model.MacDmgPackage;
 import jdk.jpackage.internal.util.FileUtils;
 import jdk.jpackage.internal.util.PathGroup;
@@ -249,7 +251,9 @@ record MacDmgPackager(BuildEnv env, MacDmgPackage pkg, Path outputDir,
         try {
             IOUtils.exec(pb, false, null, true, Executor.INFINITE_TIMEOUT);
         } catch (IOException ex) {
-            Log.verbose(ex); // Log exception
+            LOGGER.log(Level.TRACE, "Failed to create a DMG from the entire app image", ex);
+
+            LOGGER.log(Level.TRACE, "Will create an empty DMG and fill it manually");
 
             // Creating DMG from entire app image failed, so lets try to create empty
             // DMG and copy files manually. See JDK-8248059.
@@ -306,7 +310,7 @@ record MacDmgPackager(BuildEnv env, MacDmgPackage pkg, Path outputDir,
                         normalizedAbsolutePathString(volumeScript()));
                 IOUtils.exec(pb, 180); // Wait 3 minutes. See JDK-8248248.
             } catch (IOException ex) {
-                Log.verbose(ex);
+                LOGGER.log(Level.ERROR, "Failed to set background image", ex);
             }
 
             // volume icon
@@ -338,8 +342,7 @@ record MacDmgPackager(BuildEnv env, MacDmgPackage pkg, Path outputDir,
                             normalizedAbsolutePathString(mountedVolume));
                     IOUtils.exec(pb);
                 } catch (IOException ex) {
-                    Log.error(ex.getMessage());
-                    Log.verbose("Cannot enable custom icon using SetFile utility");
+                    LOGGER.log(Level.ERROR, "Failed to set custom icon", ex);
                 }
             } else {
                 Log.verbose(I18N.getString("message.setfile.dmg"));
@@ -395,7 +398,11 @@ record MacDmgPackager(BuildEnv env, MacDmgPackage pkg, Path outputDir,
                 .setMaxAttemptsCount(10)
                 .setAttemptTimeoutMillis(3000)
                 .execute(pb);
-        } catch (Exception ex) {
+        } catch (IOException ex) {
+            LOGGER.log(Level.ERROR, "Failed to convert an interim DMG into the output DMG", ex);
+
+            LOGGER.log(Level.TRACE, "Try to convert a copy of an interim DMG into the output DMG", ex);
+
             // Convert might failed if something holds file. Try to convert copy.
             Path protoCopyDMG = protoCopyDmg();
             Files.copy(protoDMG, protoCopyDMG);
@@ -409,7 +416,7 @@ record MacDmgPackager(BuildEnv env, MacDmgPackage pkg, Path outputDir,
                         "-o", normalizedAbsolutePathString(finalDMG));
                 IOUtils.exec(pb, false, null, true, Executor.INFINITE_TIMEOUT);
             } finally {
-                Files.deleteIfExists(protoCopyDMG);
+                FileUtils.deleteIfExistsIgnoreError(protoCopyDMG, LOGGER);
             }
         }
 
@@ -428,12 +435,7 @@ record MacDmgPackager(BuildEnv env, MacDmgPackage pkg, Path outputDir,
                 .execute(pb);
         }
 
-        try {
-            //Delete the temporary image
-            Files.deleteIfExists(protoDMG);
-        } catch (IOException ex) {
-            // Don't care if fails
-        }
+        FileUtils.deleteIfExistsIgnoreError(protoDMG, LOGGER);
 
         Log.verbose(MessageFormat.format(I18N.getString(
                 "message.output-to-location"),
@@ -447,4 +449,6 @@ record MacDmgPackager(BuildEnv env, MacDmgPackage pkg, Path outputDir,
     private static final String TEMPLATE_BUNDLE_ICON = "JavaApp.icns";
 
     private static final String DEFAULT_LICENSE_PLIST="lic_template.plist";
+
+    private final static System.Logger LOGGER = Logger.MAIN.get();
 }
