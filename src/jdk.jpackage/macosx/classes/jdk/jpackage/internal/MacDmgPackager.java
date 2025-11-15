@@ -219,9 +219,6 @@ record MacDmgPackager(BuildEnv env, MacDmgPackage pkg, Path outputDir,
 
         Path srcFolder = env.appImageDir();
 
-        Log.verbose(MessageFormat.format(I18N.getString(
-                "message.creating-dmg-file"), finalDMG.toAbsolutePath()));
-
         Files.createDirectories(protoDMG.getParent());
         Files.createDirectories(finalDMG.getParent());
 
@@ -426,11 +423,6 @@ record MacDmgPackager(BuildEnv env, MacDmgPackage pkg, Path outputDir,
         } catch (IOException ex) {
             // Don't care if fails
         }
-
-        Log.verbose(MessageFormat.format(I18N.getString(
-                "message.output-to-location"),
-                pkg.app().name(), normalizedAbsolutePathString(finalDMG)));
-
     }
 
     // Background image name in resources
