@@ -54,7 +54,6 @@ public class MacBundlingEnvironment extends DefaultBundlingEnvironment {
                 buildEnv()::create,
                 MacBundlingEnvironment::buildPipeline,
                 (env, pkg, outputDir) -> {
-                    Log.verbose(I18N.format("message.building-dmg", pkg.app().name()));
                     return new MacDmgPackager(env, pkg, outputDir, sysEnv);
                 });
     }
@@ -65,7 +64,6 @@ public class MacBundlingEnvironment extends DefaultBundlingEnvironment {
                 buildEnv()::create,
                 MacBundlingEnvironment::buildPipeline,
                 (env, pkg, outputDir) -> {
-                    Log.verbose(I18N.format("message.building-pkg", pkg.app().name()));
                     return new MacPkgPackager(env, pkg, outputDir);
                 });
     }
