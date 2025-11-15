@@ -43,6 +43,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import jdk.internal.util.OperatingSystem;
+import jdk.jpackage.internal.PackagingPipeline.PackageTaskID;
 import jdk.jpackage.internal.cli.CliBundlingEnvironment;
 import jdk.jpackage.internal.cli.Options;
 import jdk.jpackage.internal.cli.StandardBundlingOperation;
@@ -167,11 +168,20 @@ class DefaultBundlingEnvironment implements CliBundlingEnvironment {
 
         var pkg = Objects.requireNonNull(createPackage.apply(options));
 
+        var pipelineBuilder = Objects.requireNonNull(createPipelineBuilder.apply(pkg));
+
+        // Delete an old output package file (if any) before creating a new one.
+        pipelineBuilder.task(PackageTaskID.DELETE_OLD_PACKAGE_FILE)
+                .addDependencies(pipelineBuilder.taskGraphSnapshot().getTailsOf(PackageTaskID.CREATE_PACKAGE_FILE))
+                .addDependent(PackageTaskID.CREATE_PACKAGE_FILE)
+                .packageAction(PackagingPipeline::deleteOutputBundle)
+                .add();
+
         Packager.<T>build().pkg(pkg)
-            .outputDir(OptionUtils.outputDir(options))
-            .env(Objects.requireNonNull(createBuildEnv.apply(options, pkg)))
-            .pipelineBuilderMutatorFactory(pipelineBuilderMutatorFactory)
-            .execute(Objects.requireNonNull(createPipelineBuilder.apply(pkg)));
+                .outputDir(OptionUtils.outputDir(options))
+                .env(Objects.requireNonNull(createBuildEnv.apply(options, pkg)))
+                .pipelineBuilderMutatorFactory(pipelineBuilderMutatorFactory)
+                .execute(pipelineBuilder);
     }
 
     @Override
