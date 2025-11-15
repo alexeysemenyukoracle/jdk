@@ -25,6 +25,7 @@
 package jdk.jpackage.internal;
 
 import static java.util.stream.Collectors.toMap;
+import static jdk.jpackage.internal.PackagingPipeline.bundleTypeDescription;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -42,18 +43,16 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
-import jdk.internal.util.OperatingSystem;
 import jdk.jpackage.internal.PackagingPipeline.PackageTaskID;
 import jdk.jpackage.internal.cli.CliBundlingEnvironment;
 import jdk.jpackage.internal.cli.Options;
 import jdk.jpackage.internal.cli.StandardBundlingOperation;
-import jdk.jpackage.internal.model.AppImagePackageType;
 import jdk.jpackage.internal.model.Application;
 import jdk.jpackage.internal.model.BundlingOperationDescriptor;
 import jdk.jpackage.internal.model.JPackageException;
 import jdk.jpackage.internal.model.Package;
-import jdk.jpackage.internal.model.PackageType;
-import jdk.jpackage.internal.model.StandardPackageType;
+import jdk.jpackage.internal.model.AppImagePackageType;
+import jdk.jpackage.internal.util.PathUtils;
 import jdk.jpackage.internal.util.Result;
 
 class DefaultBundlingEnvironment implements CliBundlingEnvironment {
@@ -126,7 +125,9 @@ class DefaultBundlingEnvironment implements CliBundlingEnvironment {
         Objects.requireNonNull(app);
         Objects.requireNonNull(pipelineBuilder);
 
-        final var outputDir = OptionUtils.outputDir(options).resolve(app.appImageDirName());
+        final var outputDir = PathUtils.normalizedAbsolutePath(OptionUtils.outputDir(options).resolve(app.appImageDirName()));
+
+        Log.verbose(I18N.getString("message.create-app-image"));
 
         IOUtils.writableOutputDir(outputDir.getParent());
 
@@ -134,14 +135,14 @@ class DefaultBundlingEnvironment implements CliBundlingEnvironment {
                 .predefinedAppImageLayout(app.asApplicationLayout().orElseThrow())
                 .create(options, app);
 
-        Log.verbose(I18N.format("message.creating-app-bundle", outputDir.getFileName(), outputDir.toAbsolutePath().getParent()));
-
         if (Files.exists(outputDir)) {
-            throw new JPackageException(I18N.format("error.root-exists", outputDir.toAbsolutePath()));
+            throw new JPackageException(I18N.format("error.root-exists", outputDir));
         }
 
         pipelineBuilder.excludeDirFromCopying(outputDir.getParent())
                 .create().execute(BuildEnv.withAppImageDir(env, outputDir), app);
+
+        Log.verbose(I18N.getString("message.app-image-created"));
     }
 
     static <T extends Package> void createNativePackage(Options options,
@@ -198,8 +199,6 @@ class DefaultBundlingEnvironment implements CliBundlingEnvironment {
             bundler.accept(tempDir.options());
 
             var packageType = OptionUtils.bundlingOperation(cmdline).packageType();
-
-            Log.verbose(I18N.format("message.bundle-created", I18N.getString(bundleTypeDescription(packageType, op.os()))));
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
         } finally {
@@ -217,56 +216,6 @@ class DefaultBundlingEnvironment implements CliBundlingEnvironment {
     private Supplier<Result<Consumer<Options>>> getBundlerSupplier(BundlingOperationDescriptor op) {
         return Optional.ofNullable(bundlers.get(op)).orElseThrow(NoSuchElementException::new);
     }
-
-    private String bundleTypeDescription(PackageType type, OperatingSystem os) {
-        switch (type) {
-            case StandardPackageType stdType -> {
-                switch (stdType) {
-                    case WIN_MSI -> {
-                        return "bundle-type.win-msi";
-                    }
-                    case WIN_EXE -> {
-                        return "bundle-type.win-exe";
-                    }
-                    case LINUX_DEB -> {
-                        return "bundle-type.linux-deb";
-                    }
-                    case LINUX_RPM -> {
-                        return "bundle-type.linux-rpm";
-                    }
-                    case MAC_DMG -> {
-                        return "bundle-type.mac-dmg";
-                    }
-                    case MAC_PKG -> {
-                        return "bundle-type.mac-pkg";
-                    }
-                    default -> {
-                        throw new AssertionError();
-                    }
-                }
-            }
-            case AppImagePackageType appImageType -> {
-                switch (os) {
-                    case WINDOWS -> {
-                        return "bundle-type.win-app";
-                    }
-                    case LINUX -> {
-                        return "bundle-type.linux-app";
-                    }
-                    case MACOS -> {
-                        return "bundle-type.mac-app";
-                    }
-                    default -> {
-                        throw new AssertionError();
-                    }
-                }
-            }
-            default -> {
-                throw new AssertionError();
-            }
-        }
-    }
-
 
     private static final class CachingSupplier<T> implements Supplier<T> {
 
