@@ -39,6 +39,8 @@ import jdk.jpackage.internal.cli.StandardBundlingOperation;
 import jdk.jpackage.internal.model.BundlingOperationDescriptor;
 import jdk.jpackage.internal.model.LinuxPackage;
 import jdk.jpackage.internal.model.PackageType;
+import jdk.jpackage.internal.summary.SummaryAccumulator;
+import jdk.jpackage.internal.summary.StandardProperty;
 import jdk.jpackage.internal.util.Result;
 
 public class LinuxBundlingEnvironment extends DefaultBundlingEnvironment {
@@ -55,22 +57,26 @@ public class LinuxBundlingEnvironment extends DefaultBundlingEnvironment {
 
     private static void createDebPackage(Options options, LinuxDebSystemEnvironment sysEnv) {
 
+        var pkg = LinuxFromOptions.createLinuxDebPackage(options);
+
         createNativePackage(options,
-                LinuxFromOptions.createLinuxDebPackage(options),
+                updateSummary(pkg, OptionUtils.summary(options), sysEnv),
                 buildEnv()::create,
                 LinuxBundlingEnvironment::buildPipeline,
-                (env, pkg, outputDir) -> {
+                (env, _, outputDir) -> {
                     return new LinuxDebPackager(env, pkg, outputDir, sysEnv);
                 });
     }
 
     private static void createRpmPackage(Options options, LinuxRpmSystemEnvironment sysEnv) {
 
+        var pkg = LinuxFromOptions.createLinuxRpmPackage(options);
+
         createNativePackage(options,
-                LinuxFromOptions.createLinuxRpmPackage(options),
+                updateSummary(pkg, OptionUtils.summary(options), sysEnv),
                 buildEnv()::create,
                 LinuxBundlingEnvironment::buildPipeline,
-                (env, pkg, outputDir) -> {
+                (env, _, outputDir) -> {
                     return new LinuxRpmPackager(env, pkg, outputDir, sysEnv);
                 });
     }
@@ -88,6 +94,14 @@ public class LinuxBundlingEnvironment extends DefaultBundlingEnvironment {
 
     private static BuildEnvFromOptions buildEnv() {
         return new BuildEnvFromOptions().predefinedAppImageLayout(APPLICATION_LAYOUT);
+    }
+
+    private static <T extends LinuxPackage> T updateSummary(
+            T pkg, SummaryAccumulator summary, LinuxSystemEnvironment sysEnv) {
+        if (!LinuxSystemEnvironment.isWithRequiredPackagesSearch(sysEnv, pkg)) {
+            summary.put(StandardProperty.LINUX_DISABLE_REQUIRED_PACKAGES_SEARCH);
+        }
+        return pkg;
     }
 
     private static final class LazyLoad {

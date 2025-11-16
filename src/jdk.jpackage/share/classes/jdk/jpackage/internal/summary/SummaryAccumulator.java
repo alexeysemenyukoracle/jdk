@@ -22,48 +22,22 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package jdk.jpackage.internal;
+package jdk.jpackage.internal.summary;
 
-import java.nio.file.Path;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-import jdk.jpackage.internal.model.MacDmgPackage;
-import jdk.jpackage.internal.model.MacDmgPackageMixin;
-import jdk.jpackage.internal.summary.SummaryAccumulator;
+/**
+ * Accumulator of items for summary.
+ */
+public interface SummaryAccumulator {
 
-final class MacDmgPackageBuilder {
-
-    MacDmgPackageBuilder(MacPackageBuilder pkgBuilder) {
-        this.pkgBuilder = Objects.requireNonNull(pkgBuilder);
+    default void putIfAbsent(SummaryItem k, Object... valueFormatArgs) {
+        putIfAbsent(k, k.formatValue(valueFormatArgs));
     }
 
-    MacDmgPackageBuilder dmgContent(List<Path> v) {
-        dmgContent = v;
-        return this;
+    default void put(SummaryItem k, Object... valueFormatArgs) {
+        put(k, k.formatValue(valueFormatArgs));
     }
 
-    MacDmgPackageBuilder icon(Path v) {
-        icon = v;
-        return this;
-    }
+    void put(SummaryItem k, String value);
 
-    List<Path> validatedDmgContent() {
-        return Optional.ofNullable(dmgContent).orElseGet(List::of);
-    }
-
-    MacDmgPackage create(SummaryAccumulator summary) {
-        final var pkg = pkgBuilder.create(summary);
-
-        return MacDmgPackage.create(
-                pkg,
-                new MacDmgPackageMixin.Stub(
-                        Optional.ofNullable(icon).or((pkg.app())::icon),
-                        validatedDmgContent()
-                ));
-    }
-
-    private Path icon;
-    private List<Path> dmgContent;
-    private final MacPackageBuilder pkgBuilder;
+    void putIfAbsent(SummaryItem k, String value);
 }

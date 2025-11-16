@@ -91,7 +91,7 @@ final class MacFromOptions {
 
         MAC_DMG_CONTENT.ifPresentIn(options, pkgBuilder::dmgContent);
 
-        return pkgBuilder.create();
+        return pkgBuilder.create(OptionUtils.summary(options));
     }
 
     static MacPkgPackage createMacPkgPackage(Options options) {
@@ -161,7 +161,7 @@ final class MacFromOptions {
             }
         }
 
-        return pkgBuilder.orElseThrow().create();
+        return pkgBuilder.orElseThrow().create(OptionUtils.summary(options));
     }
 
     private record ApplicationWithDetails(MacApplication app, Optional<ExternalApplication> externalApp) {

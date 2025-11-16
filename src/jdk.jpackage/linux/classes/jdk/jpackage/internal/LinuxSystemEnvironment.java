@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
+import jdk.jpackage.internal.model.LinuxPackage;
 import jdk.jpackage.internal.model.PackageType;
 import jdk.jpackage.internal.model.StandardPackageType;
 import jdk.jpackage.internal.util.CompositeProxy;
@@ -43,6 +44,11 @@ public interface LinuxSystemEnvironment extends SystemEnvironment {
         return detectNativePackageType().map(LinuxSystemEnvironment::create).orElseGet(() -> {
             return Result.ofError(new RuntimeException("Unknown native package type"));
         });
+    }
+
+    static boolean isWithRequiredPackagesSearch(LinuxSystemEnvironment sysEnv, LinuxPackage pkg) {
+        Objects.requireNonNull(pkg);
+        return sysEnv.soLookupAvailable() && sysEnv.nativePackageType().equals(pkg.type());
     }
 
     static Optional<PackageType> detectNativePackageType() {
