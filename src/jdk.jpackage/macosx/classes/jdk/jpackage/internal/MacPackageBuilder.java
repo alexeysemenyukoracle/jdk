@@ -32,6 +32,8 @@ import java.util.Objects;
 import jdk.jpackage.internal.model.MacApplication;
 import jdk.jpackage.internal.model.MacPackage;
 import jdk.jpackage.internal.model.MacPackageMixin;
+import jdk.jpackage.internal.summary.SummaryAccumulator;
+import jdk.jpackage.internal.summary.StandardWarning;
 
 final class MacPackageBuilder {
 
@@ -48,7 +50,7 @@ final class MacPackageBuilder {
         return pkgBuilder;
     }
 
-    MacPackage create() {
+    MacPackage create(SummaryAccumulator summary) {
 
         final var app = (MacApplication)pkgBuilder.app();
 
@@ -60,16 +62,16 @@ final class MacPackageBuilder {
         pkg = pkgBuilder.create();
 
         var macPkg = MacPackage.create(pkg, new MacPackageMixin.Stub(pkg.predefinedAppImage().map(v -> predefinedAppImageSigned)));
-        validatePredefinedAppImage(macPkg);
+        validatePredefinedAppImage(summary, macPkg);
         return macPkg;
     }
 
-    private static void validatePredefinedAppImage(MacPackage pkg) {
+    private static void validatePredefinedAppImage(SummaryAccumulator summary, MacPackage pkg) {
         if (pkg.predefinedAppImageSigned().orElse(false)) {
             pkg.predefinedAppImage().ifPresent(predefinedAppImage -> {
                 var thePackageFile = PackageFile.getPathInAppImage(APPLICATION_LAYOUT);
                 if (!Files.exists(predefinedAppImage.resolve(thePackageFile))) {
-                    Log.info(I18N.format("warning.per.user.app.image.signed", thePackageFile));
+                    summary.put(StandardWarning.MAC_SIGNED_PREDEFINED_APP_IMAGE_WITHOUT_PACKAGE_FILE, thePackageFile);
                 }
             });
         }
