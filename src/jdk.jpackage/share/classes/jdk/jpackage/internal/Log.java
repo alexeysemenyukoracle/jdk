@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2011, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,6 +29,7 @@ import java.io.PrintWriter;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Log
@@ -106,23 +107,27 @@ public class Log {
         }
 
         public void verbose(List<String> strings,
-                List<String> output, int returnCode, long pid) {
+                List<String> output, int returnCode, Optional<Long> pid) {
             if (verbose) {
-                StringBuilder sb = new StringBuilder();
-                sb.append("Command [PID: ");
-                sb.append(pid);
-                sb.append("]:\n   ");
+                final var sb = new StringBuilder();
+                sb.append("Command");
+                pid.ifPresent(v -> {
+                    sb.append(" [PID: ");
+                    sb.append(v);
+                    sb.append("]");
+                });
+                sb.append(":\n   ");
 
                 for (String s : strings) {
                     sb.append(" " + s);
                 }
                 verbose(sb.toString());
                 if (output != null && !output.isEmpty()) {
-                    sb = new StringBuilder("Output:");
+                    var outputSb = new StringBuilder("Output:");
                     for (String s : output) {
-                        sb.append("\n    " + s);
+                        outputSb.append("\n    " + s);
                     }
-                    verbose(sb.toString());
+                    verbose(outputSb.toString());
                 }
                 verbose("Returned: " + returnCode + "\n");
             }
@@ -179,7 +184,7 @@ public class Log {
     }
 
     public static void verbose(List<String> strings, List<String> out,
-            int ret, long pid) {
+            int ret, Optional<Long> pid) {
        instance.get().verbose(strings, out, ret, pid);
     }
 }
