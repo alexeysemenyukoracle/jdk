@@ -42,6 +42,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.jar.JarFile;
@@ -75,7 +76,7 @@ final class JLinkRuntimeBuilder implements RuntimeBuilder {
         String jlinkOut = writer.toString();
 
         args.add(0, "jlink");
-        Log.verbose(args, List.of(jlinkOut), retVal, -1);
+        Log.verbose(args, List.of(jlinkOut), retVal, Optional.empty());
         if (retVal != 0) {
             throw new JPackageException(I18N.format("error.jlink.failed", jlinkOut));
         }

@@ -32,6 +32,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import jdk.jpackage.internal.model.JPackageException;
 
 /**
@@ -104,14 +105,11 @@ final class IOUtils {
         }
     }
 
-    public static long getPID(Process p) {
+    public static Optional<Long> getPID(Process p) {
         try {
-            return p.pid();
+            return Optional.of(p.pid());
         } catch (UnsupportedOperationException ex) {
-            Log.verbose(ex); // Just log exception and ignore it. This method
-                             // is used for verbose output, so not a problem
-                             // if unsupported.
-            return -1;
+            return Optional.empty();
         }
     }
 }
