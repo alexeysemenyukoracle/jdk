@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2024, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -35,6 +35,7 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import jdk.internal.util.OperatingSystem;
 import jdk.jpackage.internal.util.function.ThrowingConsumer;
@@ -110,6 +111,17 @@ public final class FileUtils {
             }
         } catch (NotLinkException ex) {
             throw ex;
+        }
+    }
+
+    public static void deleteIfExistsIgnoreError(Path path, System.Logger logger) {
+        Objects.requireNonNull(logger);
+        try {
+            Files.deleteIfExists(path);
+        } catch (IOException ex) {
+            logger.log(System.Logger.Level.WARNING, () -> {
+                return String.format("Faile to delete [%s]", path);
+            }, ex);
         }
     }
 
