@@ -621,8 +621,7 @@ public final class StandardOption {
     }
 
     private static OptionValue<AdditionalLauncher[]> createAddLauncherOption(String name) {
-        OptionValueConverter<Path> propertyFileConverter = fileOption(name)
-                .create().getSpec().converter().orElseThrow();
+        var propertyFileSpec = fileOption(name).create().getSpec();
 
         return option(name, AdditionalLauncher.class)
                 .valuePattern("<launcher name>=<file path>")
@@ -654,7 +653,7 @@ public final class StandardOption {
 
                     final Path propertyFile;
                     try {
-                        propertyFile = propertyFileConverter.convert(OptionName.of(name),
+                        propertyFile = propertyFileSpec.convert(OptionName.of(name),
                                 StringToken.of(value, components[1])).orElseThrow();
                     } catch (JPackageException ex) {
                         throw new AddLauncherInvalidPropertyFileException(I18N.format(

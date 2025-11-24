@@ -239,7 +239,7 @@ public final class StandardAppImageFileOption {
             }
 
             return strValue.map(v -> {
-                return spec.converter().orElseThrow().convert(spec.name(), StringToken.of(v)).orElseThrow();
+                return spec.convert(spec.name(), StringToken.of(v)).orElseThrow();
             }).map(v -> {
                 return Map.entry(option, v);
             });
