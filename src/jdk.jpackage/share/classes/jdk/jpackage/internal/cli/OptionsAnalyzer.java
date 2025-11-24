@@ -271,7 +271,6 @@ final class OptionsAnalyzer {
                 return packageType;
             } else {
                 return typeOption.spec()
-                        .converter().orElseThrow()
                         .convert(typeOption.spec().name(), StringToken.of(((String[])obj)[0]))
                         .orElseThrow();
             }

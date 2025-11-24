@@ -426,7 +426,7 @@ final class OptionSpecBuilder<T> {
         ).flatMap(Collection::stream).map(OptionName::new).distinct().toList();
     }
 
-    private Optional<OptionValueConverter<T>> createConverter() {
+    private Optional<OptionValueConverter<String, T>> createConverter() {
         if (converterBuilder.converter().isPresent()) {
             final var newBuilder = converterBuilder.copy();
             createValidator().ifPresent(newBuilder::validator);
@@ -446,7 +446,7 @@ final class OptionSpecBuilder<T> {
         });
     }
 
-    private OptionValueConverter<T[]> createArrayConverter() {
+    private OptionValueConverter<String, T[]> createArrayConverter() {
         final var newBuilder = converterBuilder.copy();
         newBuilder.tokenizer(Optional.ofNullable(arrayTokenizer).orElse(str -> {
             return new String[] { str };
