@@ -73,6 +73,7 @@ final class OptionSpecBuilder<T> {
         valuePattern = other.valuePattern;
         converterBuilder = other.converterBuilder.copy();
         validatorBuilder = other.validatorBuilder.copy();
+        validator = other.validator;
 
         if (other.arrayDefaultValue != null) {
             arrayDefaultValue = Arrays.copyOf(other.arrayDefaultValue, other.arrayDefaultValue.length);
@@ -162,11 +163,13 @@ final class OptionSpecBuilder<T> {
 
     OptionSpecBuilder<T> validatorExceptionFormatString(String v) {
         validatorBuilder.formatString(v);
+        validator = null;
         return this;
     }
 
     OptionSpecBuilder<T> validatorExceptionFormatString(UnaryOperator<String> mutator) {
         validatorBuilder.formatString(mutator.apply(validatorBuilder.formatString().orElse(null)));
+        validator = null;
         return this;
     }
 
@@ -182,6 +185,7 @@ final class OptionSpecBuilder<T> {
 
     OptionSpecBuilder<T> validatorExceptionFactory(OptionValueExceptionFactory<? extends RuntimeException> v) {
         validatorBuilder.exceptionFactory(v);
+        validator = null;
         return this;
     }
 
@@ -225,18 +229,26 @@ final class OptionSpecBuilder<T> {
 
     OptionSpecBuilder<T> validator(Predicate<T> v) {
         validatorBuilder.predicate(v::test);
+        validator = null;
         return this;
     }
 
     @SuppressWarnings("overloads")
     OptionSpecBuilder<T> validator(Consumer<T> v) {
         validatorBuilder.consumer(v::accept);
+        validator = null;
         return this;
     }
 
     @SuppressWarnings("overloads")
     OptionSpecBuilder<T> validator(UnaryOperator<Validator.Builder<T, RuntimeException>> mutator) {
         validatorBuilder = mutator.apply(validatorBuilder);
+        validator = null;
+        return this;
+    }
+
+    OptionSpecBuilder<T> validator(Validator<T, RuntimeException> v) {
+        validator = v;
         return this;
     }
 
@@ -247,6 +259,7 @@ final class OptionSpecBuilder<T> {
 
     OptionSpecBuilder<T> withoutValidator() {
         validatorBuilder.predicate(null).consumer(null);
+        validator = null;
         return this;
     }
 
@@ -423,12 +436,14 @@ final class OptionSpecBuilder<T> {
         }
     }
 
-    private Optional<Validator<T, ? extends RuntimeException>> createValidator() {
-        if (validatorBuilder.hasValidatingMethod()) {
-            return Optional.of(validatorBuilder.create());
-        } else {
-            return Optional.empty();
-        }
+    private Optional<? extends Validator<T, ? extends RuntimeException>> createValidator() {
+        return Optional.ofNullable(validator).or(() -> {
+            if (validatorBuilder.hasValidatingMethod()) {
+                return Optional.of(validatorBuilder.create());
+            } else {
+                return Optional.empty();
+            }
+        });
     }
 
     private OptionValueConverter<T[]> createArrayConverter() {
@@ -468,6 +483,7 @@ final class OptionSpecBuilder<T> {
     private String valuePattern;
     private OptionValueConverter.Builder<T> converterBuilder = OptionValueConverter.build();
     private Validator.Builder<T, RuntimeException> validatorBuilder = Validator.build();
+    private Validator<T, RuntimeException> validator;
 
     private T[] arrayDefaultValue;
     private String arrayValuePatternSeparator;
