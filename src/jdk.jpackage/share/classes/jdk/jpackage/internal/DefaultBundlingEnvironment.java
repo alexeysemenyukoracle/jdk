@@ -139,8 +139,7 @@ class DefaultBundlingEnvironment implements CliBundlingEnvironment {
             throw new JPackageException(I18N.format("error.root-exists", outputDir.toAbsolutePath()));
         }
 
-        pipelineBuilder.excludeDirFromCopying(outputDir.getParent())
-                .create().execute(BuildEnv.withAppImageDir(env, outputDir), app);
+        pipelineBuilder.create().execute(BuildEnv.withAppImageDir(env, outputDir), app);
     }
 
     static <T extends Package> void createNativePackage(Options options,

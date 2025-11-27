@@ -31,7 +31,6 @@ import static jdk.jpackage.internal.model.AppImageLayout.toPathGroup;
 import java.io.IOException;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -303,12 +302,6 @@ final class PackagingPipeline {
             });
         }
 
-        Builder excludeDirFromCopying(Path path) {
-            Objects.requireNonNull(path);
-            excludeCopyDirs.add(path);
-            return this;
-        }
-
         Builder contextMapper(UnaryOperator<TaskContext> v) {
             contextMapper = v;
             return this;
@@ -331,7 +324,6 @@ final class PackagingPipeline {
         }
 
         private final FixedDAG.Builder<TaskID> taskGraphBuilder = FixedDAG.build();
-        private final List<Path> excludeCopyDirs = new ArrayList<>();
         private final Map<TaskID, TaskConfig> taskConfig = new HashMap<>();
         private UnaryOperator<TaskContext> contextMapper;
         private FixedDAG<TaskID> taskGraphSnapshot;
@@ -365,7 +357,7 @@ final class PackagingPipeline {
 
         builder.task(BuildApplicationTaskID.CONTENT)
                 .addDependent(BuildApplicationTaskID.APP_IMAGE_FILE)
-                .applicationAction(ApplicationImageUtils.createCopyContentAction(() -> builder.excludeCopyDirs)).add();
+                .applicationAction(ApplicationImageUtils.createCopyContentAction()).add();
 
         return builder;
     }
