@@ -34,6 +34,8 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import java.util.stream.StreamSupport;
+import jdk.jpackage.internal.cli.Validator.ParsedValue;
+import jdk.jpackage.internal.cli.Validator.ValidatorException;
 import jdk.jpackage.test.JUnitUtils;
 
 final class TestUtils {
@@ -149,6 +151,31 @@ final class TestUtils {
         }
 
         private static final long serialVersionUID = 1L;
+    }
+
+
+    static final class RecordingValidator<T, U extends Exception> implements Validator<T, U> {
+
+        RecordingValidator(Validator<T, U> validator) {
+            this.validator = Objects.requireNonNull(validator);
+        }
+
+        @Override
+        public List<U> validate(OptionName optionName, ParsedValue<T> optionValue) {
+            counter++;
+            return validator.validate(optionName, optionValue);
+        }
+
+        int counter() {
+            return counter;
+        }
+
+        void resetCounter() {
+            counter = 0;
+        }
+
+        private final Validator<T, U> validator;
+        private int counter;
     }
 
 

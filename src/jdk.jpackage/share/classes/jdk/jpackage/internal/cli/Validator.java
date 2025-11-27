@@ -24,6 +24,7 @@
  */
 package jdk.jpackage.internal.cli;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
@@ -36,8 +37,12 @@ interface Validator<T, U extends Exception> {
 
     List<U> validate(OptionName optionName, ParsedValue<T> optionValue);
 
-    default Validator<T, ? extends Exception> andThen(Validator<T, ? extends Exception> after) {
-        return reduce(this, after);
+    default Validator<T, ? extends Exception> and(Validator<T, ? extends Exception> after) {
+        return reduceAnd(this, after);
+    }
+
+    default Validator<T, ? extends Exception> or(Validator<T, ? extends Exception> after) {
+        return reduceOr(this, after);
     }
 
     /**
@@ -253,13 +258,33 @@ interface Validator<T, U extends Exception> {
     }
 
     @SafeVarargs
-    private static <T> Validator<T, ? extends Exception> reduce(Validator<T, ? extends Exception>... validators) {
+    private static <T> Validator<T, ? extends Exception> reduceAnd(Validator<T, ? extends Exception>... validators) {
         @SuppressWarnings("varargs")
         var theValidators = List.of(validators);
         return (optionName, optionValue) -> {
             return theValidators.stream().map(validator -> {
                 return validator.validate(optionName, optionValue);
             }).flatMap(Collection::stream).map(Exception.class::cast).toList();
+        };
+    }
+
+    @SafeVarargs
+    private static <T> Validator<T, ? extends Exception> reduceOr(Validator<T, ? extends Exception>... validators) {
+        @SuppressWarnings("varargs")
+        var theValidators = List.of(validators);
+        return (optionName, optionValue) -> {
+            List<Exception> allErrors = null;
+            for (var validator : theValidators) {
+                var errors = validator.validate(optionName, optionValue);
+                if (errors.isEmpty()) {
+                    return List.of();
+                } else if (allErrors == null) {
+                    allErrors = new ArrayList<>(errors);
+                } else {
+                    allErrors.addAll(errors);
+                }
+            }
+            return allErrors;
         };
     }
 }
