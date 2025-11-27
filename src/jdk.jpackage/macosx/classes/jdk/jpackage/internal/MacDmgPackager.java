@@ -43,6 +43,7 @@ import jdk.jpackage.internal.PackagingPipeline.TaskID;
 import jdk.jpackage.internal.model.MacDmgPackage;
 import jdk.jpackage.internal.util.FileUtils;
 import jdk.jpackage.internal.util.PathGroup;
+import jdk.jpackage.internal.util.RootedPath;
 
 record MacDmgPackager(BuildEnv env, MacDmgPackage pkg, Path outputDir,
         MacDmgSystemEnvironment sysEnv) implements Consumer<PackagingPipeline.Builder> {
@@ -57,7 +58,6 @@ record MacDmgPackager(BuildEnv env, MacDmgPackage pkg, Path outputDir,
     @Override
     public void accept(PackagingPipeline.Builder pipelineBuilder) {
         pipelineBuilder
-                .excludeDirFromCopying(outputDir)
                 .task(DmgPackageTaskID.COPY_DMG_CONTENT)
                         .action(this::copyDmgContent)
                         .addDependent(PackageTaskID.CREATE_PACKAGE_FILE)
@@ -123,9 +123,7 @@ record MacDmgPackager(BuildEnv env, MacDmgPackage pkg, Path outputDir,
 
     private void copyDmgContent() throws IOException {
         final var srcFolder = env.appImageDir();
-        for (Path path : pkg.content()) {
-            FileUtils.copyRecursive(path, srcFolder.resolve(path.getFileName()));
-        }
+        RootedPath.copyInto(pkg.dmgRootDirSources().stream(), srcFolder);
     }
 
     private void prepareDMGSetupScript() throws IOException {

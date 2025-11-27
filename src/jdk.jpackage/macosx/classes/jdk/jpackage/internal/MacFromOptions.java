@@ -30,8 +30,8 @@ import static jdk.jpackage.internal.MacPackagingPipeline.APPLICATION_LAYOUT;
 import static jdk.jpackage.internal.MacRuntimeValidator.validateRuntimeHasJliLib;
 import static jdk.jpackage.internal.MacRuntimeValidator.validateRuntimeHasNoBinDir;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.SIGN_MAC_APP_IMAGE;
-import static jdk.jpackage.internal.cli.StandardOption.ICON;
 import static jdk.jpackage.internal.cli.StandardOption.APPCLASS;
+import static jdk.jpackage.internal.cli.StandardOption.ICON;
 import static jdk.jpackage.internal.cli.StandardOption.MAC_APP_CATEGORY;
 import static jdk.jpackage.internal.cli.StandardOption.MAC_APP_IMAGE_SIGN_IDENTITY;
 import static jdk.jpackage.internal.cli.StandardOption.MAC_APP_STORE;
@@ -52,6 +52,8 @@ import static jdk.jpackage.internal.model.StandardPackageType.MAC_PKG;
 import static jdk.jpackage.internal.util.function.ExceptionBox.toUnchecked;
 
 import java.nio.file.Path;
+import java.util.Collection;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import jdk.jpackage.internal.ApplicationBuilder.MainLauncherStartupInfo;
@@ -72,6 +74,7 @@ import jdk.jpackage.internal.model.MacPkgPackage;
 import jdk.jpackage.internal.model.PackageType;
 import jdk.jpackage.internal.model.RuntimeLayout;
 import jdk.jpackage.internal.util.Result;
+import jdk.jpackage.internal.util.RootedPath;
 import jdk.jpackage.internal.util.function.ExceptionBox;
 
 
@@ -89,7 +92,11 @@ final class MacFromOptions {
 
         final var pkgBuilder = new MacDmgPackageBuilder(superPkgBuilder);
 
-        MAC_DMG_CONTENT.ifPresentIn(options, pkgBuilder::dmgContent);
+        MAC_DMG_CONTENT.findIn(options).map((List<Collection<RootedPath>> v) -> {
+            // Reverse the order of content sources.
+            // The implementation will use only the first source for the destination file.
+            return v.reversed().stream().flatMap(Collection::stream).toList();
+        }).ifPresent(pkgBuilder::dmgRootDirSources);
 
         return pkgBuilder.create();
     }
