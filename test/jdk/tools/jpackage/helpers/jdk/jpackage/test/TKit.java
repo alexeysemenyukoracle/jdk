@@ -1088,7 +1088,7 @@ public final class TKit {
      * java.io.Closeable that will delete all created nonexistent parent
      * directories.
      */
-    public static Closeable createDirectories(Path dir) throws IOException {
+    public static Closeable createDirectories(Path dir) {
         Objects.requireNonNull(dir);
 
         Collection<Path> dirsToDelete = new ArrayList<>();
@@ -1098,7 +1098,12 @@ public final class TKit {
             dirsToDelete.add(curDir);
             curDir = curDir.getParent();
         }
-        Files.createDirectories(dir);
+
+        try {
+            Files.createDirectories(dir);
+        } catch (IOException ex) {
+            throw new UncheckedIOException(ex);
+        }
 
         return new Closeable() {
             @Override
