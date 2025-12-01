@@ -24,18 +24,28 @@
  */
 package jdk.jpackage.internal.model;
 
+import java.util.Objects;
+
 /**
  * App image packaging type.
  *
  * @see StandardPackageType
  */
-public final class AppImagePackageType implements PackageType {
+public enum AppImagePackageType implements PackageType {
 
-    private AppImagePackageType() {
+    WIN_APP_IMAGE("bundle-type.win-app"),
+    LINUX_APP_IMAGE("bundle-type.linux-app"),
+    MAC_APP_IMAGE("bundle-type.mac-app"),
+    ;
+
+    private AppImagePackageType(String key) {
+        this.key = Objects.requireNonNull(key);
     }
 
-    /**
-     * Singleton
-     */
-    public static final AppImagePackageType APP_IMAGE = new AppImagePackageType();
+    @Override
+    public String label() {
+        return I18N.getString(key);
+    }
+
+    private final String key;
 }

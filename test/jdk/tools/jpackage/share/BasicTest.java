@@ -36,6 +36,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import jdk.jpackage.internal.util.PathUtils;
 import jdk.jpackage.internal.util.function.ThrowingConsumer;
 import jdk.jpackage.test.Annotations.Parameter;
 import jdk.jpackage.test.Annotations.ParameterSupplier;
@@ -176,58 +177,58 @@ public final class BasicTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
-    public void testVerbose() {
-        JPackageCommand cmd = JPackageCommand.helloAppImage()
+    @Parameter("true")
+    @Parameter("false")
+    public void testVerbose(boolean verbose) {
+        var cmd = JPackageCommand.helloAppImage()
                 // Disable default logic adding `--verbose` option
                 // to jpackage command line.
                 .ignoreDefaultVerbose(true)
                 .saveConsoleOutput(true)
-                .setFakeRuntime().executePrerequisiteActions();
+                .setFakeRuntime();
 
-        List<String> expectedVerboseOutputStrings = new ArrayList<>();
-        expectedVerboseOutputStrings.add("Creating app package:");
-        if (TKit.isWindows()) {
-            expectedVerboseOutputStrings.add(
-                    "Succeeded in building Windows Application Image package");
-        } else if (TKit.isLinux()) {
-            expectedVerboseOutputStrings.add(
-                    "Succeeded in building Linux Application Image package");
-        } else if (TKit.isOSX()) {
-            expectedVerboseOutputStrings.add("Preparing Info.plist:");
-            expectedVerboseOutputStrings.add(
-                    "Succeeded in building Mac Application Image package");
-        } else {
-            TKit.throwUnknownPlatformError();
+        List<String> expecteOutputStrings = new ArrayList<>();
+
+        if (verbose) {
+            cmd.addArgument("--verbose");
+
+            var appImageDir = cmd.outputBundle();
+
+            expecteOutputStrings.add(JPackageStringBundle.MAIN.cannedFormattedString(
+                    "message.creating-app-bundle",
+                    appImageDir.getFileName(),
+                    PathUtils.normalizedAbsolutePath(appImageDir.getParent())
+            ).getValue());
+
+            final String appImageType;
+            if (TKit.isWindows()) {
+                appImageType = "bundle-type.win-app";
+            } else if (TKit.isLinux()) {
+                appImageType = "bundle-type.linux-app";
+            } else if (TKit.isOSX()) {
+                appImageType = "bundle-type.mac-app";
+            } else {
+                throw TKit.throwUnknownPlatformError();
+            }
+
+            expecteOutputStrings.add(JPackageStringBundle.MAIN.cannedFormattedString(
+                    "message.bundle-created", JPackageStringBundle.MAIN.cannedFormattedString(appImageType)
+            ).getValue());
+
+            if (TKit.isOSX()) {
+                expecteOutputStrings.add("Preparing Info.plist:");
+            }
         }
 
-        TKit.deleteDirectoryContentsRecursive(cmd.outputDir());
-        List<String> nonVerboseOutput = cmd.execute().getOutput();
-        List<String>[] verboseOutput = (List<String>[])new List<?>[1];
+        List<String> output = cmd.execute().getOutput();
 
-        // Directory clean up is not 100% reliable on Windows because of
-        // antivirus software that can lock .exe files. Setup
-        // different output directory instead of cleaning the default one for
-        // verbose jpackage run.
-        TKit.withTempDirectory("verbose-output", tempDir -> {
-            cmd.setArgumentValue("--dest", tempDir);
-            cmd.addArgument("--verbose");
-            verboseOutput[0] = cmd.execute().getOutput();
-        });
-
-        TKit.assertTrue(nonVerboseOutput.size() < verboseOutput[0].size(),
-                "Check verbose output is longer than regular");
-
-        expectedVerboseOutputStrings.forEach(str -> {
-            TKit.assertTextStream(str).label("regular output")
-                    .predicate(String::contains).negate()
-                    .apply(nonVerboseOutput);
-        });
-
-        expectedVerboseOutputStrings.forEach(str -> {
-            TKit.assertTextStream(str).label("verbose output")
-                    .apply(verboseOutput[0]);
-        });
+        if (verbose) {
+            expecteOutputStrings.forEach(str -> {
+                TKit.assertTextStream(str).label("verbose output").apply(output);
+            });
+        } else {
+            TKit.assertStringListEquals(List.of(), output, "Check output is empty");
+        }
     }
 
     @Test
