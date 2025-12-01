@@ -1070,6 +1070,14 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
         return makeAdvice(JPackageStringBundle.MAIN.cannedFormattedString(key, args));
     }
 
+    public static CannedFormattedString makeSummaryWarning(CannedFormattedString v) {
+        return v.addPrefix("summary.warning");
+    }
+
+    public static CannedFormattedString makeSummaryWarning(String key, Object ... args) {
+        return makeSummaryWarning(JPackageStringBundle.MAIN.cannedFormattedString(key, args));
+    }
+
     public String getValue(CannedFormattedString str) {
         return new CannedFormattedString(str.formatter(), str.format(), str.args().stream().map(arg -> {
             if (arg instanceof CannedArgument cannedArg) {

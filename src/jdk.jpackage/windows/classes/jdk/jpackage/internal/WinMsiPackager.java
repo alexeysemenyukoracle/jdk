@@ -317,9 +317,6 @@ final class WinMsiPackager implements Consumer<PackagingPipeline.Builder> {
         wixVars.put("JpProductCode", pkg.productCode().toString());
         wixVars.put("JpProductUpgradeCode", pkg.upgradeCode().toString());
 
-        Log.verbose(I18N.format("message.product-code", pkg.productCode()));
-        Log.verbose(I18N.format("message.upgrade-code", pkg.upgradeCode()));
-
         wixVars.define("JpAllowUpgrades");
         if (!pkg.isRuntimeInstaller()) {
             wixVars.define("JpAllowDowngrades");
