@@ -170,7 +170,7 @@ final class MacFromOptions {
 
         pkgSigningIdentityBuilder.ifPresent(pkgBuilder::signingBuilder);
 
-        return pkgBuilder.create();
+        return pkgBuilder.summary(OptionUtils.summary(options)).create();
     }
 
     private record ApplicationWithDetails(MacApplication app, Optional<ExternalApplication> externalApp) {
@@ -218,7 +218,7 @@ final class MacFromOptions {
 
         final var app = superAppBuilder.create();
 
-        final var appBuilder = new MacApplicationBuilder(app);
+        final var appBuilder = new MacApplicationBuilder(app).summary(OptionUtils.summary(options));
 
         PREDEFINED_APP_IMAGE.findIn(options)
                 .map(MacBundle::new)
@@ -291,6 +291,8 @@ final class MacFromOptions {
                     .map(MacPackagingPipeline::isSigned)
                     .ifPresent(builder::predefinedAppImageSigned);
         }
+
+        builder.summary(OptionUtils.summary(options));
 
         return builder;
     }
