@@ -22,47 +22,35 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package jdk.jpackage.internal;
+package jdk.jpackage.internal.summary;
 
-import java.nio.file.Path;
-import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
-import jdk.jpackage.internal.model.MacDmgPackage;
-import jdk.jpackage.internal.model.MacDmgPackageMixin;
 
-final class MacDmgPackageBuilder {
+/**
+ * Warning in summary.
+ */
+public enum StandardWarning implements Warning {
 
-    MacDmgPackageBuilder(MacPackageBuilder pkgBuilder) {
-        this.pkgBuilder = Objects.requireNonNull(pkgBuilder);
+    //
+    // Keep items in the order they should be printed in the summary.
+    //
+
+    MAC_SIGNED_PREDEFINED_APP_IMAGE_WITHOUT_PACKAGE_FILE("warning.per.user.app.image.signed"),
+
+    MAC_SIGNED_PKG_WITH_UNSIGNED_PREDEFINED_APP_IMAGE("warning.unsigned.app.image"),
+
+    MAC_NON_STANDARD_APP_CONTENT("warning.non-standard-app-content"),
+
+    ;
+
+    StandardWarning(String valueFormatter) {
+        this.valueFormatter = Optional.of(valueFormatter);
     }
 
-    MacDmgPackageBuilder dmgContent(List<Path> v) {
-        dmgContent = v;
-        return this;
+    @Override
+    public Optional<String> valueFormatter() {
+        return valueFormatter;
     }
 
-    MacDmgPackageBuilder icon(Path v) {
-        icon = v;
-        return this;
-    }
-
-    List<Path> validatedDmgContent() {
-        return Optional.ofNullable(dmgContent).orElseGet(List::of);
-    }
-
-    MacDmgPackage create() {
-        final var pkg = pkgBuilder.create();
-
-        return MacDmgPackage.create(
-                pkg,
-                new MacDmgPackageMixin.Stub(
-                        Optional.ofNullable(icon).or((pkg.app())::icon),
-                        validatedDmgContent()
-                ));
-    }
-
-    private Path icon;
-    private List<Path> dmgContent;
-    private final MacPackageBuilder pkgBuilder;
+    private final Optional<String> valueFormatter;
 }

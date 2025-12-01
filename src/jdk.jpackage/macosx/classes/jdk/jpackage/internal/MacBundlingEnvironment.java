@@ -76,6 +76,8 @@ public class MacBundlingEnvironment extends DefaultBundlingEnvironment {
 
         final var pkg = createSignAppImagePackage(app, env);
 
+        OptionUtils.finalizeAndPrintSummary(options, pkg, Log::verbose);
+
         buildPipeline(pkg).create().execute(env, pkg, env.appImageDir());
     }
 
