@@ -24,10 +24,17 @@
  */
 package jdk.jpackage.internal;
 
+import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.mapping;
+import static java.util.stream.Collectors.toList;
+
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -37,6 +44,8 @@ import jdk.jpackage.internal.model.Application;
 import jdk.jpackage.internal.model.Launcher;
 import jdk.jpackage.internal.model.MacApplication;
 import jdk.jpackage.internal.model.MacApplicationMixin;
+import jdk.jpackage.internal.summary.StandardWarning;
+import jdk.jpackage.internal.summary.SummaryAccumulator;
 
 final class MacApplicationBuilder {
 
@@ -90,13 +99,20 @@ final class MacApplicationBuilder {
         return this;
     }
 
+    MacApplicationBuilder summary(SummaryAccumulator v) {
+        summary = v;
+        return this;
+    }
+
     MacApplication create() {
         if (externalInfoPlistFile != null) {
             return createCopyForExternalInfoPlistFile().create();
         }
 
         validateAppVersion(app);
-        validateAppContentDirs(app);
+        summary().ifPresent(s -> {
+            validateAppContentDirs(s, app);
+        });
 
         final var mixin = new MacApplicationMixin.Stub(
                 validatedIcon(),
@@ -142,23 +158,62 @@ final class MacApplicationBuilder {
         }
     }
 
-    private static void validateAppContentDirs(Application app) {
-        for (var contentDir : app.contentDirs()) {
+    private static void validateAppContentDirs(SummaryAccumulator summary, Application app) {
+        var warnings = app.contentDirs().stream()
+                .map(NonStandardAppContentWarning::createMapEntry)
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .collect(groupingBy(
+                        Map.Entry::getKey,
+                        mapping(Map.Entry::getValue, toList())
+                )).entrySet().stream()
+                .sorted(Comparator.comparing(
+                        Map.Entry::getKey,
+                        Comparator.comparing(Enum::ordinal)
+                ))
+                .map(Map.Entry::getValue)
+                .flatMap(Collection::stream)
+                .toList();
+        if (!warnings.isEmpty()) {
+            summary.putWarning(StandardWarning.MAC_NON_STANDARD_APP_CONTENT, warnings);
+        }
+    }
+
+    private enum NonStandardAppContentWarning {
+        NOT_DIRECTORY("warning.non-standard-app-content.not-dir"),
+        NON_STANDARD_DIRECTOTY_NAME("warning.non-standard-app-content.non-standard-dir-name"),
+        ;
+
+        NonStandardAppContentWarning(String formatKey) {
+            this.formatKey = Objects.requireNonNull(formatKey);
+        }
+
+        static Optional<Map.Entry<NonStandardAppContentWarning, String>> createMapEntry(Path contentDir) {
             if (!Files.isDirectory(contentDir)) {
-                Log.info(I18N.format("warning.app.content.is.not.dir",
-                        contentDir));
+                return Optional.of(Map.entry(NOT_DIRECTORY, NOT_DIRECTORY.format(contentDir)));
             } else if (!CONTENTS_SUB_DIRS.contains(contentDir.getFileName().toString())) {
-                Log.info(I18N.format("warning.non.standard.contents.sub.dir",
-                        contentDir));
+                return Optional.of(Map.entry(
+                        NON_STANDARD_DIRECTOTY_NAME,
+                        NON_STANDARD_DIRECTOTY_NAME.format(contentDir.getFileName(), contentDir)
+                ));
+            } else {
+                return Optional.empty();
             }
         }
+
+        private String format(Object... formatArgs) {
+            return I18N.format(formatKey, formatArgs);
+        }
+
+
+        private final String formatKey;
     }
 
     private MacApplicationBuilder createCopyForExternalInfoPlistFile() {
         try {
             final var plistFile = AppImageInfoPListFile.loadFromInfoPList(externalInfoPlistFile);
 
-            final var builder = new MacApplicationBuilder(this);
+            final var builder = new MacApplicationBuilder(this).summary(summary);
 
             builder.externalInfoPlistFile(null);
 
@@ -240,6 +295,10 @@ final class MacApplicationBuilder {
         return Optional.ofNullable(icon).map(LauncherBuilder::validateIcon);
     }
 
+    private Optional<SummaryAccumulator> summary() {
+        return Optional.ofNullable(summary);
+    }
+
     private record Defaults(String category) {
     }
 
@@ -250,6 +309,7 @@ final class MacApplicationBuilder {
     private boolean appStore;
     private Path externalInfoPlistFile;
     private AppImageSigningConfigBuilder signingBuilder;
+    private SummaryAccumulator summary;
 
     private final Application app;
 

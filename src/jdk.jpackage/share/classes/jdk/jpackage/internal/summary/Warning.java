@@ -22,47 +22,10 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package jdk.jpackage.internal;
+package jdk.jpackage.internal.summary;
 
-import java.nio.file.Path;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-import jdk.jpackage.internal.model.MacDmgPackage;
-import jdk.jpackage.internal.model.MacDmgPackageMixin;
-
-final class MacDmgPackageBuilder {
-
-    MacDmgPackageBuilder(MacPackageBuilder pkgBuilder) {
-        this.pkgBuilder = Objects.requireNonNull(pkgBuilder);
-    }
-
-    MacDmgPackageBuilder dmgContent(List<Path> v) {
-        dmgContent = v;
-        return this;
-    }
-
-    MacDmgPackageBuilder icon(Path v) {
-        icon = v;
-        return this;
-    }
-
-    List<Path> validatedDmgContent() {
-        return Optional.ofNullable(dmgContent).orElseGet(List::of);
-    }
-
-    MacDmgPackage create() {
-        final var pkg = pkgBuilder.create();
-
-        return MacDmgPackage.create(
-                pkg,
-                new MacDmgPackageMixin.Stub(
-                        Optional.ofNullable(icon).or((pkg.app())::icon),
-                        validatedDmgContent()
-                ));
-    }
-
-    private Path icon;
-    private List<Path> dmgContent;
-    private final MacPackageBuilder pkgBuilder;
+/**
+ * Warning in summary.
+ */
+public non-sealed interface Warning extends SummaryItem {
 }

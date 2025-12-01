@@ -24,6 +24,8 @@
  */
 package jdk.jpackage.internal;
 
+import static jdk.jpackage.internal.LinuxSystemEnvironment.isWithRequiredPackagesSearch;
+
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -47,7 +49,7 @@ abstract class LinuxPackager<T extends LinuxPackage> implements Consumer<Packagi
         this.env = Objects.requireNonNull(env);
         this.pkg = Objects.requireNonNull(pkg);
         this.outputDir = Objects.requireNonNull(outputDir);
-        this.withRequiredPackagesLookup = sysEnv.soLookupAvailable() && sysEnv.nativePackageType().equals(pkg.type());
+        this.withRequiredPackagesLookup = isWithRequiredPackagesSearch(sysEnv, pkg);
 
         customActions = List.of(
                 DesktopIntegration.create(env, pkg),
@@ -136,8 +138,7 @@ abstract class LinuxPackager<T extends LinuxPackage> implements Consumer<Packagi
         if (withRequiredPackagesLookup) {
             neededLibPackages = findRequiredPackages();
         } else {
-            neededLibPackages = Collections.emptyList();
-            Log.info(I18N.getString("warning.foreign-app-image"));
+            neededLibPackages = Collections.emptyList();;
         }
 
         // Merge all package lists together.

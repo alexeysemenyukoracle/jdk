@@ -22,47 +22,38 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package jdk.jpackage.internal;
+package jdk.jpackage.internal.summary;
 
-import java.nio.file.Path;
 import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-import jdk.jpackage.internal.model.MacDmgPackage;
-import jdk.jpackage.internal.model.MacDmgPackageMixin;
+import java.util.Map;
+import jdk.internal.util.OperatingSystem;
+import jdk.jpackage.internal.util.MultiResourceBundle;
+import jdk.jpackage.internal.util.StringBundle;
 
-final class MacDmgPackageBuilder {
+final class I18N {
 
-    MacDmgPackageBuilder(MacPackageBuilder pkgBuilder) {
-        this.pkgBuilder = Objects.requireNonNull(pkgBuilder);
+    private I18N() {
     }
 
-    MacDmgPackageBuilder dmgContent(List<Path> v) {
-        dmgContent = v;
-        return this;
+    static String getString(String key) {
+        return BUNDLE.getString(key);
     }
 
-    MacDmgPackageBuilder icon(Path v) {
-        icon = v;
-        return this;
+    static String format(String key, Object ... args) {
+        return BUNDLE.format(key, args);
     }
 
-    List<Path> validatedDmgContent() {
-        return Optional.ofNullable(dmgContent).orElseGet(List::of);
+    private static final StringBundle BUNDLE;
+
+    static {
+        var prefix = "jdk.jpackage.internal.resources.";
+        BUNDLE = StringBundle.fromResourceBundle(MultiResourceBundle.create(
+                prefix + "MainResources",
+                Map.of(
+                        OperatingSystem.LINUX, List.of(prefix + "LinuxResources"),
+                        OperatingSystem.MACOS, List.of(prefix + "MacResources"),
+                        OperatingSystem.WINDOWS, List.of(prefix + "WinResources")
+                )
+        ));
     }
-
-    MacDmgPackage create() {
-        final var pkg = pkgBuilder.create();
-
-        return MacDmgPackage.create(
-                pkg,
-                new MacDmgPackageMixin.Stub(
-                        Optional.ofNullable(icon).or((pkg.app())::icon),
-                        validatedDmgContent()
-                ));
-    }
-
-    private Path icon;
-    private List<Path> dmgContent;
-    private final MacPackageBuilder pkgBuilder;
 }

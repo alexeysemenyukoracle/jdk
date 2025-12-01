@@ -25,7 +25,6 @@
 package jdk.jpackage.internal;
 
 import static java.util.stream.Collectors.toMap;
-import static jdk.jpackage.internal.PackagingPipeline.bundleTypeDescription;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -51,7 +50,6 @@ import jdk.jpackage.internal.model.Application;
 import jdk.jpackage.internal.model.BundlingOperationDescriptor;
 import jdk.jpackage.internal.model.JPackageException;
 import jdk.jpackage.internal.model.Package;
-import jdk.jpackage.internal.model.AppImagePackageType;
 import jdk.jpackage.internal.util.PathUtils;
 import jdk.jpackage.internal.util.Result;
 
@@ -125,6 +123,8 @@ class DefaultBundlingEnvironment implements CliBundlingEnvironment {
         Objects.requireNonNull(app);
         Objects.requireNonNull(pipelineBuilder);
 
+        OptionUtils.finalizeAndPrintSummary(options, app, Log::verbose);
+
         final var outputDir = PathUtils.normalizedAbsolutePath(OptionUtils.outputDir(options).resolve(app.appImageDirName()));
 
         Log.verbose(I18N.getString("message.create-app-image"));
@@ -191,14 +191,15 @@ class DefaultBundlingEnvironment implements CliBundlingEnvironment {
     @Override
     public void createBundle(BundlingOperationDescriptor op, Options cmdline) {
         final var bundler = getBundlerSupplier(op).get().orElseThrow();
+
+        cmdline = OptionUtils.addSummary(cmdline);
+
         Optional<Path> permanentWorkDirectory = Optional.empty();
         try (var tempDir = new TempDirectory(cmdline)) {
             if (!tempDir.deleteOnClose()) {
                 permanentWorkDirectory = Optional.of(tempDir.path());
             }
             bundler.accept(tempDir.options());
-
-            var packageType = OptionUtils.bundlingOperation(cmdline).packageType();
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
         } finally {

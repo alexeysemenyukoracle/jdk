@@ -30,8 +30,8 @@ import static jdk.jpackage.internal.MacPackagingPipeline.APPLICATION_LAYOUT;
 import static jdk.jpackage.internal.MacRuntimeValidator.validateRuntimeHasJliLib;
 import static jdk.jpackage.internal.MacRuntimeValidator.validateRuntimeHasNoBinDir;
 import static jdk.jpackage.internal.cli.StandardBundlingOperation.SIGN_MAC_APP_IMAGE;
-import static jdk.jpackage.internal.cli.StandardOption.ICON;
 import static jdk.jpackage.internal.cli.StandardOption.APPCLASS;
+import static jdk.jpackage.internal.cli.StandardOption.ICON;
 import static jdk.jpackage.internal.cli.StandardOption.MAC_APP_CATEGORY;
 import static jdk.jpackage.internal.cli.StandardOption.MAC_APP_IMAGE_SIGN_IDENTITY;
 import static jdk.jpackage.internal.cli.StandardOption.MAC_APP_STORE;
@@ -161,7 +161,7 @@ final class MacFromOptions {
             }
         }
 
-        return pkgBuilder.orElseThrow().create();
+        return pkgBuilder.orElseThrow().summary(OptionUtils.summary(options)).create();
     }
 
     private record ApplicationWithDetails(MacApplication app, Optional<ExternalApplication> externalApp) {
@@ -209,7 +209,7 @@ final class MacFromOptions {
 
         final var app = superAppBuilder.create();
 
-        final var appBuilder = new MacApplicationBuilder(app);
+        final var appBuilder = new MacApplicationBuilder(app).summary(OptionUtils.summary(options));
 
         PREDEFINED_APP_IMAGE.findIn(options)
                 .map(MacBundle::new)
