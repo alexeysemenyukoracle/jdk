@@ -31,4 +31,11 @@ package jdk.jpackage.internal.model;
  *
  * @see jdk.jpackage.internal.model.Package
  */
-public interface PackageType {}
+public interface PackageType {
+
+    /**
+     * Returns a human-readable label of this package type.
+     * @return the human-readable label of this package type.
+     */
+    String label();
+}
