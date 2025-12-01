@@ -55,6 +55,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import jdk.internal.util.OperatingSystem;
+import jdk.jpackage.internal.model.AppImagePackageType;
 import jdk.jpackage.internal.model.BundlingOperationDescriptor;
 import jdk.jpackage.internal.model.JPackageException;
 import jdk.jpackage.internal.model.LauncherShortcut;
@@ -107,14 +108,14 @@ public final class StandardOption {
             .scope(StandardBundlingOperation.values()).inScope(NOT_BUILDING_APP_IMAGE)
             .converterExceptionFactory(ERROR_WITH_VALUE).converterExceptionFormatString("ERR_InvalidInstallerType")
             .converter(str -> {
-                Objects.requireNonNull(str);
-                return Stream.of(StandardBundlingOperation.values()).filter(bundlingOperation -> {
-                    return bundlingOperation.packageTypeValue().equals(str);
-                }).map(StandardBundlingOperation::packageType).findFirst().orElseThrow(IllegalArgumentException::new);
+                return parsePackageType(str, OperatingSystem.current());
             })
             .description("help.option.type" + resourceKeySuffix(OperatingSystem.current()))
             .mutate(createOptionSpecBuilderMutator((b, context) -> {
                 b.description("help.option.type" + resourceKeySuffix(context.os()));
+                b.converter(str -> {
+                    return parsePackageType(str, context.os());
+                });
             })).create();
 
     public static final OptionValue<Path> INPUT = directoryOption("input").addAliases("i")
@@ -663,6 +664,23 @@ public final class StandardOption {
 
                     return new AdditionalLauncher(launcherName, propertyFile);
                 }).defaultArrayValue(new AdditionalLauncher[0]).createArray();
+    }
+
+    private static PackageType parsePackageType(String str, OperatingSystem appImageOS) {
+        Objects.requireNonNull(str);
+        Objects.requireNonNull(appImageOS);
+
+        return Stream.of(StandardBundlingOperation.values()).filter(bundlingOperation -> {
+            return bundlingOperation.packageTypeValue().equals(str);
+        })
+        .filter(bundlingOperation -> {
+            // Skip app image bundle type if it is from another platform.
+            return !(bundlingOperation.packageType() instanceof AppImagePackageType) 
+                    || (bundlingOperation.os() == appImageOS);
+        })
+        .map(StandardBundlingOperation::packageType)
+        .findFirst()
+        .orElseThrow(IllegalArgumentException::new);
     }
 
     private static String resourceKeySuffix(OperatingSystem os) {
