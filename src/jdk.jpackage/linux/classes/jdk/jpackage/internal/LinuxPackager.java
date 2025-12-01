@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2025, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
+ * Copyright (c) 2025, 2026, Oracle and/or its affiliates. All rights reserved.
  * under the terms of the GNU General Public License version 2 only, as
  * published by the Free Software Foundation.  Oracle designates this
  * particular file as subject to the "Classpath" exception as provided
@@ -23,6 +23,8 @@
  * questions.
  */
 package jdk.jpackage.internal;
+
+import static jdk.jpackage.internal.LinuxSystemEnvironment.isWithRequiredPackagesSearch;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -47,7 +49,7 @@ abstract class LinuxPackager<T extends LinuxPackage> implements Consumer<Packagi
         this.env = Objects.requireNonNull(env);
         this.pkg = Objects.requireNonNull(pkg);
         this.outputDir = Objects.requireNonNull(outputDir);
-        this.withRequiredPackagesLookup = sysEnv.soLookupAvailable() && sysEnv.nativePackageType().equals(pkg.type());
+        this.withRequiredPackagesLookup = isWithRequiredPackagesSearch(sysEnv, pkg);
 
         customActions = List.of(
                 DesktopIntegration.create(env, pkg),
@@ -136,8 +138,7 @@ abstract class LinuxPackager<T extends LinuxPackage> implements Consumer<Packagi
         if (withRequiredPackagesLookup) {
             neededLibPackages = findRequiredPackages();
         } else {
-            neededLibPackages = Collections.emptyList();
-            Log.info(I18N.getString("warning.foreign-app-image"));
+            neededLibPackages = Collections.emptyList();;
         }
 
         // Merge all package lists together.
