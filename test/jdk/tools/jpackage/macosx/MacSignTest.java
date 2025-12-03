@@ -34,14 +34,17 @@ import jdk.jpackage.test.Annotations.Parameter;
 import jdk.jpackage.test.Annotations.ParameterSupplier;
 import jdk.jpackage.test.Annotations.Test;
 import jdk.jpackage.test.CannedFormattedString;
+import jdk.jpackage.test.ConfigurationTarget;
 import jdk.jpackage.test.JPackageCommand;
 import jdk.jpackage.test.JPackageStringBundle;
 import jdk.jpackage.test.MacHelper;
+import jdk.jpackage.test.PackageTest;
 import jdk.jpackage.test.MacSign;
 import jdk.jpackage.test.MacSign.CertificateRequest;
 import jdk.jpackage.test.MacSign.CertificateType;
 import jdk.jpackage.test.MacSignVerify;
 import jdk.jpackage.test.PackageType;
+import jdk.jpackage.test.RunnablePackageTest.Action;
 import jdk.jpackage.test.TKit;
 
 /*
@@ -196,10 +199,57 @@ public class MacSignTest {
                     .setFakeRuntime()
                     .addArguments("--mac-signing-key-user-name", signingKeyUserName);
 
-            cmd.executeAndAssertHelloAppImageCreated();
+            cmd.executeAndAssertImageCreated();
 
-            MacSignVerify.assertSigned(cmd.outputBundle(), certRequest);
+            MacSignVerify.verifyAppImageSigned(cmd, certRequest, keychain);
         }, MacSign.Keychain.UsageBuilder::addToSearchList, SigningBase.StandardKeychain.MAIN.keychain());
+    }
+
+    @Test
+    @Parameter("IMAGE")
+    @Parameter("MAC_DMG")
+    @Parameter("MAC_PKG")
+    public static void testNoSigningIdentity(PackageType bundleType) {
+
+        MacSign.withKeychain(keychain -> {
+
+            ConfigurationTarget target;
+
+            switch (bundleType) {
+                case IMAGE -> {
+                    target = new ConfigurationTarget(JPackageCommand.helloAppImage());
+                }
+                case MAC_DMG, MAC_PKG -> {
+                    target = new ConfigurationTarget(new PackageTest().forTypes(bundleType).configureHelloApp());
+                }
+                default -> {
+                    throw new IllegalArgumentException();
+                }
+            }
+
+            target.addInitializer(cmd -> {
+                MacHelper.useKeychain(cmd, keychain).setFakeRuntime();
+            });
+
+            target.cmd().ifPresent(cmd -> {
+                cmd.executeAndAssertImageCreated();
+            });
+
+            target.addInstallVerifier(cmd -> {
+                MacSignVerify.verifyAppImageSigned(cmd, SigningBase.StandardCertificateRequest.CODESIGN.spec(), keychain);
+            });
+
+            target.test().ifPresent(test -> {
+                if (bundleType == PackageType.MAC_PKG) {
+                    test.addBundleVerifier(cmd -> {
+                        MacSignVerify.verifyPkgSigned(cmd, SigningBase.StandardCertificateRequest.PKG.spec(), keychain);
+                    });
+                }
+
+                test.run(Action.CREATE_AND_UNPACK);
+            });
+
+        }, MacSign.Keychain.UsageBuilder::addToSearchList, SigningBase.StandardKeychain.SINGLE.keychain());
     }
 
     public static Collection<Object[]> testSelectSigningIdentity() {

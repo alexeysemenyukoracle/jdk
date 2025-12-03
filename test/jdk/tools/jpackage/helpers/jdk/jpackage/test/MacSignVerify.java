@@ -44,7 +44,7 @@ public final class MacSignVerify {
     public static void verifyAppImageSigned(
             JPackageCommand cmd, CertificateRequest certRequest, MacSign.ResolvedKeychain keychain) {
 
-        cmd.verifyIsOfType(PackageType.MAC);
+        cmd.verifyIsOfType(PackageType.MAC_DMG, PackageType.MAC_PKG, PackageType.IMAGE);
         Objects.requireNonNull(certRequest);
         Objects.requireNonNull(keychain);
 
