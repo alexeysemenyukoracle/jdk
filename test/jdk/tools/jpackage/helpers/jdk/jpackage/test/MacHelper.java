@@ -59,8 +59,6 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
@@ -90,7 +88,7 @@ public final class MacHelper {
         final var mountRoot = TKit.createTempDirectory("mountRoot");
 
         // Explode DMG assuming this can require interaction, thus use `yes`.
-        final var attachStdout = Executor.of("sh", "-c", String.join(" ",
+        final var attachResult = Executor.of("sh", "-c", String.join(" ",
                 "yes",
                 "|",
                 "/usr/bin/hdiutil",
@@ -99,14 +97,14 @@ public final class MacHelper {
                 "-mountroot", PathUtils.normalizedAbsolutePathString(mountRoot),
                 "-nobrowse",
                 "-plist"
-        )).saveOutput().storeOutputInFiles().executeAndRepeatUntilExitCode(0, 10, 6).stdout();
+        )).saveOutput().binaryOutput().storeOutputInFiles().executeAndRepeatUntilExitCode(0, 10, 6);
 
         final Path mountPoint;
 
         boolean mountPointInitialized = false;
         try {
             // One of "dict" items of "system-entities" array property should contain "mount-point" string property.
-            mountPoint = readPList(attachStdout).queryArrayValue("system-entities", false)
+            mountPoint = readPList(attachResult.byteStdout()).queryArrayValue("system-entities", false)
                     .map(PListReader.class::cast)
                     .map(dict -> {
                         return dict.findValue("mount-point");
@@ -117,7 +115,9 @@ public final class MacHelper {
         } finally {
             if (!mountPointInitialized) {
                 TKit.trace("Unexpected plist file missing `system-entities` array:");
-                attachStdout.forEach(TKit::trace);
+                ThrowingSupplier.toSupplier(() -> {
+                    return attachResult.toCharacterResult(StandardCharsets.UTF_8, false);
+                }).get().getOutput().forEach(TKit::trace);
                 TKit.trace("Done");
             }
         }
@@ -168,19 +168,15 @@ public final class MacHelper {
 
     public static PListReader readPList(Path path) {
         TKit.assertReadableFileExists(path);
-        return ThrowingSupplier.toSupplier(() -> readPList(Files.readAllLines(
-                path))).get();
+        return ThrowingSupplier.toSupplier(() -> {
+            return readPList(Files.readAllBytes(path));
+        }).get();
     }
 
-    public static PListReader readPList(List<String> lines) {
-        return readPList(lines.stream());
-    }
-
-    public static PListReader readPList(Stream<String> lines) {
-        return ThrowingSupplier.toSupplier(() -> new PListReader(lines
-                // Skip leading lines before xml declaration
-                .dropWhile(Pattern.compile("\\s?<\\?xml\\b.+\\?>").asPredicate().negate())
-                .collect(Collectors.joining()).getBytes(StandardCharsets.UTF_8))).get();
+    public static PListReader readPList(byte[] xml) {
+        return ThrowingSupplier.toSupplier(() -> {
+            return new PListReader(xml);
+        }).get();
     }
 
     public static Map<String, String> flatMapPList(PListReader plistReader) {

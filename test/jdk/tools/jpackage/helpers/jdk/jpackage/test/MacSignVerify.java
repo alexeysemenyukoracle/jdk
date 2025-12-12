@@ -92,10 +92,10 @@ public final class MacSignVerify {
     }
 
     public static Optional<PListReader> findEntitlements(Path path) {
-        final var exec = Executor.of("/usr/bin/codesign", "-d", "--entitlements", "-", "--xml", path.toString()).saveOutput().dumpOutput();
-        final var result = exec.execute();
-        var xml = result.stdout();
-        if (xml.isEmpty()) {
+        final var exec = Executor.of("/usr/bin/codesign", "-d", "--entitlements", "-", "--xml", path.toString());
+        final var result = exec.saveOutput().binaryOutput().dumpOutput().execute();
+        var xml = result.byteStdout();
+        if (xml.length == 0) {
             return Optional.empty();
         } else {
             return Optional.of(MacHelper.readPList(xml));
