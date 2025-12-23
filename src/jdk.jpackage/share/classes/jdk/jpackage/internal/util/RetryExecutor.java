@@ -37,7 +37,7 @@ import jdk.jpackage.internal.util.function.ExceptionBox;
 import jdk.jpackage.internal.util.function.ThrowingFunction;
 import jdk.jpackage.internal.util.function.ThrowingSupplier;
 
-public final class RetryExecutor<T, E extends Exception> {
+public class RetryExecutor<T, E extends Exception> {
 
     public RetryExecutor(Class<? extends E> exceptionType) {
         this.exceptionType = Objects.requireNonNull(exceptionType);
@@ -45,12 +45,16 @@ public final class RetryExecutor<T, E extends Exception> {
         setAttemptTimeout(2, TimeUnit.SECONDS);
     }
 
+    final public Class<? extends E> exceptionType() {
+        return exceptionType;
+    }
+
     public RetryExecutor<T, E> setExecutable(ThrowingFunction<Context<RetryExecutor<T, E>>, T, E> v) {
         executable = v;
         return this;
     }
 
-    public RetryExecutor<T, E> setExecutable(ThrowingSupplier<T, E> v) {
+    final public RetryExecutor<T, E> setExecutable(ThrowingSupplier<T, E> v) {
         if (v != null) {
             setExecutable(_ -> {
                 return v.get();
@@ -66,7 +70,7 @@ public final class RetryExecutor<T, E extends Exception> {
         return this;
     }
 
-    public RetryExecutor<T, E> setAttemptTimeout(long v, TimeUnit unit) {
+    final public RetryExecutor<T, E> setAttemptTimeout(long v, TimeUnit unit) {
         return setAttemptTimeout(Duration.of(v, unit.toChronoUnit()));
     }
 
@@ -85,7 +89,7 @@ public final class RetryExecutor<T, E extends Exception> {
         return this;
     }
 
-    public RetryExecutor<T, E> mutate(Consumer<RetryExecutor<T, E>> mutator) {
+    final public RetryExecutor<T, E> mutate(Consumer<RetryExecutor<T, E>> mutator) {
         mutator.accept(this);
         return this;
     }
@@ -116,7 +120,7 @@ public final class RetryExecutor<T, E extends Exception> {
         return result;
     }
 
-    public T executeUnchecked() {
+    final public T executeUnchecked() {
         try {
             return execute();
         } catch (Error|RuntimeException t) {
