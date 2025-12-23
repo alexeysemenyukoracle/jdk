@@ -207,11 +207,11 @@ class DefaultBundlingEnvironment implements CliBundlingEnvironment {
 
         Optional<Path> permanentWorkDirectory = Optional.empty();
 
-        try (var tempDir = new TempDirectory(cmdline)) {
+        try (var tempDir = new TempDirectory(cmdline, objectFactory)) {
             if (!tempDir.deleteOnClose()) {
                 permanentWorkDirectory = Optional.of(tempDir.path());
             }
-            bundler.accept(tempDir.options());
+            bundler.accept(tempDir.map(cmdline));
 
             var packageType = OptionUtils.bundlingOperation(cmdline).packageType();
 

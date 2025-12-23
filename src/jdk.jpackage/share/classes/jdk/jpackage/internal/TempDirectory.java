@@ -28,27 +28,37 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import jdk.jpackage.internal.cli.Options;
 import jdk.jpackage.internal.cli.StandardOption;
 import jdk.jpackage.internal.util.FileUtils;
 
 final class TempDirectory implements Closeable {
 
-    TempDirectory(Options options) throws IOException {
-        final var tempDir = StandardOption.TEMP_ROOT.findIn(options);
+    TempDirectory(Options options, RetryExecutorFactory retryExecutorFactory) throws IOException {
+        this(StandardOption.TEMP_ROOT.findIn(options), retryExecutorFactory);
+    }
+
+    TempDirectory(Optional<Path> tempDir, RetryExecutorFactory retryExecutorFactory) throws IOException {
         if (tempDir.isPresent()) {
             this.path = tempDir.orElseThrow();
-            this.options = options;
         } else {
             this.path = Files.createTempDirectory("jdk.jpackage");
-            this.options = options.copyWithDefaultValue(StandardOption.TEMP_ROOT, path);
         }
 
         deleteOnClose = tempDir.isEmpty();
+        this.retryExecutorFactory = Objects.requireNonNull(retryExecutorFactory);
     }
 
-    Options options() {
-        return options;
+    Options map(Options options) {
+        if (deleteOnClose) {
+            return options.copyWithDefaultValue(StandardOption.TEMP_ROOT, path);
+        } else {
+            return options;
+        }
     }
 
     Path path() {
@@ -62,11 +72,38 @@ final class TempDirectory implements Closeable {
     @Override
     public void close() throws IOException {
         if (deleteOnClose) {
-            FileUtils.deleteRecursive(path);
+            retryExecutorFactory.<Void, IOException>retryExecutor(IOException.class)
+                    .setMaxAttemptsCount(5)
+                    .setAttemptTimeout(2, TimeUnit.SECONDS)
+                    .setExecutable(context -> {
+                        try {
+                            FileUtils.deleteRecursive(path);
+                        } catch (IOException ex) {
+                            if (!context.isLastAttempt()) {
+                                throw ex;
+                            } else {
+                                List<Path> remainingFiles;
+                                try (var walk = Files.walk(path)) {
+                                    remainingFiles = walk.filter(Files::isRegularFile).toList();
+                                } catch (IOException walkEx) {
+                                    remainingFiles = List.of();
+                                }
+
+                                if (remainingFiles.isEmpty()) {
+                                    Log.info(I18N.format("warning.tempdir.cleanup-failed", path));
+                                } else {
+                                    remainingFiles.forEach(file -> {
+                                        Log.info(I18N.format("warning.tempdir.cleanup-file-failed", file));
+                                    });
+                                }
+                            }
+                        }
+                        return null;
+                    }).execute();
         }
     }
 
     private final Path path;
-    private final Options options;
     private final boolean deleteOnClose;
+    private final RetryExecutorFactory retryExecutorFactory;
 }
