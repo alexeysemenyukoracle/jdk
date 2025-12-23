@@ -27,6 +27,7 @@ package jdk.jpackage.internal.util;
 import java.io.IOException;
 import java.nio.file.CopyOption;
 import java.nio.file.FileVisitResult;
+import java.nio.file.FileVisitor;
 import java.nio.file.Files;
 import java.nio.file.NotLinkException;
 import java.nio.file.Path;
@@ -41,14 +42,32 @@ import jdk.jpackage.internal.util.function.ThrowingConsumer;
 
 public final class FileUtils {
 
-    public static void deleteRecursive(Path directory) throws IOException {
-        if (!Files.exists(directory)) {
+    private FileUtils() {
+    }
+
+    /**
+     * Recursively deletes {@code path}.
+     * <p>
+     * Returns immediately if the specified {@code path} does not exist. Otherwise,
+     * traverses the file tree rooted at {@code path} using
+     * {@link Files#walkFileTree(Path, FileVisitor)}.
+     * <p>
+     * If an {@link IOException} occurs while deleting a file during file tree
+     * traversal, the file visitor records the first such exception and continues
+     * traversing the tree. After the traversal completes, the method rethrows the
+     * recorded exception, if any.
+     *
+     * @param path the path to delete
+     * @throws IOException if an I/O error occurs
+     */
+    public static void deleteRecursive(Path path) throws IOException {
+        if (!Files.exists(path)) {
             return;
         }
 
         var callback = new RecursiveDeleter();
 
-        Files.walkFileTree(directory, callback);
+        Files.walkFileTree(path, callback);
 
         if (callback.ex != null) {
             throw callback.ex;

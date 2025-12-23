@@ -23,19 +23,27 @@
 
 package jdk.jpackage.internal.util;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import static jdk.jpackage.internal.util.function.ThrowingConsumer.toConsumer;
 
 
 public class FileUtilsTest {
@@ -104,6 +112,74 @@ public class FileUtilsTest {
         } else {
             assertEquals("Hello", Files.readString(workdir.resolve("to/foo/bar/file.txt")));
         }
+    }
+
+    @Test
+    public void test_deleteRecursive_dir(@TempDir Path workdir) throws IOException {
+        var rootDir = workdir.resolve("from");
+        Files.createDirectories(rootDir.resolve("foo/bar"));
+        Files.writeString(rootDir.resolve("foo/bar/file.txt"), "Hello");
+        FileUtils.deleteRecursive(rootDir);
+        assertFalse(Files.exists(rootDir));
+    }
+
+    @Test
+    public void test_deleteRecursive_file(@TempDir Path workdir) throws IOException {
+        var file = workdir.resolve("file.txt");
+        Files.writeString(file, "Hello");
+        FileUtils.deleteRecursive(file);
+        assertFalse(Files.exists(file));
+    }
+
+    @Test
+    @EnabledOnOs(value = OS.WINDOWS, disabledReason = "Can reliably lock a file using FileLock to cause an IOException on Windows only")
+    @SuppressWarnings("try")
+    public void test_deleteRecursive_file_locked(@TempDir Path workdir) throws IOException {
+        var file = workdir.resolve("file.txt");
+        Files.writeString(file, "Hello");
+
+        try (var out = new FileOutputStream(file.toFile()); var lock = out.getChannel().lock()) {
+            assertThrows(IOException.class, () -> {
+                FileUtils.deleteRecursive(file);
+            });
+        }
+
+        assertTrue(Files.exists(file));
+    }
+
+    @Test
+    @EnabledOnOs(value = OS.WINDOWS, disabledReason = "Can reliably lock a file using FileLock to cause an IOException on Windows only")
+    @SuppressWarnings("try")
+    public void test_deleteRecursive_dir_locked(@TempDir Path workdir) throws IOException {
+        var rootDir = workdir.resolve("from");
+        Files.createDirectory(rootDir);
+        Stream.of("a", "b", "c", "d").map(rootDir::resolve).peek(toConsumer(Files::createFile)).toList();
+
+        var a = rootDir.resolve("a");
+        var c = rootDir.resolve("c");
+
+        try (var aOut = new FileOutputStream(a.toFile()); var aLock = aOut.getChannel().lock()) {
+            try (var cOut = new FileOutputStream(c.toFile()); var cLock = cOut.getChannel().lock()) {
+                assertThrows(IOException.class, () -> {
+                    FileUtils.deleteRecursive(rootDir);
+                });
+            }
+        }
+
+        assertTrue(Files.exists(a));
+        assertFalse(Files.exists(rootDir.resolve("b")));
+        assertTrue(Files.exists(c));
+        assertFalse(Files.exists(rootDir.resolve("d")));
+
+        FileUtils.deleteRecursive(rootDir);
+        assertFalse(Files.exists(rootDir));
+    }
+
+    @Test
+    public void test_deleteRecursive_non_existing(@TempDir Path workdir) throws IOException {
+        assertDoesNotThrow(() -> {
+            FileUtils.deleteRecursive(workdir.resolve("foo"));
+        });
     }
 
     enum ExcludeType {
