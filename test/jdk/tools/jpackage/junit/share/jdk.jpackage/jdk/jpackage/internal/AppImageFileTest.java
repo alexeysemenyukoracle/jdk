@@ -124,7 +124,7 @@ public class AppImageFileTest {
     }
 
     @Test
-    @EnabledOnOs(value = OS.WINDOWS, disabledReason = "Can reliably lock a file using FileLock to cuase an IOException on Windows only")
+    @EnabledOnOs(value = OS.WINDOWS, disabledReason = "Can reliably lock a file using FileLock to cause an IOException on Windows only")
     @SuppressWarnings("try")
     public void testGenericIOException() throws IOException {
 
