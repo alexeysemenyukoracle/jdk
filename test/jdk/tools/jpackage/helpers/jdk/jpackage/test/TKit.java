@@ -113,7 +113,7 @@ public final class TKit {
         Objects.requireNonNull(out);
         Objects.requireNonNull(err);
         try {
-            withNewState(action, stateBuilder -> {
+            withState(action, stateBuilder -> {
                 stateBuilder.out(out).err(err);
             });
         } finally {
@@ -125,28 +125,17 @@ public final class TKit {
         }
     }
 
-    public static State state() {
-        return STATE.get();
-    }
-
-    public static void state(State v) {
-        STATE.set(Objects.requireNonNull(v));
-    }
-
-    static void withNewState(ThrowingRunnable<? extends Exception> action, Consumer<State.Builder> stateBuilderMutator) {
+    public static void withState(ThrowingRunnable<? extends Exception> action, Consumer<State.Builder> stateBuilderMutator) {
         Objects.requireNonNull(action);
         Objects.requireNonNull(stateBuilderMutator);
 
-        var oldState = state();
-        var builder = oldState.buildCopy();
-        stateBuilderMutator.accept(builder);
-        var newState = builder.create();
-        try {
-            state(newState);
-            ThrowingRunnable.toRunnable(action).run();
-        } finally {
-            state(oldState);
-        }
+        var stateBuilder = state().buildCopy();
+        stateBuilderMutator.accept(stateBuilder);
+        ScopedValue.where(STATE, stateBuilder.create()).run(ThrowingRunnable.toRunnable(action));
+    }
+
+    public static State state() {
+        return STATE.orElse(DEFAULT_STATE);
     }
 
     enum RunTestMode {
@@ -167,7 +156,7 @@ public final class TKit {
         }
 
         tests.stream().forEach(test -> {
-            withNewState(() -> {
+            withState(() -> {
                 if (modes.contains(RunTestMode.FAIL_FAST)) {
                     test.run();
                 } else {
@@ -1464,10 +1453,6 @@ public final class TKit {
     }
 
 
-    private static final InheritableThreadLocal<State> STATE = new InheritableThreadLocal<>() {
-        @Override
-        protected State initialValue() {
-            return State.build().initDefaults().create();
-        }
-    };
+    private static final ScopedValue<State> STATE = ScopedValue.newInstance();
+    private static final State DEFAULT_STATE = State.build().initDefaults().create();
 }
