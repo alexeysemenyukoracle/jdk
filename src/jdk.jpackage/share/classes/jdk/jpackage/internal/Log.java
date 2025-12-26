@@ -111,8 +111,8 @@ public class Log {
         }
     }
 
-    private static final InheritableThreadLocal<Logger> instance =
-            new InheritableThreadLocal<Logger>() {
+    private static final ThreadLocal<Logger> instance =
+            new ThreadLocal<Logger>() {
                 @Override protected Logger initialValue() {
                     return new Logger();
                 }
