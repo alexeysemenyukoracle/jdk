@@ -1374,7 +1374,7 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
             if (!isImagePackageType() && hasArgument("--app-image")) {
                 // Build native macOS package from an external app image.
                 // If the external app image is signed, ".jpackage.xml" file should be kept, otherwise removed.
-                return AppImageFile.load(Path.of(getArgumentValue("--app-image"))).macSigned();
+                return MacHelper.isBundleSigned(Path.of(getArgumentValue("--app-image")));
             }
         }
 
@@ -1395,13 +1395,8 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
             final AppImageFile aif = AppImageFile.load(rootDir);
 
             if (TKit.isOSX()) {
-                boolean expectedValue = MacHelper.appImageSigned(this);
-                boolean actualValue = aif.macSigned();
-                TKit.assertEquals(expectedValue, actualValue,
-                    "Check for unexpected value of <signed> property in app image file");
-
-                expectedValue = hasArgument("--mac-app-store");
-                actualValue = aif.macAppStore();
+                var expectedValue = hasArgument("--mac-app-store");
+                var actualValue = aif.macAppStore();
                 TKit.assertEquals(expectedValue, actualValue,
                     "Check for unexpected value of <app-store> property in app image file");
             }
@@ -1426,7 +1421,7 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
         } else {
             if (TKit.isOSX() && hasArgument("--app-image")) {
                 String appImage = getArgumentValue("--app-image");
-                if (AppImageFile.load(Path.of(appImage)).macSigned()) {
+                if (MacHelper.isBundleSigned(Path.of(appImage))) {
                     assertFileNotInAppImage(lookupPath);
                 } else {
                     assertFileInAppImage(lookupPath);
