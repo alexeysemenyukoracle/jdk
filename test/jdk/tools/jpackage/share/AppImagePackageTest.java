@@ -26,6 +26,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.function.Predicate;
 import jdk.internal.util.OperatingSystem;
+import jdk.jpackage.internal.util.MacBundle;
 import jdk.jpackage.internal.util.XmlUtils;
 import jdk.jpackage.test.Annotations.Parameter;
 import jdk.jpackage.test.Annotations.Test;
@@ -133,8 +134,7 @@ public class AppImagePackageTest {
      */
     @Test
     public static void testBadAppImage() throws IOException {
-        Path appImageDir = TKit.createTempDirectory("appimage");
-        Files.createFile(appImageDir.resolve("foo"));
+        Path appImageDir = createInvalidAppImage();
         configureBadAppImage(appImageDir).addInitializer(cmd -> {
             cmd.removeArgumentWithValue("--name");
         }).run(Action.CREATE);
@@ -145,8 +145,7 @@ public class AppImagePackageTest {
      */
     @Test
     public static void testBadAppImage2() throws IOException {
-        Path appImageDir = TKit.createTempDirectory("appimage");
-        Files.createFile(appImageDir.resolve("foo"));
+        Path appImageDir = createInvalidAppImage();
         configureBadAppImage(appImageDir).run(Action.CREATE);
     }
 
@@ -225,6 +224,21 @@ public class AppImagePackageTest {
     private static Path iconPath(String name) {
         return TKit.TEST_SRC_ROOT.resolve(Path.of("resources", name
                 + TKit.ICON_SUFFIX));
+    }
+
+    private static Path createInvalidAppImage() throws IOException {
+        Path appImageDir = TKit.createTempDirectory("appimage");
+        if (TKit.isOSX()) {
+            // Create minimal macOS bundle to prevent jpackage bail out early
+            // with "error.parameter-not-mac-bundle" error.
+            var bundle = new MacBundle(appImageDir);
+            Files.createDirectories(bundle.macOsDir());
+            Files.createFile(bundle.infoPlistFile());
+        } else {
+            Files.createFile(appImageDir.resolve("foo"));
+        }
+
+        return appImageDir;
     }
 
 }
