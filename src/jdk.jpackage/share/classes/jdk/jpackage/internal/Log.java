@@ -80,13 +80,6 @@ public class Log {
             }
         }
 
-        public void verbose(Throwable t) {
-            if (out != null && verbose) {
-                out.print(addTimestamp(""));
-                t.printStackTrace(out);
-            }
-        }
-
         public void verbose(String msg) {
             msg = addTimestamp(msg);
             if (out != null && verbose) {
@@ -119,9 +112,5 @@ public class Log {
 
     public static void verbose(String msg) {
         Globals.instance().logger().verbose(msg);
-    }
-
-    public static void verbose(Throwable t) {
-        Globals.instance().logger().verbose(t);
     }
 }
