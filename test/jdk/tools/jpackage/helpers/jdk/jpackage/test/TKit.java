@@ -1275,10 +1275,6 @@ public final class TKit {
         return state().currentTest;
     }
 
-    static boolean verboseJPackage() {
-        return state().verboseJPackage;
-    }
-
     static boolean verboseTestSetup() {
         return state().verboseTestSetup;
     }
@@ -1320,7 +1316,6 @@ public final class TKit {
                 Map<Object, Object> properties,
                 boolean trace,
                 boolean traceAsserts,
-                boolean verboseJPackage,
                 boolean verboseTestSetup) {
 
             Objects.requireNonNull(out);
@@ -1335,7 +1330,6 @@ public final class TKit {
             this.trace = trace;
             this.traceAsserts = traceAsserts;
 
-            this.verboseJPackage = verboseJPackage;
             this.verboseTestSetup = verboseTestSetup;
         }
 
@@ -1379,12 +1373,10 @@ public final class TKit {
                 if (logOptions == null) {
                     trace = true;
                     traceAsserts = true;
-                    verboseJPackage = true;
                     verboseTestSetup = true;
                 } else if (logOptions.contains("all")) {
                     trace = false;
                     traceAsserts = false;
-                    verboseJPackage = false;
                     verboseTestSetup = false;
                 } else {
                     Predicate<Set<String>> isNonOf = options -> {
@@ -1393,7 +1385,6 @@ public final class TKit {
 
                     trace = isNonOf.test(Set.of("trace", "t"));
                     traceAsserts = isNonOf.test(Set.of("assert", "a"));
-                    verboseJPackage = isNonOf.test(Set.of("jpackage", "jp"));
                     verboseTestSetup = isNonOf.test(Set.of("init", "i"));
                 }
 
@@ -1412,7 +1403,6 @@ public final class TKit {
                 trace = state.trace;
                 traceAsserts = state.traceAsserts;
 
-                verboseJPackage = state.verboseJPackage;
                 verboseTestSetup = state.verboseTestSetup;
 
                 return this;
@@ -1455,7 +1445,6 @@ public final class TKit {
                         mutable ? new HashMap<>(properties) : Map.copyOf(properties),
                         trace,
                         traceAsserts,
-                        verboseJPackage,
                         verboseTestSetup);
             }
 
@@ -1467,7 +1456,6 @@ public final class TKit {
             private boolean trace;
             private boolean traceAsserts;
 
-            private boolean verboseJPackage;
             private boolean verboseTestSetup;
 
             private boolean mutable = true;
@@ -1483,7 +1471,6 @@ public final class TKit {
         private final boolean trace;
         private final boolean traceAsserts;
 
-        private final boolean verboseJPackage;
         private final boolean verboseTestSetup;
     }
 
