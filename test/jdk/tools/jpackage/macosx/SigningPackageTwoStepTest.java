@@ -194,7 +194,7 @@ public class SigningPackageTwoStepTest {
             signAppImage.map(SignKeyOption::certRequest).ifPresent(certRequest -> {
                 // The predefined app image is signed, verify bundled app image is signed too.
                 test.addInstallVerifier(cmd -> {
-                    MacSignVerify.verifyAppImageSigned(cmd, certRequest, keychain);
+                    MacSignVerify.verifyAppImageSigned(cmd, certRequest);
                 });
             });
 
