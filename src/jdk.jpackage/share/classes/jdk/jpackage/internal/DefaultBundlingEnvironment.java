@@ -176,6 +176,8 @@ class DefaultBundlingEnvironment implements CliBundlingEnvironment {
         Objects.requireNonNull(createPipelineBuilder);
         Objects.requireNonNull(pipelineBuilderMutatorFactory);
 
+        OptionUtils.finalizeAndPrintSummary(options, pkg, Log::verbose);
+
         var pipelineBuilder = Objects.requireNonNull(createPipelineBuilder.apply(pkg));
 
         // Delete an old output package file (if any) before creating a new one.

@@ -119,7 +119,7 @@ public final class Summary implements SummaryAccumulator {
         switch (op) {
             case SIGN_MAC_APP_IMAGE -> {
                 putIfAbsent(StandardProperty.MAC_SIGN_APP_IMAGE_OPERATION,
-                        bundleTypeDescription(AppImagePackageType.APP_IMAGE, OperatingSystem.MACOS),
+                        bundleTypeDescription(AppImagePackageType.MAC_APP_IMAGE, OperatingSystem.MACOS),
                         PathUtils.normalizedAbsolutePath(outputDir));
             }
             default -> {
