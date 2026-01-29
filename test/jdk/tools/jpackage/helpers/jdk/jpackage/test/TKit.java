@@ -77,6 +77,9 @@ import jdk.jpackage.internal.util.function.ThrowingUnaryOperator;
 
 public final class TKit {
 
+    private static final ScopedValue<State> STATE = ScopedValue.newInstance();
+    private static final State DEFAULT_STATE = State.build().initDefaults().mutable(false).create();
+
     public static final Path TEST_SRC_ROOT = Functional.identity(() -> {
         Path root = Path.of(System.getProperty("test.src"));
 
@@ -126,6 +129,15 @@ public final class TKit {
                 err.flush();
             }
         }
+    }
+
+    public static void withOperatingSystem(ThrowingRunnable<? extends Exception> action, OperatingSystem os) {
+        Objects.requireNonNull(action);
+        Objects.requireNonNull(os);
+
+        withState(action, stateBuilder -> {
+            stateBuilder.os(os);
+        });
     }
 
     public static void withState(ThrowingRunnable<? extends Exception> action, Consumer<State.Builder> stateBuilderMutator) {
@@ -233,19 +245,23 @@ public final class TKit {
     }
 
     public static boolean isWindows() {
-        return OperatingSystem.isWindows();
+        return TKit.state().os == OperatingSystem.WINDOWS;
     }
 
     public static boolean isOSX() {
-        return OperatingSystem.isMacOS();
+        return TKit.state().os == OperatingSystem.MACOS;
     }
 
     public static boolean isLinux() {
-        return OperatingSystem.isLinux();
+        return TKit.state().os == OperatingSystem.LINUX;
     }
 
     public static boolean isLinuxAPT() {
         return isLinux() && Files.exists(Path.of("/usr/bin/apt-get"));
+    }
+
+    public static boolean isMockingOperatingSystem() {
+        return TKit.state().os != OperatingSystem.current();
     }
 
     private static String addTimestamp(String msg) {
@@ -1310,6 +1326,7 @@ public final class TKit {
     public static final class State {
 
         private State(
+                OperatingSystem os,
                 TestInstance currentTest,
                 PrintStream out,
                 PrintStream err,
@@ -1318,10 +1335,12 @@ public final class TKit {
                 boolean traceAsserts,
                 boolean verboseTestSetup) {
 
+            Objects.requireNonNull(os);
             Objects.requireNonNull(out);
             Objects.requireNonNull(err);
             Objects.requireNonNull(properties);
 
+            this.os = os;
             this.currentTest = currentTest;
             this.out = out;
             this.err = err;
@@ -1365,6 +1384,7 @@ public final class TKit {
         static final class Builder {
 
             Builder initDefaults() {
+                os = null;
                 currentTest = null;
                 out = System.out;
                 err = System.err;
@@ -1394,6 +1414,7 @@ public final class TKit {
             }
 
             Builder initFrom(State state) {
+                os = state.os;
                 currentTest = state.currentTest;
                 out = state.out;
                 err = state.err;
@@ -1405,6 +1426,11 @@ public final class TKit {
 
                 verboseTestSetup = state.verboseTestSetup;
 
+                return this;
+            }
+
+            Builder os(OperatingSystem v) {
+                os = v;
                 return this;
             }
 
@@ -1439,6 +1465,7 @@ public final class TKit {
 
             State create() {
                 return new State(
+                        Optional.ofNullable(os).orElseGet(OperatingSystem::current),
                         currentTest,
                         out,
                         err,
@@ -1448,6 +1475,7 @@ public final class TKit {
                         verboseTestSetup);
             }
 
+            private OperatingSystem os;
             private TestInstance currentTest;
             private PrintStream out;
             private PrintStream err;
@@ -1462,6 +1490,7 @@ public final class TKit {
         }
 
 
+        private OperatingSystem os;
         private final TestInstance currentTest;
         private final PrintStream out;
         private final PrintStream err;
@@ -1473,8 +1502,4 @@ public final class TKit {
 
         private final boolean verboseTestSetup;
     }
-
-
-    private static final ScopedValue<State> STATE = ScopedValue.newInstance();
-    private static final State DEFAULT_STATE = State.build().initDefaults().mutable(false).create();
 }
