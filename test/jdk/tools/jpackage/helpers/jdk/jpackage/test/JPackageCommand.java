@@ -350,6 +350,14 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
         return this;
     }
 
+    public String fullVersion() {
+        if (isImagePackageType() || !PackageType.LINUX.contains(packageType())) {
+            return version();
+        } else {
+            return version() + LinuxHelper.getReleaseSuffix(this);
+        }
+    }
+
     public String name() {
         return nameFromAppImage().or(this::nameFromBasicArgs).or(this::nameFromRuntimeImage).orElseThrow();
     }
