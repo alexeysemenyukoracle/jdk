@@ -267,6 +267,14 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
         ).orElse("1.0");
     }
 
+    public String fullVersion() {
+        if (isImagePackageType() || !PackageType.LINUX.contains(packageType())) {
+            return version();
+        } else {
+            return version() + LinuxHelper.getReleaseSuffix(this);
+        }
+    }
+
     public String name() {
         return nameFromAppImage().or(this::nameFromBasicArgs).or(this::nameFromRuntimeImage).orElseThrow();
     }
