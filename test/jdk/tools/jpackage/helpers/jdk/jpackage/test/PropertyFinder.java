@@ -66,8 +66,13 @@ final class PropertyFinder {
     }
 
     static <T> Finder<T> nop() {
+        return of(Optional.empty());
+    }
+
+    static <T> Finder<T> of(Optional<String> v) {
+        Objects.requireNonNull(v);
         return target -> {
-            return Optional.empty();
+            return v;
         };
     }
 
