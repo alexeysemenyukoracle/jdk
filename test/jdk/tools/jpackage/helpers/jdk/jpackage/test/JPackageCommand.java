@@ -81,6 +81,7 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
     @SuppressWarnings("this-escape")
     public JPackageCommand() {
         toolProviderSource = new ToolProviderSource();
+        executorPrototype = new Executor().dumpOutput(true);
         prerequisiteActions = new Actions();
         verifyActions = new Actions();
         excludeStandardAsserts(StandardAssert.MAIN_LAUNCHER_DESCRIPTION);
@@ -90,10 +91,7 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
     private JPackageCommand(JPackageCommand cmd, boolean immutable) {
         args.addAll(cmd.args);
         toolProviderSource = cmd.toolProviderSource.copy();
-        saveConsoleOutput = cmd.saveConsoleOutput;
-        discardStdout = cmd.discardStdout;
-        discardStderr = cmd.discardStderr;
-        suppressOutput = cmd.suppressOutput;
+        executorPrototype = cmd.executorPrototype.copy();
         ignoreDefaultRuntime = cmd.ignoreDefaultRuntime;
         ignoreDefaultVerbose = cmd.ignoreDefaultVerbose;
         removeOldOutputBundle = cmd.removeOldOutputBundle;
@@ -941,27 +939,39 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
         return this;
     }
 
+    public JPackageCommand removeEnvVars(String ... envVarName) {
+        verifyMutable();
+        List.of(envVarName).forEach(executorPrototype::removeEnvVar);
+        return this;
+    }
+
+    public JPackageCommand setEnvVar(String envVarName, String envVarValue) {
+        verifyMutable();
+        executorPrototype.setEnvVar(envVarName, envVarValue);
+        return this;
+    }
+
     public JPackageCommand saveConsoleOutput(boolean v) {
         verifyMutable();
-        saveConsoleOutput = v;
+        executorPrototype.saveOutput(v);
         return this;
     }
 
     public JPackageCommand discardStdout(boolean v) {
         verifyMutable();
-        discardStdout = v;
+        executorPrototype.discardStdout(v);
         return this;
     }
 
     public JPackageCommand discardStderr(boolean v) {
         verifyMutable();
-        discardStderr = v;
+        executorPrototype.discardStderr(v);
         return this;
     }
 
     public JPackageCommand dumpOutput(boolean v) {
         verifyMutable();
-        suppressOutput = !v;
+        executorPrototype.dumpOutput(v);
         return this;
     }
 
@@ -1134,18 +1144,16 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
     }
 
     Executor createExecutor() {
-        Executor exec = new Executor()
-                .saveOutput(saveConsoleOutput).dumpOutput(!suppressOutput)
-                .discardStdout(discardStdout).discardStderr(discardStderr)
+        Executor exec = executorPrototype.copy()
                 .setDirectory(executeInDirectory)
                 .addArguments(args);
 
         toolProviderSource.toolProvider().ifPresentOrElse(exec::setToolProvider, () -> {
-                    exec.setExecutable(JavaTool.JPACKAGE);
-                    if (TKit.isWindows()) {
-                        exec.setWindowsTmpDir(System.getProperty("java.io.tmpdir"));
-                    }
-                });
+            exec.setExecutable(JavaTool.JPACKAGE);
+            if (TKit.isWindows()) {
+                exec.setWindowsTmpDir(System.getProperty("java.io.tmpdir"));
+            }
+        });
 
         return exec;
     }
@@ -2059,10 +2067,7 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
     }
 
     private final ToolProviderSource toolProviderSource;
-    private boolean saveConsoleOutput;
-    private boolean discardStdout;
-    private boolean discardStderr;
-    private boolean suppressOutput;
+    private final Executor executorPrototype;
     private boolean ignoreDefaultRuntime;
     private boolean ignoreDefaultVerbose;
     private boolean removeOldOutputBundle;
