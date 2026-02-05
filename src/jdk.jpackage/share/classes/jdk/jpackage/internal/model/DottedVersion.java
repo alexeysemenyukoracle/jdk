@@ -52,7 +52,7 @@ public final class DottedVersion {
                             if (!greedy) {
                                 return null;
                             } else {
-                                ds.throwException();
+                                throw ds.createException();
                             }
                         }
 
@@ -70,7 +70,7 @@ public final class DottedVersion {
                     }).takeWhile(Objects::nonNull).toArray(Component[]::new);
             suffix = ds.getUnprocessedString();
             if (!suffix.isEmpty() && greedy) {
-                ds.throwException();
+                throw ds.createException();
             }
         }
     }
@@ -83,6 +83,9 @@ public final class DottedVersion {
     private static class DigitsSupplier {
 
         DigitsSupplier(String input) {
+            if (input.isEmpty()) {
+                throw new IllegalArgumentException();
+            }
             this.input = input;
         }
 
@@ -99,7 +102,7 @@ public final class DottedVersion {
                 } else {
                     var curStopAtDot = (chr == '.');
                     if (!curStopAtDot) {
-                        if (lastDotPos >= 0) {
+                        if (sb.isEmpty() && lastDotPos >= 0) {
                             cursor = lastDotPos;
                         } else {
                             cursor--;
@@ -116,11 +119,7 @@ public final class DottedVersion {
             }
 
             if (sb.isEmpty()) {
-                if (lastDotPos >= 0) {
-                    cursor = lastDotPos;
-                } else {
-                    cursor--;
-                }
+                cursor = lastDotPos;
             }
 
             stoped = true;
@@ -131,7 +130,7 @@ public final class DottedVersion {
             return input.substring(cursor);
         }
 
-        void throwException() {
+        IllegalArgumentException createException() {
             final String tail;
             if (lastDotPos >= 0) {
                 tail = input.substring(lastDotPos + 1);
@@ -147,7 +146,7 @@ public final class DottedVersion {
                 errMessage = MessageFormat.format(I18N.getString(
                         "error.version-string-invalid-component"), input, tail);
             }
-            throw new IllegalArgumentException(errMessage);
+            return new IllegalArgumentException(errMessage);
         }
 
         private int cursor;
