@@ -1179,14 +1179,13 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
 
             Function<JPackageCommand, List<Path>> create() {
                 return cmd -> {
-                    if (enable != null && !enable.test(cmd)) {
+                    if (!cmd.hasArgument(argName) || (enable != null && !enable.test(cmd))) {
                         return List.of();
                     } else {
                         final List<Optional<Path>> dirs;
                         if (multiple) {
                             dirs = Stream.of(cmd.getAllArgumentValues(argName))
-                                    .map(Builder::tokenizeValue)
-                                    .flatMap(x -> x)
+                                    .flatMap(Builder::tokenizeValue)
                                     .map(Builder::toExistingFile).toList();
                         } else {
                             dirs = Optional.ofNullable(cmd.getArgumentValue(argName))
@@ -1197,11 +1196,11 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
                                 .map(cmd::getArgumentValue)
                                 .filter(Objects::nonNull)
                                 .map(Builder::toExistingFile)
-                                .filter(Optional::isPresent).map(Optional::orElseThrow)
+                                .flatMap(Optional::stream)
                                 .collect(toSet());
 
                         return dirs.stream()
-                                .filter(Optional::isPresent).map(Optional::orElseThrow)
+                                .flatMap(Optional::stream)
                                 .filter(Predicate.not(mutablePaths::contains))
                                 .toList();
                     }
