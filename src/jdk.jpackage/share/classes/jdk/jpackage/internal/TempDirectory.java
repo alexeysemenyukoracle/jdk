@@ -37,10 +37,10 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import jdk.jpackage.internal.cli.Options;
 import jdk.jpackage.internal.cli.StandardOption;
 import jdk.jpackage.internal.util.FileUtils;
+import jdk.jpackage.internal.util.Slot;
 
 final class TempDirectory implements Closeable {
 
@@ -49,13 +49,14 @@ final class TempDirectory implements Closeable {
     }
 
     TempDirectory(Optional<Path> tempDir, RetryExecutorFactory retryExecutorFactory) throws IOException {
-        if (tempDir.isPresent()) {
-            this.path = tempDir.orElseThrow();
-        } else {
-            this.path = Files.createTempDirectory("jdk.jpackage");
-        }
+        this(tempDir.isEmpty() ? Files.createTempDirectory("jdk.jpackage") : tempDir.get(),
+                tempDir.isEmpty(),
+                retryExecutorFactory);
+    }
 
-        deleteOnClose = tempDir.isEmpty();
+    TempDirectory(Path tempDir, boolean deleteOnClose, RetryExecutorFactory retryExecutorFactory) throws IOException {
+        this.path = Objects.requireNonNull(tempDir);
+        this.deleteOnClose = deleteOnClose;
         this.retryExecutorFactory = Objects.requireNonNull(retryExecutorFactory);
     }
 
@@ -91,7 +92,7 @@ final class TempDirectory implements Closeable {
                                 // Collect the list of leftover files. Collect at most the first 100 files.
                                 var remainingFiles = DirectoryListing.listFilesAndEmptyDirectories(path, 100).paths();
 
-                                if (remainingFiles.isEmpty()) {
+                                if (remainingFiles.equals(List.of(path))) {
                                     Log.info(I18N.format("warning.tempdir.cleanup-failed", path));
                                 } else {
                                     remainingFiles.forEach(file -> {
@@ -121,7 +122,9 @@ final class TempDirectory implements Closeable {
             }
 
             var paths = new ArrayList<Path>();
-            var stopped = new AtomicBoolean();
+            var stopped = Slot.<Boolean>createEmpty();
+
+            stopped.set(false);
 
             try {
                 Files.walkFileTree(path, new FileVisitor<>() {
@@ -155,15 +158,13 @@ final class TempDirectory implements Closeable {
                     }
 
                     private FileVisitResult addPath(Path v, FileVisitResult result) {
-                        synchronized (paths) {
-                            if (paths.size() < limit) {
-                                paths.add(v);
-                                return result;
-                            } else {
-                                stopped.set(true);
-                            }
-                            return FileVisitResult.TERMINATE;
+                        if (paths.size() < limit) {
+                            paths.add(v);
+                            return result;
+                        } else {
+                            stopped.set(true);
                         }
+                        return FileVisitResult.TERMINATE;
                     }
 
                 });

@@ -31,7 +31,6 @@ import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.BufferedReader;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringReader;
@@ -58,13 +57,12 @@ import jdk.jpackage.internal.util.FileUtils;
 import jdk.jpackage.internal.util.RetryExecutor;
 import jdk.jpackage.internal.util.function.ThrowingFunction;
 import jdk.jpackage.internal.util.function.ThrowingSupplier;
+import jdk.jpackage.test.PathDeletionPreventer;
+import jdk.jpackage.test.PathDeletionPreventer.ReadOnlyDirectoryPathDeletionPreventer;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledOnOs;
-import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 public class TempDirectoryTest {
@@ -97,13 +95,12 @@ public class TempDirectoryTest {
         assertFalse(Files.isDirectory(tempDir.path()));
     }
 
-    @EnabledOnOs(value = OS.WINDOWS, disabledReason = "Can reliably lock a file using FileLock to cause an IOException on Windows only")
     @SuppressWarnings("try")
     @ParameterizedTest
-    @EnumSource(CloseType.class)
-    void test_close(CloseType closeType) {
+    @MethodSource
+    void test_close(CloseType closeType, @TempDir Path root) {
         Globals.main(ThrowingSupplier.toSupplier(() -> {
-            test_close_impl(closeType);
+            test_close_impl(closeType, root);
             return 0;
         }));
     }
@@ -140,37 +137,110 @@ public class TempDirectoryTest {
         assertEquals(expected, listing.paths());
     }
 
-    private void test_close_impl(CloseType closeType) throws IOException {
+    private static Stream<CloseType> test_close() {
+        switch (PathDeletionPreventer.DEFAULT.implementation()) {
+            case READ_ONLY_NON_EMPTY_DIRECTORY -> {
+                return Stream.of(CloseType.values());
+            }
+            default -> {
+                return Stream.of(CloseType.values())
+                        .filter(Predicate.not(Set.of(
+                                CloseType.FAIL_NO_LEFTOVER_FILES,
+                                CloseType.FAIL_NO_LEFTOVER_FILES_VERBOSE)::contains));
+            }
+        }
+    }
+
+    @SuppressWarnings({ "try" })
+    private void test_close_impl(CloseType closeType, Path root) throws IOException {
         var logSink = new StringWriter();
         var logPrintWriter = new PrintWriter(logSink, true);
         Globals.instance().loggerOutputStreams(logPrintWriter, logPrintWriter);
-        if (closeType == CloseType.FAIL_VERBOSE) {
+        if (closeType.isVerbose()) {
             Globals.instance().loggerVerbose();
         }
 
-        var tempDir = new TempDirectory(Optional.empty(), RetryExecutorMock::new);
+        final var workDir = root.resolve("workdir");
+        Files.createDirectories(workDir);
 
-        for (var fname : List.of("a", "b")) {
-            Files.createFile(tempDir.path().resolve(fname));
+        final Path leftoverPath;
+        final TempDirectory tempDir;
+
+        switch (closeType) {
+            case FAIL_NO_LEFTOVER_FILES_VERBOSE, FAIL_NO_LEFTOVER_FILES -> {
+                leftoverPath = workDir;
+                tempDir = new TempDirectory(workDir, true, new RetryExecutorFactory() {
+                    @Override
+                    public <T, E extends Exception> RetryExecutor<T, E> retryExecutor(Class<? extends E> exceptionType) {
+                        return new RetryExecutor<T, E>(exceptionType).setSleepFunction(_ -> {});
+                    }
+                });
+
+                // Lock the parent directory of the work directory and don't create any files in the work directory.
+                // This should trigger the error message about the failure to delete the empty work directory.
+                try (var lockWorkDir = ReadOnlyDirectoryPathDeletionPreventer.INSTANCE.preventPathDeletion(workDir.getParent())) {
+                    tempDir.close();
+                }
+            }
+            default -> {
+                Files.createFile(workDir.resolve("b"));
+
+                final var lockedPath = workDir.resolve("a");
+                switch (PathDeletionPreventer.DEFAULT.implementation()) {
+                    case FILE_CHANNEL_LOCK -> {
+                        Files.createFile(lockedPath);
+                        leftoverPath = lockedPath;
+                    }
+                    case READ_ONLY_NON_EMPTY_DIRECTORY -> {
+                        Files.createDirectories(lockedPath);
+                        leftoverPath = lockedPath.resolve("a");
+                        Files.createFile(leftoverPath);
+                    }
+                    default -> {
+                        throw new AssertionError();
+                    }
+                }
+
+                tempDir = new TempDirectory(workDir, true, new RetryExecutorFactory() {
+                    @Override
+                    public <T, E extends Exception> RetryExecutor<T, E> retryExecutor(Class<? extends E> exceptionType) {
+                        var config = new RetryExecutorMock.Config(lockedPath, closeType.isSuccess());
+                        return new RetryExecutorMock<>(exceptionType, config);
+                    }
+                });
+
+                tempDir.close();
+            }
         }
-
-        var lockedFile = tempDir.path().resolve("a");
-
-        RetryExecutorMock.currentConfig = new RetryExecutorMock.Config(lockedFile, closeType == CloseType.SUCCEED);
-
-        tempDir.close();
 
         logPrintWriter.flush();
         var logMessages = new BufferedReader(new StringReader(logSink.toString())).lines().toList();
 
-        if (closeType == CloseType.SUCCEED) {
+        assertTrue(Files.isDirectory(root));
+
+        if (closeType.isSuccess()) {
             assertFalse(Files.exists(tempDir.path()));
             assertEquals(List.of(), logMessages);
         } else {
-            assertTrue(Files.exists(lockedFile));
+            assertTrue(Files.isDirectory(tempDir.path()));
+            assertTrue(Files.exists(leftoverPath));
             assertFalse(Files.exists(tempDir.path().resolve("b")));
-            assertEquals(List.of(I18N.format("warning.tempdir.cleanup-file-failed", lockedFile)), logMessages.subList(0, 1));
-            if (closeType == CloseType.FAIL_VERBOSE) {
+
+            String errMessage;
+            switch (closeType) {
+                case FAIL_SOME_LEFTOVER_FILES_VERBOSE, FAIL_SOME_LEFTOVER_FILES -> {
+                    errMessage = "warning.tempdir.cleanup-file-failed";
+                }
+                case FAIL_NO_LEFTOVER_FILES_VERBOSE, FAIL_NO_LEFTOVER_FILES -> {
+                    errMessage = "warning.tempdir.cleanup-failed";
+                }
+                default -> {
+                    throw new AssertionError();
+                }
+            }
+            assertEquals(List.of(I18N.format(errMessage, leftoverPath)), logMessages.subList(0, 1));
+
+            if (closeType.isVerbose()) {
                 // Check the log contains a stacktrace
                 assertNotEquals(1, logMessages.size());
             }
@@ -212,17 +282,27 @@ public class TempDirectoryTest {
 
     enum CloseType {
         SUCCEED,
-        FAIL,
-        FAIL_VERBOSE,
+        FAIL_SOME_LEFTOVER_FILES,
+        FAIL_SOME_LEFTOVER_FILES_VERBOSE,
+        FAIL_NO_LEFTOVER_FILES,
+        FAIL_NO_LEFTOVER_FILES_VERBOSE,
         ;
+
+        boolean isSuccess() {
+            return this ==  SUCCEED;
+        }
+
+        boolean isVerbose() {
+            return name().endsWith("_VERBOSE");
+        }
     }
 
     private static final class RetryExecutorMock<T, E extends Exception> extends RetryExecutor<T, E> {
 
-        RetryExecutorMock(Class<? extends E> exceptionType) {
+        RetryExecutorMock(Class<? extends E> exceptionType, Config config) {
             super(exceptionType);
             setSleepFunction(_ -> {});
-            config = Objects.requireNonNull(RetryExecutorMock.currentConfig);
+            this.config = Objects.requireNonNull(config);
         }
 
         @SuppressWarnings({ "try", "unchecked" })
@@ -232,7 +312,7 @@ public class TempDirectoryTest {
                 if (context.isLastAttempt() && config.unlockOnLastAttempt()) {
                     return v.apply(context);
                 } else {
-                    try (var out = new FileOutputStream(config.lockedFile().toFile()); var lock = out.getChannel().lock()) {
+                    try (var lock = PathDeletionPreventer.DEFAULT.preventPathDeletion(config.lockedPath())) {
                         return v.apply(context);
                     } catch (IOException ex) {
                         if (exceptionType().isInstance(ex)) {
@@ -247,13 +327,11 @@ public class TempDirectoryTest {
 
         private final Config config;
 
-        record Config(Path lockedFile, boolean unlockOnLastAttempt) {
+        record Config(Path lockedPath, boolean unlockOnLastAttempt) {
             Config {
-                Objects.requireNonNull(lockedFile);
+                Objects.requireNonNull(lockedPath);
             }
         }
-
-        static Config currentConfig;
     }
 
     sealed interface FileSpec extends Comparable<FileSpec> {
