@@ -337,7 +337,7 @@ public class TempDirectoryTest {
     sealed interface FileSpec extends Comparable<FileSpec> {
         Path path();
         Path create(Path root) throws IOException;
-        default public int compareTo(FileSpec other) {
+        public default int compareTo(FileSpec other) {
             return path().compareTo(other.path());
         }
 

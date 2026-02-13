@@ -78,7 +78,7 @@ public sealed interface PathDeletionPreventer {
             return new UndeletablePath(path);
         }
 
-        private final static class UndeletablePath implements Closeable {
+        private static final class UndeletablePath implements Closeable {
 
             UndeletablePath(Path file) throws IOException {
                 var fos = new FileOutputStream(Objects.requireNonNull(file).toFile());
@@ -121,7 +121,7 @@ public sealed interface PathDeletionPreventer {
             return new UndeletablePath(path);
         }
 
-        private final static class UndeletablePath implements Closeable {
+        private static final class UndeletablePath implements Closeable {
 
             UndeletablePath(Path dir) throws IOException {
                 this.dir = Objects.requireNonNull(dir);
