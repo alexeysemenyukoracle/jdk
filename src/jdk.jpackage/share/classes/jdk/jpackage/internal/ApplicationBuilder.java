@@ -49,6 +49,29 @@ import jdk.jpackage.internal.util.RootedPath;
 
 final class ApplicationBuilder {
 
+    ApplicationBuilder() {
+    }
+
+    ApplicationBuilder(ApplicationBuilder other) {
+        name = other.name;
+        description = other.description;
+        version = other.version;
+        vendor = other.vendor;
+        copyright = other.copyright;
+        appDirSources = other.appDirSources;
+        externalApp = other.externalApp;
+        contentDirSources = other.contentDirSources;
+        appImageLayout = other.appImageLayout;
+        runtimeBuilder = other.runtimeBuilder;
+        launchers = other.launchers;
+        runtimeReleaseFile = other.runtimeReleaseFile;
+        derivedVersionNormalizer = other.derivedVersionNormalizer;
+    }
+
+    ApplicationBuilder copy() {
+        return new ApplicationBuilder(this);
+    }
+
     Application create() {
         Objects.requireNonNull(appImageLayout);
 
@@ -103,6 +126,11 @@ final class ApplicationBuilder {
         return this;
     }
 
+    boolean isRuntime() {
+        return Optional.ofNullable(appImageLayout)
+                .orElseThrow(IllegalStateException::new) instanceof RuntimeLayout;
+    }
+
     ApplicationBuilder name(String v) {
         name = v;
         return this;
@@ -116,6 +144,10 @@ final class ApplicationBuilder {
     ApplicationBuilder version(String v) {
         version = v;
         return this;
+    }
+
+    Optional<String> version() {
+        return Optional.ofNullable(version);
     }
 
     ApplicationBuilder vendor(String v) {
