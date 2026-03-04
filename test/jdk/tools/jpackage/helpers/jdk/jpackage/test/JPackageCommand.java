@@ -43,7 +43,7 @@ import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Iterator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -61,6 +61,10 @@ import java.util.spi.ToolProvider;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+import jdk.jpackage.internal.model.DottedVersion;
+import jdk.jpackage.internal.util.MacBundle;
+import jdk.jpackage.internal.util.Result;
+import jdk.jpackage.internal.util.RuntimeReleaseFile;
 import jdk.jpackage.internal.util.function.ExceptionBox;
 import jdk.jpackage.internal.util.function.ThrowingConsumer;
 import jdk.jpackage.internal.util.function.ThrowingFunction;
@@ -102,6 +106,7 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
         executeInDirectory = cmd.executeInDirectory;
         winMsiLogFile = cmd.winMsiLogFile;
         unpackedPackageDirectory = cmd.unpackedPackageDirectory;
+        explicitVersion = cmd.explicitVersion;
     }
 
     JPackageCommand createImmutableCopy() {
@@ -246,11 +251,71 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
 
     public String version() {
         return PropertyFinder.findAppProperty(this,
-                PropertyFinder.cmdlineOptionWithValue("--app-version"),
+                PropertyFinder.<JPackageCommand>of(Optional.ofNullable(explicitVersion))
+                        .or(PropertyFinder.cmdlineOptionWithValue("--app-version"))
+                        .or(_ -> {
+                            return derivedVersion().map(JPackageCommand::normalizeDerivedVersion).map(map -> {
+                                return map.getOrDefault(packageType(), DEFAULT_VERSION);
+                            });
+                        }),
                 PropertyFinder.appImageFile(appImageFile -> {
                     return appImageFile.version();
                 })
-        ).orElse("1.0");
+        ).orElse(DEFAULT_VERSION);
+    }
+
+    private Optional<String> derivedVersion() {
+        if (isRuntime()) {
+            var predefinedRuntimePath = Path.of(getArgumentValue("--runtime-image"));
+            Path runtimeDir;
+            if (TKit.isOSX()) {
+                runtimeDir = MacBundle.fromPath(predefinedRuntimePath)
+                        .map(MacBundle::homeDir)
+                        .orElse(predefinedRuntimePath);
+            } else {
+                runtimeDir = predefinedRuntimePath;
+            }
+            return Result.of(() -> {
+                return RuntimeReleaseFile.loadFromRuntime(runtimeDir).getJavaVersion().toString();
+            }, Exception.class).value();
+        } else {
+            return Optional.empty();
+        }
+    }
+
+    public static Map<PackageType, String> normalizeDerivedVersion(String version) {
+        var dotted = DottedVersion.lazy(version);
+
+        var map = new HashMap<PackageType, String>();
+
+        // Linux
+        map.put(PackageType.LINUX_IMAGE, version);
+        map.put(PackageType.LINUX_DEB, version);
+        if (dotted.getUnprocessedSuffix().contains("-")) {
+            map.put(PackageType.LINUX_RPM, dotted.toComponentsString());
+        } else {
+            map.put(PackageType.LINUX_RPM, version);
+        }
+
+        // macOS
+        PackageType.ALL_MAC.forEach(type -> {
+            map.put(type, dotted.trim(3).pad(1).toComponentsString());
+        });
+
+        // Windows
+        PackageType.ALL_WINDOWS.forEach(type -> {
+            DottedVersion ver;
+            if (dotted.getComponentsCount() < 2) {
+                ver = dotted.pad(2);
+            } else {
+                ver = dotted.trim(4);
+            }
+            map.put(type, ver.toComponentsString());
+        });
+
+        map.put(PackageType.IMAGE, Objects.requireNonNull(map.get(PackageType.appImageForOS(PackageType.IMAGE.os()))));
+
+        return map;
     }
 
     public String fullVersion() {
@@ -259,6 +324,24 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
         } else {
             return version() + LinuxHelper.getReleaseSuffix(this);
         }
+    }
+
+    /**
+     * Sets application version.
+     * <p>
+     * Use this method to explicitly set the application version. Normally, the
+     * application version can be derived from the command line, but sometimes, when
+     * jpackage derives it from other sources, the {@code JPackageCommand} class
+     * can't get it correctly. Use this method in these uncommon cases.
+     *
+     * @param v the application version or {@code null} to reset previously set
+     *          value
+     * @return this
+     */
+    public JPackageCommand version(String v) {
+        verifyMutable();
+        explicitVersion = v;
+        return this;
     }
 
     public String name() {
@@ -1858,6 +1941,7 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
     private Path executeInDirectory;
     private Path winMsiLogFile;
     private Path unpackedPackageDirectory;
+    private String explicitVersion;
     private Set<ReadOnlyPathAssert> readOnlyPathAsserts = Set.of(ReadOnlyPathAssert.values());
     private Set<StandardAssert> standardAsserts = Set.of(StandardAssert.values());
     private List<Consumer<Executor.Result>> validators = new ArrayList<>();
@@ -1876,6 +1960,8 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
     // jpackage command line if the command line doesn't have
     // `--runtime-image` parameter set.
     public static final Path DEFAULT_RUNTIME_IMAGE = Optional.ofNullable(TKit.getConfigProperty("runtime-image")).map(Path::of).orElse(null);
+
+    public final static String DEFAULT_VERSION = "1.0";
 
     // [HH:mm:ss.SSS]
     private static final Pattern TIMESTAMP_REGEXP = Pattern.compile(
