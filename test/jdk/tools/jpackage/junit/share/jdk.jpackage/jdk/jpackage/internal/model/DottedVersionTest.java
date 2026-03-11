@@ -200,12 +200,6 @@ public class DottedVersionTest {
         ).map(DottedVersionTest::mapFirstStringToDottedVersion);
     }
 
-    private static Stream<Arguments> testPadNegative() {
-        return Stream.of(
-                Arguments.of("10.5.foo", -1)
-        ).map(DottedVersionTest::mapFirstStringToDottedVersion);
-    }
-
     private static Arguments mapFirstStringToDottedVersion(Arguments v) {
         var objs = v.get();
         objs[0] = DottedVersion.lazy((String)objs[0]);
