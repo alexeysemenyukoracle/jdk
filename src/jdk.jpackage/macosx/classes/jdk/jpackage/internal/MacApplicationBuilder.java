@@ -225,7 +225,6 @@ final class MacApplicationBuilder {
             return I18N.format(formatKey, formatArgs);
         }
 
-
         private final String formatKey;
     }
 
@@ -252,7 +251,10 @@ final class MacApplicationBuilder {
             }
 
             if (builder.superBuilder.version().isEmpty()) {
-                plist.findValue("CFBundleVersion").ifPresent(builder.superBuilder::version);
+                plist.findValue("CFBundleVersion").ifPresent(ver -> {
+                    Log.trace("Derive bundle version [%s] from [%s] file", ver, externalInfoPlistFile);
+                    builder.superBuilder.version(ver);
+                });
             }
         });
 
@@ -329,7 +331,7 @@ final class MacApplicationBuilder {
                 }
             }
 
-            Log.verbose(I18N.format("message.derived-bundle-identifier", derivedValue));
+            Log.trace("Derived bundle identifier: %s", derivedValue);
             return derivedValue;
         });
     }
