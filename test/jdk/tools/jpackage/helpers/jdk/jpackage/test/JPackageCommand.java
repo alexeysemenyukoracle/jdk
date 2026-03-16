@@ -1059,7 +1059,7 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
     }
 
     public String getValue(CannedFormattedString str) {
-        return new CannedFormattedString(str.formatter(), str.key(), str.args().stream().map(arg -> {
+        return new CannedFormattedString(str.formatter(), str.format(), str.args().stream().map(arg -> {
             if (arg instanceof CannedArgument cannedArg) {
                 return cannedArg.value(this);
             } else {
