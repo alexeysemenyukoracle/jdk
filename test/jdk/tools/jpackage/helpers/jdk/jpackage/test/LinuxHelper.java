@@ -53,7 +53,6 @@ import java.util.stream.Stream;
 import jdk.internal.util.Architecture;
 import jdk.jpackage.internal.util.PathUtils;
 import jdk.jpackage.internal.util.Result;
-import jdk.jpackage.internal.util.function.ThrowingConsumer;
 import jdk.jpackage.test.LauncherShortcut.InvokeShortcutSpec;
 import jdk.jpackage.test.PackageTest.PackageHandlers;
 
@@ -647,48 +646,35 @@ public final class LinuxHelper {
                 "Failed to locate system .desktop files folder"));
     }
 
-    private static void withTestFileAssociationsFile(FileAssociations fa,
-            ThrowingConsumer<Path, ? extends Exception> consumer) {
-        boolean iterated[] = new boolean[] { false };
-        PackageTest.withFileAssociationsTestRuns(fa, (testRun, testFiles) -> {
-            if (!iterated[0]) {
-                iterated[0] = true;
-                consumer.accept(testFiles.get(0));
-            }
-        });
-    }
-
     static void addFileAssociationsVerifier(PackageTest test, FileAssociations fa) {
         test.addInstallVerifier(cmd -> {
             if (cmd.isPackageUnpacked("Not running file associations checks")) {
                 return;
             }
 
-            withTestFileAssociationsFile(fa, testFile -> {
+            PackageTest.withFileAssociationsTestRuns(fa, (_, testFile) -> {
                 String mimeType = queryFileMimeType(testFile);
 
                 TKit.assertEquals(fa.getMime(), mimeType, String.format(
                         "Check mime type of [%s] file", testFile));
 
-                String desktopFileName = queryMimeTypeDefaultHandler(mimeType).orElse(null);
+                String desktopFileName = queryMimeTypeDefaultHandler(mimeType).orElseThrow();
 
-                Path systemDesktopFile = getSystemDesktopFilesFolder().resolve(
-                        desktopFileName);
-                Path appDesktopFile = cmd.appLayout().desktopIntegrationDirectory().resolve(
-                        desktopFileName);
+                Path systemDesktopFile = getSystemDesktopFilesFolder().resolve(desktopFileName);
+                Path appDesktopFile = cmd.appLayout().desktopIntegrationDirectory().resolve(desktopFileName);
 
                 TKit.assertFileExists(systemDesktopFile);
                 TKit.assertFileExists(appDesktopFile);
 
-                TKit.assertStringListEquals(Files.readAllLines(appDesktopFile),
-                        Files.readAllLines(systemDesktopFile), String.format(
-                        "Check [%s] file is a copy of [%s] file",
-                        systemDesktopFile, appDesktopFile));
+                TKit.assertStringListEquals(
+                        Files.readAllLines(appDesktopFile),
+                        Files.readAllLines(systemDesktopFile),
+                        String.format("Check [%s] file is a copy of [%s] file", systemDesktopFile, appDesktopFile));
             });
         });
 
         test.addUninstallVerifier(cmd -> {
-            withTestFileAssociationsFile(fa, testFile -> {
+            PackageTest.withFileAssociationsTestRuns(fa, (_, testFile) -> {
                 String mimeType = queryFileMimeType(testFile);
 
                 TKit.assertNotEquals(fa.getMime(), mimeType, String.format(

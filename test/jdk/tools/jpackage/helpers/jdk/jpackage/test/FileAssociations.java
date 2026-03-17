@@ -37,11 +37,10 @@ import java.util.TreeMap;
 public final class FileAssociations {
     public FileAssociations(String faSuffixName) {
         suffixName = faSuffixName;
-        setFilename("fa");
         setDescription("jpackage test extension");
     }
 
-    private void createFile() {
+    private Path createPropertiesFile() {
         Map<String, String> entries = new TreeMap<>(Map.of(
             "extension", suffixName,
             "mime-type", getMime()
@@ -56,12 +55,11 @@ public final class FileAssociations {
                 entries.put("icon", icon.toString());
             }
         }
-        TKit.createPropertiesFile(file, entries);
-    }
 
-    public FileAssociations setFilename(String v) {
-        file = TKit.workDir().resolve(v + ".properties");
-        return this;
+        var path = TKit.createTempFile("fa.properties");
+        TKit.createPropertiesFile(path, entries);
+
+        return path;
     }
 
     public FileAssociations setDescription(String v) {
@@ -72,10 +70,6 @@ public final class FileAssociations {
     public FileAssociations setIcon(Path v) {
         icon = v;
         return this;
-    }
-
-    Path getPropertiesFile() {
-        return file;
     }
 
     String getSuffix() {
@@ -93,8 +87,7 @@ public final class FileAssociations {
     public void applyTo(PackageTest test) {
         test.notForTypes(PackageType.MAC_DMG, () -> {
             test.addInitializer(cmd -> {
-                createFile();
-                cmd.addArguments("--file-associations", getPropertiesFile());
+                cmd.addArguments("--file-associations", createPropertiesFile());
             });
             test.addHelloAppFileAssociationsVerifier(this);
         });
@@ -119,14 +112,18 @@ public final class FileAssociations {
         return new TestRunsBuilder();
     }
 
-    static class TestRun {
-        Iterable<String> getFileNames() {
-            return testFileNames;
+    record TestRun(Path fileName, InvocationType invocationType) {
+
+        TestRun {
+            Objects.requireNonNull(fileName);
+            Objects.requireNonNull(invocationType);
+
+            if (fileName.getNameCount() != 1 || fileName.isAbsolute()) {
+                throw new IllegalArgumentException();
+            }
         }
 
-        List<String> openFiles(List<Path> testFiles) throws IOException {
-            // current supported invocation types work only on single files
-            Path testFile = testFiles.get(0);
+        List<String> openFile(Path testFile) throws IOException {
 
             // To test unicode arguments on Windows manually:
             // 1. add the following argument ("Hello" in Bulgarian) to the
@@ -202,54 +199,37 @@ public final class FileAssociations {
                             "Invalid invocationType: [%s]", invocationType));
             }
         }
-
-        private TestRun(Collection<String> testFileNames,
-                InvocationType invocationType) {
-
-            Objects.requireNonNull(invocationType);
-
-            if (testFileNames.size() == 0) {
-                throw new IllegalArgumentException("Empty test file names list");
-            }
-
-            if (invocationType == InvocationType.DesktopOpenAssociatedFile && testFileNames.size() != 1) {
-                throw new IllegalArgumentException("Only one file can be configured for opening with the desktop");
-            }
-
-            this.testFileNames = testFileNames;
-            this.invocationType = invocationType;
-        }
-
-        private final Collection<String> testFileNames;
-        private final InvocationType invocationType;
     }
 
-    public static class TestRunsBuilder {
+    public static final class TestRunsBuilder {
+
+        private TestRunsBuilder() {
+        }
+
         public TestRunsBuilder setCurrentInvocationType(InvocationType v) {
             curInvocationType = v;
             return this;
         }
 
-        public TestRunsBuilder addTestRunForFilenames(String ... filenames) {
-            testRuns.add(new TestRun(List.of(filenames), curInvocationType));
+        public TestRunsBuilder addTestRunForFilenames(String fileName) {
+            testRuns.add(new TestRun(Path.of(fileName), curInvocationType));
             return this;
         }
 
         public void applyTo(FileAssociations fa) {
-            fa.testRuns = testRuns;
+            fa.testRuns = List.copyOf(testRuns);
         }
 
         private InvocationType curInvocationType = InvocationType.DesktopOpenAssociatedFile;
         private List<TestRun> testRuns = new ArrayList<>();
     }
 
-    public static enum InvocationType {
+    public enum InvocationType {
         DesktopOpenAssociatedFile,
         WinCommandLine,
         WinDesktopOpenShortcut
     }
 
-    private Path file;
     private final String suffixName;
     private String description;
     private Path icon;
