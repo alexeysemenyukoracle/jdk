@@ -27,11 +27,15 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 
 public final class FileAssociations {
@@ -228,6 +232,101 @@ public final class FileAssociations {
         DesktopOpenAssociatedFile,
         WinCommandLine,
         WinDesktopOpenShortcut
+    }
+
+    record FileAssociationDescriptor(
+            String launcherName,
+            Optional<String> description,
+            String mimeType,
+            Optional<String> extension) {
+
+        FileAssociationDescriptor {
+            Objects.requireNonNull(launcherName);
+            Objects.requireNonNull(description);
+            Objects.requireNonNull(mimeType);
+            Objects.requireNonNull(extension);
+        }
+
+        FileAssociationDescriptor copyWithDescription(String description) {
+            return new FileAssociationDescriptor(launcherName, Optional.of(description), mimeType, extension);
+        }
+
+        static FileAssociationDescriptor create(String launcherName, PropertyFile props) {
+            return new FileAssociationDescriptor(
+                    launcherName,
+                    props.findProperty("description"),
+                    props.findProperty("mime-type").orElseThrow(),
+                    props.findProperty("extension"));
+        }
+
+        private static <T> Comparator<Optional<T>> optionalComparator(Comparator<T> valueComparator) {
+            return Comparator
+                    .comparing(Optional<T>::isPresent)
+                    .thenComparing(opt -> {
+                        return opt.orElse(null);
+                    }, Comparator.nullsLast(valueComparator));
+        }
+
+        static final Comparator<FileAssociationDescriptor> COMPARATOR = Comparator
+                .comparing(FileAssociationDescriptor::launcherName)
+                .thenComparing(FileAssociationDescriptor::mimeType)
+                .thenComparing(FileAssociationDescriptor::extension, optionalComparator(String::compareTo))
+                .thenComparing(FileAssociationDescriptor::description, optionalComparator(String::compareTo));
+    }
+
+    static void vallidateFileAssociations(JPackageCommand cmd) {
+        var comm = Comm.compare(Set.copyOf(declaredFileAssociations(cmd)), Set.copyOf(definedFileAssociations(cmd)));
+        if (!Stream.of(comm.unique1(), comm.unique2(), comm.common()).allMatch(Collection::isEmpty)) {
+            trace(comm.common(), "Expected file associations (size=%d):");
+            trace(comm.unique1(), "Missing file associations (size=%d):");
+            trace(comm.unique2(), "Unexpected file associations (size=%d):");
+            TKit.trace("DONE");
+            TKit.assertTrue(comm.uniqueEmpty(), "Check file associations are as expected");
+        }
+    }
+
+    private static void trace(Collection<FileAssociationDescriptor> fas, String format) {
+        Objects.requireNonNull(fas);
+        Objects.requireNonNull(format);
+        if (!fas.isEmpty()) {
+            TKit.trace(String.format(format, fas.size()));
+            fas.stream().sorted(FileAssociationDescriptor.COMPARATOR).forEach(fa -> {
+                var tokens = new ArrayList<String>();
+                tokens.add("launcher=[" + fa.launcherName() + "]");
+                tokens.add("mime=[" + fa.mimeType() + "]");
+                fa.extension().ifPresent(extension -> {
+                    tokens.add("ext=[" + extension + "]");
+                });
+                fa.description().ifPresent(description -> {
+                    tokens.add("description=[" + description + "]");
+                });
+                TKit.trace(String.format("  %s", tokens.stream().collect(Collectors.joining(", "))));
+            });
+        }
+    }
+
+    private static Collection<FileAssociationDescriptor> definedFileAssociations(JPackageCommand cmd) {
+        if (cmd.isImagePackageType()) {
+            return List.of();
+        } else if (TKit.isWindows()) {
+            return WindowsHelper.fileAssociations(cmd);
+        } else if (TKit.isLinux()) {
+            return LinuxHelper.fileAssociations(cmd);
+        } else if (TKit.isOSX()) {
+            return MacHelper.fileAssociations(cmd);
+        } else {
+            throw new AssertionError();
+        }
+    }
+
+    private static Collection<FileAssociationDescriptor> declaredFileAssociations(JPackageCommand cmd) {
+        return Stream.of(cmd.getAllArgumentValues("--file-associations")).map(Path::of).map(PropertyFile::new).map(props -> {
+            var fa = FileAssociationDescriptor.create(cmd.mainLauncherName(), props);
+            if (fa.description().isEmpty() && !TKit.isOSX()) {
+                fa = fa.copyWithDescription(String.format("%s association", cmd.name()));
+            }
+            return fa;
+        }).toList();
     }
 
     private final String suffixName;
