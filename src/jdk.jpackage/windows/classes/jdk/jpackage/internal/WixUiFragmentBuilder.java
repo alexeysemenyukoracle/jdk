@@ -48,8 +48,8 @@ import jdk.jpackage.internal.wixui.Dialog;
 import jdk.jpackage.internal.wixui.DialogPair;
 import jdk.jpackage.internal.wixui.Publish;
 import jdk.jpackage.internal.wixui.ShowActionSuppresser;
-import jdk.jpackage.internal.wixui.UIConfig2;
-import jdk.jpackage.internal.wixui.UISpec2;
+import jdk.jpackage.internal.wixui.UIConfig;
+import jdk.jpackage.internal.wixui.UISpec;
 
 /**
  * Creates UI WiX fragment.
@@ -62,14 +62,14 @@ final class WixUiFragmentBuilder extends WixFragmentBuilder {
 
         final var shortcutFolders = ShortcutsFolder.getForPackage(pkg);
 
-        uiConfig = UIConfig2.build()
+        uiConfig = UIConfig.build()
                 .withLicenseDlg(pkg.licenseFile().isPresent())
                 .withInstallDirChooserDlg(pkg.withInstallDirChooser())
                 .withShortcutPromptDlg(!shortcutFolders.isEmpty() && pkg.withShortcutPrompt())
                 .create();
 
-        if (!uiConfig.equals(UIConfig2.build().create()) || pkg.withUI()) {
-            uiSpec = Optional.of(UISpec2.create(uiConfig));
+        if (!uiConfig.equals(UIConfig.build().create()) || pkg.withUI()) {
+            uiSpec = Optional.of(UISpec.create(uiConfig));
         } else {
             uiSpec = Optional.empty();
         }
@@ -316,8 +316,8 @@ final class WixUiFragmentBuilder extends WixFragmentBuilder {
         private final String wxsFileName;
     }
 
-    private UIConfig2 uiConfig;
-    private Optional<UISpec2> uiSpec;
+    private UIConfig uiConfig;
+    private Optional<UISpec> uiSpec;
     private boolean withCustomActionsDll = true;
     private List<CustomDialog> customDialogs;
 }

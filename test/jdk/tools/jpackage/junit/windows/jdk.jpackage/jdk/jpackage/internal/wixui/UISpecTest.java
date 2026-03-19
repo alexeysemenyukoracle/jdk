@@ -32,24 +32,24 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
-public class UISpecTest2 {
+class UISpecTest {
 
     @ParameterizedTest
     @MethodSource
-    void test(UIConfig2 cfg) {
-        var uiSpec = UISpec2.create(cfg);
+    void test(UIConfig cfg) {
+        var uiSpec = UISpec.create(cfg);
 
         validateCustomDialogSequence(uiSpec.customDialogSequence());
     }
 
-    private static Collection<UIConfig2> test() {
+    private static Collection<UIConfig> test() {
 
-        var testCases = new ArrayList<UIConfig2>();
+        var testCases = new ArrayList<UIConfig>();
 
         for (boolean withInstallDirChooserDlg : List.of(true, false)) {
             for (boolean withShortcutPromptDlg : List.of(true, false)) {
                 for (boolean withLicenseDlg : List.of(true, false)) {
-                    testCases.add(UIConfig2.build()
+                    testCases.add(UIConfig.build()
                             .withInstallDirChooserDlg(withInstallDirChooserDlg)
                             .withShortcutPromptDlg(withShortcutPromptDlg)
                             .withLicenseDlg(withLicenseDlg)

@@ -27,7 +27,7 @@ package jdk.jpackage.internal.wixui;
 /**
  * UI config.
  */
-public record UIConfig2(
+public record UIConfig(
         boolean isWithInstallDirChooserDlg,
         boolean isWithShortcutPromptDlg,
         boolean isWithLicenseDlg) {
@@ -41,8 +41,8 @@ public record UIConfig2(
         private Builder() {
         }
 
-        public UIConfig2 create() {
-            return new UIConfig2(isWithInstallDirChooserDlg, isWithShortcutPromptDlg, isWithLicenseDlg);
+        public UIConfig create() {
+            return new UIConfig(isWithInstallDirChooserDlg, isWithShortcutPromptDlg, isWithLicenseDlg);
         }
 
         public Builder withInstallDirChooserDlg(boolean v) {
