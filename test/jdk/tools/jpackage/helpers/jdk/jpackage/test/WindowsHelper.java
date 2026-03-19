@@ -276,7 +276,7 @@ public class WindowsHelper {
         return MsiDatabaseCache.INSTANCE.findProperty(cmd.outputBundle(), propertyName).orElseThrow();
     }
 
-    public static MsiDatabase.UIAlterations getUIAlerations(JPackageCommand cmd) {
+    public static MsiDatabase.UIAlterations getUIAlterations(JPackageCommand cmd) {
         cmd.verifyIsOfType(PackageType.WIN_MSI);
         return MsiDatabaseCache.INSTANCE.uiAlterations(cmd.outputBundle());
     }

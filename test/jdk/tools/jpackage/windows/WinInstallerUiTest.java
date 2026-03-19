@@ -93,7 +93,7 @@ public class WinInstallerUiTest {
     public static void updateExpectedMsiTables() {
         for (var spec : testCases()) {
             spec.createTest(true).addBundleVerifier(cmd -> {
-                spec.save(WindowsHelper.getUIAlerations(cmd));
+                spec.save(WindowsHelper.getUIAlterations(cmd));
             }).run(Action.CREATE);
         }
     }
@@ -151,7 +151,7 @@ public class WinInstallerUiTest {
                 var expectedInstallUISequence = Files.readAllLines(expectedFilesDir.resolve(INSTALL_UI_SEQUENCE_FILE));
                 var expectedControlEvents = Files.readAllLines(expectedFilesDir.resolve(CONTROL_EVENTS_FILE));
 
-                var uiAlterations = WindowsHelper.getUIAlerations(cmd);
+                var uiAlterations = WindowsHelper.getUIAlterations(cmd);
 
                 var actualInstallUISequence = actionSequenceToMarkdownTable(uiAlterations.installUISequence());
                 var actualControlEvents = controlEventsToMarkdownTable(uiAlterations.controlEvents());
