@@ -101,6 +101,8 @@ public class SigningRuntimeImagePackageTest {
             cmd.removeArgumentWithValue("--input");
             cmd.setArgumentValue("--runtime-image", predefinedRuntime.get());
 
+            // `warning.per.user.app.image.signed` warning doesn't apply to runtime bundling.
+            // Ensure the warning is not in the output.
             new JPackageOutputValidator().add(TKit.assertTextStream(
                     JPackageStringBundle.MAIN.cannedFormattedStringAsPattern("warning.per.user.app.image.signed", "file")
             ).negate()).stdoutAndStderr().applyTo(cmd);
