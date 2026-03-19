@@ -23,8 +23,6 @@
 
 package jdk.jpackage.internal.wixui;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -34,24 +32,24 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
-class UiSpecTest {
+public class UISpecTest2 {
 
     @ParameterizedTest
     @MethodSource
-    void test(UiConfig cfg) {
-        var uiSpec = UiSpec.create(cfg);
+    void test(UIConfig2 cfg) {
+        var uiSpec = UISpec2.create(cfg);
 
         validateCustomDialogSequence(uiSpec.customDialogSequence());
     }
 
-    private static Collection<UiConfig> test() {
+    private static Collection<UIConfig2> test() {
 
-        var testCases = new ArrayList<UiConfig>();
+        var testCases = new ArrayList<UIConfig2>();
 
         for (boolean withInstallDirChooserDlg : List.of(true, false)) {
             for (boolean withShortcutPromptDlg : List.of(true, false)) {
                 for (boolean withLicenseDlg : List.of(true, false)) {
-                    testCases.add(UiConfig.build()
+                    testCases.add(UIConfig2.build()
                             .withInstallDirChooserDlg(withInstallDirChooserDlg)
                             .withShortcutPromptDlg(withShortcutPromptDlg)
                             .withLicenseDlg(withLicenseDlg)

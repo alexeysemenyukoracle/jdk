@@ -50,13 +50,13 @@ import java.util.stream.Collectors;
  * <p>
  * UI is based on one of the standard WiX UIs with optional alterations.
  */
-public record UiSpec(
+public record UISpec2(
         WixUI wixUI,
         Map<String, String> wixVariables,
         Map<DialogPair, Publish> customDialogSequence,
         Collection<ShowActionSuppresser> hideDialogs) {
 
-    public UiSpec {
+    public UISpec2 {
         Objects.requireNonNull(wixUI);
         Objects.requireNonNull(wixVariables);
         Objects.requireNonNull(customDialogSequence);
@@ -72,8 +72,8 @@ public record UiSpec(
         private Builder() {
         }
 
-        UiSpec create() {
-            return new UiSpec(
+        UISpec2 create() {
+            return new UISpec2(
                     wixUI,
                     Optional.ofNullable(wixVariables).map(Collections::unmodifiableMap).orElseGet(Map::of),
                     Optional.ofNullable(customDialogSequence).map(Collections::unmodifiableMap).orElseGet(Map::of),
@@ -110,14 +110,14 @@ public record UiSpec(
         private Collection<ShowActionSuppresser> hideDialogs;
     }
 
-    public static UiSpec create(UiConfig cfg) {
+    public static UISpec2 create(UIConfig2 cfg) {
         Objects.requireNonNull(cfg);
         return Optional.ofNullable(DEFAULT_SPECS.get(cfg)).map(Supplier::get).orElseGet(() -> {
             return createCustom(cfg);
         });
     }
 
-    private static UiSpec createCustom(UiConfig cfg) {
+    private static UISpec2 createCustom(UIConfig2 cfg) {
         Objects.requireNonNull(cfg);
 
         var dialogs = installDirUiDialogs(cfg);
@@ -199,7 +199,7 @@ public record UiSpec(
         return pairs;
     }
 
-    private static List<Dialog> installDirUiDialogs(UiConfig cfg) {
+    private static List<Dialog> installDirUiDialogs(UIConfig2 cfg) {
         var dialogs = new ArrayList<Dialog>();
 
         dialogs.add(WelcomeDlg);
@@ -264,17 +264,17 @@ public record UiSpec(
         return entries;
     }
 
-    private static final Map<UiConfig, Supplier<UiSpec>> DEFAULT_SPECS;
+    private static final Map<UIConfig2, Supplier<UISpec2>> DEFAULT_SPECS;
 
     private static final String CONDITION_ALWAYS = "1";
     private static final String CONDITION_NOT_INSTALLED = "NOT Installed";
 
     static {
 
-        var specs = new HashMap<UiConfig, Supplier<UiSpec>>();
+        var specs = new HashMap<UIConfig2, Supplier<UISpec2>>();
 
         // Verbatim WiX "Minimal" dialog set.
-        specs.put(UiConfig.build()
+        specs.put(UIConfig2.build()
                 .withLicenseDlg()
                 .create(), () -> {
                     return build(WixUI.MINIMAL).create();
@@ -283,7 +283,7 @@ public record UiSpec(
         // Standard WiX "Minimal" dialog set without the license dialog.
         // The license dialog is removed by overriding the default "Show"
         // action with the condition that always evaluates to "FALSE".
-        specs.put(UiConfig.build()
+        specs.put(UIConfig2.build()
                 .create(), () -> {
                     return build(WixUI.MINIMAL).hideDialogs(suppressShowAction(WelcomeEulaDlg).after(ProgressDlg)).create();
                 });

@@ -36,7 +36,7 @@ public interface WinMsiPackageMixin {
 
     boolean withShortcutPrompt();
 
-    boolean withUi();
+    boolean withUI();
 
     Optional<String> helpURL();
 
@@ -56,7 +56,7 @@ public interface WinMsiPackageMixin {
             DottedVersion msiVersion,
             boolean withInstallDirChooser,
             boolean withShortcutPrompt,
-            boolean withUi,
+            boolean withUI,
             Optional<String> helpURL,
             Optional<String> updateURL,
             String startMenuGroupName,
