@@ -46,7 +46,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import jdk.internal.util.OperatingSystem;
 import jdk.jpackage.internal.util.MacBundle;
@@ -287,9 +286,7 @@ public final class AppVersionTest {
         }
 
         TKit.TextStreamVerifier negateFind() {
-            var pattern = JPackageStringBundle.MAIN.cannedFormattedStringAsPattern(key, _ -> {
-                return Pattern.compile(".*");
-            }, args);
+            var pattern = JPackageStringBundle.MAIN.cannedFormattedStringAsPattern(key, args);
             return TKit.assertTextStream(pattern).negate();
         }
 
@@ -400,7 +397,7 @@ public final class AppVersionTest {
             Stream.of(Message.values()).filter(message -> {
                 return !expectMessageKeys.contains(message.key());
             }).map(Message::negateFind).forEach(validator -> {
-                new JPackageOutputValidator().add(validator).applyTo(cmd);
+                new JPackageOutputValidator().add(validator).stdoutAndStderr().applyTo(cmd);
             });
         }
 
