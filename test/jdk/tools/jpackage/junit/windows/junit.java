@@ -42,6 +42,6 @@
  * @requires (os.family == "windows")
  * @modules jdk.jpackage/jdk.jpackage.internal.wixui:open
  * @compile/module=jdk.jpackage -Xlint:all -Werror
- *    jdk/jpackage/internal/wixui/UiSpecTest.java
- * @run junit jdk.jpackage/jdk.jpackage.internal.wixui.UiSpecTest
+ *    jdk/jpackage/internal/wixui/UISpecTest.java
+ * @run junit jdk.jpackage/jdk.jpackage.internal.wixui.UISpecTest
  */
