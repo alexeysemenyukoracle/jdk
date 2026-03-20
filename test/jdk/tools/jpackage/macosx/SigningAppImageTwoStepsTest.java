@@ -21,11 +21,14 @@
  * questions.
  */
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import jdk.jpackage.test.AdditionalLauncher;
@@ -35,6 +38,7 @@ import jdk.jpackage.test.JPackageCommand;
 import jdk.jpackage.test.MacHelper.SignKeyOption;
 import jdk.jpackage.test.MacHelper.SignKeyOptionWithKeychain;
 import jdk.jpackage.test.MacSign;
+import jdk.jpackage.test.ApplicationLayout;
 import jdk.jpackage.test.MacSignVerify;
 import jdk.jpackage.test.PackageType;
 import jdk.jpackage.test.TKit;
@@ -67,6 +71,22 @@ public class SigningAppImageTwoStepsTest {
     public static void test(TestSpec spec) {
         spec.test();
     }
+
+    @Test
+    public static void testAppStore() {
+
+        var sign = new SignKeyOptionWithKeychain(
+                SignKeyOption.Type.SIGN_KEY_USER_SHORT_NAME,
+                SigningBase.StandardCertificateRequest.CODESIGN,
+                SigningBase.StandardKeychain.MAIN.keychain());
+
+        var spec = new TestSpec(Optional.empty(), sign);
+
+        spec.signAppImage(spec.createAppImage(), Optional.of(cmd -> {
+            cmd.addArgument("--mac-app-store");
+        }));
+    }
+
 
     public record TestSpec(Optional<SignKeyOptionWithKeychain> signAppImage, SignKeyOptionWithKeychain sign) {
 
@@ -133,7 +153,7 @@ public class SigningAppImageTwoStepsTest {
             private SignKeyOptionWithKeychain sign;
         }
 
-        void test() {
+        Path createAppImage() {
             var appImageCmd = JPackageCommand.helloAppImage()
                     .setFakeRuntime()
                     .setArgumentValue("--dest", TKit.createTempDirectory("appimage"));
@@ -150,15 +170,28 @@ public class SigningAppImageTwoStepsTest {
                 }, signOption.keychain());
             }, appImageCmd::execute);
 
+            return appImageCmd.outputBundle();
+        }
+
+        void signAppImage(Path appImage, Optional<Consumer<JPackageCommand>> mutator) {
+            Objects.requireNonNull(appImage);
+            Objects.requireNonNull(mutator);
+
             MacSign.withKeychain(keychain -> {
                 var cmd = new JPackageCommand()
                         .setPackageType(PackageType.IMAGE)
-                        .addArguments("--app-image", appImageCmd.outputBundle())
+                        .addArguments("--app-image", appImage)
                         .mutate(sign::addTo);
+
+                mutator.ifPresent(cmd::mutate);
 
                 cmd.executeAndAssertHelloAppImageCreated();
                 MacSignVerify.verifyAppImageSigned(cmd, sign.certRequest());
             }, sign.keychain());
+        }
+
+        void test() {
+            signAppImage(createAppImage(), Optional.empty());
         }
     }
 
