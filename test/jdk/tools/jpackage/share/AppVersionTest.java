@@ -757,7 +757,7 @@ public final class AppVersionTest {
             private final List<VersionSource> versions = new ArrayList<>();
             private final Map<PackageType, Expected> expected = new HashMap<>();
 
-            private final static Set<PackageType> ALL_TYPES = Set.of(PackageType.values());
+            private static final Set<PackageType> ALL_TYPES = Set.of(PackageType.values());
         }
     }
 
@@ -1016,7 +1016,7 @@ public final class AppVersionTest {
             return predefinedRuntimeDir;
         }
 
-        final static String MAC_PREDEFINED_RUNTIME_BUNDLE_VERSION = "1.22.333";
+        static final String MAC_PREDEFINED_RUNTIME_BUNDLE_VERSION = "1.22.333";
     }
 
     private static Consumer<TestSpec> skipImagePackageType(Consumer<TestSpec> consumer) {
