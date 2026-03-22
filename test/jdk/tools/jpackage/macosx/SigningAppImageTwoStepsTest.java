@@ -21,8 +21,6 @@
  * questions.
  */
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -38,7 +36,6 @@ import jdk.jpackage.test.JPackageCommand;
 import jdk.jpackage.test.MacHelper.SignKeyOption;
 import jdk.jpackage.test.MacHelper.SignKeyOptionWithKeychain;
 import jdk.jpackage.test.MacSign;
-import jdk.jpackage.test.ApplicationLayout;
 import jdk.jpackage.test.MacSignVerify;
 import jdk.jpackage.test.PackageType;
 import jdk.jpackage.test.TKit;
@@ -153,7 +150,7 @@ public class SigningAppImageTwoStepsTest {
             private SignKeyOptionWithKeychain sign;
         }
 
-        Path createAppImage() {
+        JPackageCommand createAppImage() {
             var appImageCmd = JPackageCommand.helloAppImage()
                     .setFakeRuntime()
                     .setArgumentValue("--dest", TKit.createTempDirectory("appimage"));
@@ -170,17 +167,17 @@ public class SigningAppImageTwoStepsTest {
                 }, signOption.keychain());
             }, appImageCmd::execute);
 
-            return appImageCmd.outputBundle();
+            return appImageCmd;
         }
 
-        void signAppImage(Path appImage, Optional<Consumer<JPackageCommand>> mutator) {
-            Objects.requireNonNull(appImage);
+        void signAppImage(JPackageCommand appImageCmd, Optional<Consumer<JPackageCommand>> mutator) {
+            Objects.requireNonNull(appImageCmd);
             Objects.requireNonNull(mutator);
 
             MacSign.withKeychain(keychain -> {
                 var cmd = new JPackageCommand()
                         .setPackageType(PackageType.IMAGE)
-                        .addArguments("--app-image", appImage)
+                        .usePredefinedAppImage(appImageCmd)
                         .mutate(sign::addTo);
 
                 mutator.ifPresent(cmd::mutate);
