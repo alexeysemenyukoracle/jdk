@@ -2043,7 +2043,7 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
     // `--runtime-image` parameter set.
     public static final Path DEFAULT_RUNTIME_IMAGE = Optional.ofNullable(TKit.getConfigProperty("runtime-image")).map(Path::of).orElse(null);
 
-    public final static String DEFAULT_VERSION = "1.0";
+    public static final String DEFAULT_VERSION = "1.0";
 
     // [HH:mm:ss.SSS]
     private static final Pattern TIMESTAMP_REGEXP = Pattern.compile(
