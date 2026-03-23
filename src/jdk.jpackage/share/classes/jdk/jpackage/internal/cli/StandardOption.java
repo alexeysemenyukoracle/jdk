@@ -117,7 +117,7 @@ public final class StandardOption {
             .converterExceptionFormatString("error.parameter-invalid-value")
             .converter(LogConfigParser::valueOf)
             .defaultOptionalValue(LogConfigParser.defaultVerbose())
-            .valuePattern("configuration")
+            .valuePattern("[<[-]category(,[-]category)*>]")
             .create();
 
     static final OptionValue<BundleType> TYPE = option("type", BundleType.class).addAliases("t")

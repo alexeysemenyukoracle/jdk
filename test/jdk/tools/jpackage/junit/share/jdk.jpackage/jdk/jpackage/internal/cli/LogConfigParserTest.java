@@ -190,14 +190,7 @@ class LogConfigParserTest {
 
             var sb = new StringBuilder();
             categories.forEach(category -> {
-                switch (category) {
-                    case SYSTEM_LOGGER -> {
-                        sb.insert(0, category.asStringValue() + ":");
-                    }
-                    default -> {
-                        sb.append(category.asStringValue()).append(',');
-                    }
-                }
+                sb.append(category.asStringValue()).append(',');
             });
 
             var logRecords = MessageCategory.toLogRecords(categories);
@@ -214,25 +207,32 @@ class LogConfigParserTest {
     private static Collection<TestSpec> test_valueOf_manual_test_cases() {
         return List.of(
                 new TestSpec("log", MessageCategory.SYSTEM_LOGGER),
-                new TestSpec("log!", MessageCategory.values()),
-                new TestSpec("log:!", MessageCategory.values()),
-                new TestSpec("!", MessageCategory.toLogRecords(
-                        SetBuilder.<MessageCategory>build()
-                                .add(MessageCategory.values())
-                                .remove(MessageCategory.SYSTEM_LOGGER)
-                                .create()
-                )),
-                new TestSpec(","),
+                new TestSpec("log,console", MessageCategory.values()),
+                new TestSpec("console", MessageCategory.toLogRecords(ALL_CONSOLE_CATEGORIES)),
+                new TestSpec("all", MessageCategory.values()),
+                new TestSpec("all,console", MessageCategory.values()),
+                new TestSpec("-trace,trace", MessageCategory.TRACE),
+                new TestSpec("-trace", Set.of()),
+                new TestSpec("-log", Set.of()),
+                new TestSpec("-tools,tools,-tools", MessageCategory.TOOLS),
+                new TestSpec("-trace,trace,console", MessageCategory.toLogRecords(ALL_CONSOLE_CATEGORIES)),
+                new TestSpec("console,-tools,tools,-tools", MessageCategory.toLogRecords(ALL_CONSOLE_CATEGORIES)),
+                new TestSpec("-tools,console,", MessageCategory.toLogRecords(
+                        SetBuilder.build(ALL_CONSOLE_CATEGORIES).remove(MessageCategory.TOOLS).create())),
                 new TestSpec(""),
-                new TestSpec(",errors,,errors,", MessageCategory.ERRORS)
+                new TestSpec("errors,,errors,", MessageCategory.ERRORS)
         );
     }
 
     private static Collection<String> test_valueOf_negative() {
         return List.of(
+                ",",
                 "logerrors",
-                "log:error",
-                "log!:"
+                "log,error",
+                "log,-all",
+                "-all",
+                "-console",
+                ",errors,,errors,"
         );
     }
 
@@ -665,7 +665,11 @@ class LogConfigParserTest {
 
     }
 
-    private static Clock FIXED_CONSOLE_TIMESTAMP = Clock.fixed(Clock.systemDefaultZone().instant(), ZoneId.systemDefault());
+    private static final Clock FIXED_CONSOLE_TIMESTAMP = Clock.fixed(Clock.systemDefaultZone().instant(), ZoneId.systemDefault());
+
+    private static final Set<MessageCategory> ALL_CONSOLE_CATEGORIES = SetBuilder.build(MessageCategory.values())
+            .remove(MessageCategory.SYSTEM_LOGGER)
+            .create();
 
     static {
 

@@ -1350,36 +1350,36 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
         static String toVerboseOptionValue(Set<MessageCategory> categories) {
             Objects.requireNonNull(categories);
 
-            var sb = new StringBuilder();
+            String negativeRoot;
 
             if (categories.contains(SYSTEM_LOGGER)) {
-                sb.append("log");
-                if (categories.size() > 1) {
-                    sb.append(":");
-                }
-            }
-
-            var consoleStr = categories.stream()
-                    .filter(MessageCategory::isConsole)
-                    .map(Enum::name)
-                    .map(String::toLowerCase)
-                    .sorted()
-                    .collect(joining(","));
-
-            var negateConsoleStr = "!" + messageCategoriesConsoleAll().stream()
-                    .filter(Predicate.not(categories::contains))
-                    .map(Enum::name)
-                    .map(String::toLowerCase)
-                    .sorted()
-                    .collect(joining(","));
-
-            if (consoleStr.length() < negateConsoleStr.length()) {
-                sb.append(consoleStr);
+                negativeRoot = "all";
             } else {
-                sb.append(negateConsoleStr);
+                negativeRoot = "console";
             }
 
-            return sb.toString();
+            var str = categories.stream()
+                    .map(Enum::name)
+                    .map(String::toLowerCase)
+                    .sorted()
+                    .collect(joining(","));
+
+            var negateStr = Stream.concat(
+                    Stream.of(negativeRoot),
+                    messageCategoriesConsoleAll().stream()
+                            .filter(Predicate.not(categories::contains))
+                            .map(Enum::name)
+                            .map(String::toLowerCase)
+                            .map(v -> {
+                                return "-" + v;
+                            }).sorted()
+            ).collect(joining(","));
+
+            if (str.length() < negateStr.length()) {
+                return str;
+            } else {
+                return negateStr;
+            }
         }
 
         boolean isConsole() {
@@ -2289,7 +2289,7 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
     private static final Optional<Path> DEFAULT_RUNTIME_IMAGE = Optional.ofNullable(TKit.getConfigProperty("runtime-image")).map(Path::of);
 
     private static final Set<MessageCategory> DEFAULT_VERBOSE = MessageCategory.parseVerboseOptionValue(
-            Optional.ofNullable(TKit.getConfigProperty("verbose")).orElse("!" /* Set max verbose level by default */)
+            Optional.ofNullable(TKit.getConfigProperty("verbose")).orElse("console" /* Set max verbose level by default */)
     );
 
     public static final String DEFAULT_VERSION = "1.0";

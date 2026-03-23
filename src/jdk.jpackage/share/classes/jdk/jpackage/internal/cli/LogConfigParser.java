@@ -24,12 +24,14 @@
  */
 package jdk.jpackage.internal.cli;
 
+import java.util.BitSet;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import jdk.jpackage.internal.log.LogEnvironment;
@@ -38,7 +40,7 @@ import jdk.jpackage.internal.log.LogEnvironment.LogSink;
 import jdk.jpackage.internal.log.LoggerRole;
 import jdk.jpackage.internal.util.SetBuilder;
 
-final public class LogConfigParser {
+public final class LogConfigParser {
 
     static Builder valueOf(String str) {
         return buildFromCategories(tokenize(str));
@@ -47,38 +49,46 @@ final public class LogConfigParser {
     public static Set<MessageCategory> tokenize(String str) {
         Objects.requireNonNull(str);
 
-        var ex = new IllegalArgumentException(String.format("Inavlid value: [%s]", str));
+        Supplier<IllegalArgumentException> ex = () -> {
+            return new IllegalArgumentException(String.format("Inavlid value: [%s]", str));
+        };
+
+        var groupCategories = new BitSet(MessageCategory.values().length);
+        var enableCategories = new BitSet(MessageCategory.values().length);
+        var diableCategories = new BitSet(MessageCategory.values().length);
+
+        Stream.of(str.split("(?<=.),")).filter(Predicate.not(String::isEmpty)).forEach(v -> {
+            if (v.charAt(0) == '-') {
+                var category = CONSOLE_CATEGORIES.get(v.substring(1));
+                if (category == null) {
+                    throw ex.get();
+                } else {
+                    diableCategories.set(category.ordinal());
+                }
+            } else {
+                Optional.ofNullable(GROUPS.get(v)).ifPresentOrElse(categoryGroup -> {
+                    for (var category : categoryGroup) {
+                        groupCategories.set(category.ordinal());
+                    }
+                }, () -> {
+                    var category = CONSOLE_CATEGORIES.get(v);
+                    if (category == null) {
+                        throw ex.get();
+                    } else {
+                        enableCategories.set(category.ordinal());
+                    }
+                });
+            }
+        });
 
         var categories = new HashSet<MessageCategory>();
 
-        var idx = 0;
-
-        if (str.startsWith(MessageCategory.SYSTEM_LOGGER.asStringValue())) {
-            idx += MessageCategory.SYSTEM_LOGGER.asStringValue().length();
-            categories.add(MessageCategory.SYSTEM_LOGGER);
-            if (str.startsWith(":", idx)) {
-                idx++;
-            } else if (idx < str.length() && str.charAt(idx) != '!') {
-                throw ex;
+        for (var category : MessageCategory.values()) {
+            if (enableCategories.get(category.ordinal()) ||
+                    (groupCategories.get(category.ordinal()) && !diableCategories.get(category.ordinal()))) {
+                categories.add(category);
             }
         }
-
-        Consumer<MessageCategory> categoryConsumer = categories::add;
-
-        if (str.startsWith("!", idx)) {
-            categories.addAll(CONSOLE_CATEGORIES.values());
-            idx++;
-            categoryConsumer = categories::remove;
-        }
-
-        Stream.of(str.substring(idx).split(",")).filter(Predicate.not(String::isEmpty)).map(v -> {
-            var category = CONSOLE_CATEGORIES.get(v);
-            if (category != null) {
-                return category;
-            } else {
-                throw ex;
-            }
-        }).forEach(categoryConsumer);
 
         return categories;
     }
@@ -98,20 +108,6 @@ final public class LogConfigParser {
     }
 
     public enum MessageCategory {
-        SUMMARY {
-            public void applyTo(Builder builder) {
-                builder.enable(LoggerRole.SUMMARY_LOGGER, LogSink.CONSOLE);
-                builder.printSummaryInConsole(true);
-            }
-        },
-        WARNINGS {
-            public void applyTo(Builder builder) {
-                builder.enable(LoggerRole.SUMMARY_LOGGER, LogSink.CONSOLE);
-                builder.enable(LoggerRole.PROGRESS_LOGGER, LogSink.CONSOLE);
-                builder.printSummaryWarningsInConsole(true);
-                builder.printProgressWarningsInConsole(true);
-            }
-        },
         ERRORS {
             public void applyTo(Builder builder) {
                 builder.enable(LoggerRole.ERROR_LOGGER, LogSink.CONSOLE);
@@ -124,23 +120,15 @@ final public class LogConfigParser {
                 builder.printProgressInConsole(true);
             }
         },
-        TRACE {
-            public void applyTo(Builder builder) {
-                TOOLS.applyTo(builder);
-                builder.enable(LoggerRole.TRACE_LOGGER, LogSink.CONSOLE);
-                builder.printErrorStackTraceInConsole(true);
-                builder.printCommandOutputInConsole(true);
-                builder.printQuietCommands(true);
-            }
-        },
         RESOURCES {
             public void applyTo(Builder builder) {
                 builder.enable(LoggerRole.RESOURCE_LOGGER, LogSink.CONSOLE);
             }
         },
-        TOOLS {
+        SUMMARY {
             public void applyTo(Builder builder) {
-                builder.enable(LoggerRole.COMMAND_LOGGER, LogSink.CONSOLE);
+                builder.enable(LoggerRole.SUMMARY_LOGGER, LogSink.CONSOLE);
+                builder.printSummaryInConsole(true);
             }
         },
         SYSTEM_LOGGER {
@@ -156,8 +144,30 @@ final public class LogConfigParser {
             }
 
             @Override
-            boolean console() {
+            boolean isConsole() {
                 return false;
+            }
+        },
+        TOOLS {
+            public void applyTo(Builder builder) {
+                builder.enable(LoggerRole.COMMAND_LOGGER, LogSink.CONSOLE);
+            }
+        },
+        TRACE {
+            public void applyTo(Builder builder) {
+                TOOLS.applyTo(builder);
+                builder.enable(LoggerRole.TRACE_LOGGER, LogSink.CONSOLE);
+                builder.printErrorStackTraceInConsole(true);
+                builder.printCommandOutputInConsole(true);
+                builder.printQuietCommands(true);
+            }
+        },
+        WARNINGS {
+            public void applyTo(Builder builder) {
+                builder.enable(LoggerRole.SUMMARY_LOGGER, LogSink.CONSOLE);
+                builder.enable(LoggerRole.PROGRESS_LOGGER, LogSink.CONSOLE);
+                builder.printSummaryWarningsInConsole(true);
+                builder.printProgressWarningsInConsole(true);
             }
         },
         ;
@@ -168,7 +178,7 @@ final public class LogConfigParser {
             return name().toLowerCase();
         }
 
-        boolean console() {
+        boolean isConsole() {
             return true;
         }
     }
@@ -187,7 +197,13 @@ final public class LogConfigParser {
         return buildFromCategories(Set.of(categories));
     }
 
-    private final static Map<String, MessageCategory> CONSOLE_CATEGORIES = Stream.of(MessageCategory.values())
-            .filter(MessageCategory::console)
+    private static final Map<String, MessageCategory> CONSOLE_CATEGORIES = Stream.of(MessageCategory.values())
             .collect(Collectors.toUnmodifiableMap(MessageCategory::asStringValue, x -> x));
+
+    private static final Map<String, Set<MessageCategory>> GROUPS = Map.ofEntries(
+            Map.entry("all", Set.of(MessageCategory.values())),
+            Map.entry("console", Stream.of(MessageCategory.values())
+                    .filter(MessageCategory::isConsole)
+                    .collect(Collectors.toUnmodifiableSet()))
+    );
 }
