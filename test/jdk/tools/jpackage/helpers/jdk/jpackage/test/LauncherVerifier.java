@@ -376,7 +376,7 @@ public final class LauncherVerifier {
 
         var customFile = Optional.ofNullable(cmd.getArgumentValue("--mac-entitlements")).map(Path::of);
         if (customFile.isPresent()) {
-            expectedEntitlementsOrigin = String.format("Custom entitlements file [%s]", customFile.get());
+            expectedEntitlementsOrigin = String.format("custom entitlements from [%s] file", customFile.get());
         } else {
             // Try from the resource dir.
             var resourceDirFile = Optional.ofNullable(cmd.getArgumentValue("--resource-dir")).map(Path::of).map(resourceDir -> {
@@ -384,7 +384,7 @@ public final class LauncherVerifier {
             }).filter(Files::exists);
             if (resourceDirFile.isPresent()) {
                 customFile = resourceDirFile;
-                expectedEntitlementsOrigin = "Custom entitlements from the resource directory";
+                expectedEntitlementsOrigin = "custom entitlements from the resource directory";
             } else {
                 expectedEntitlementsOrigin = null;
             }
@@ -397,7 +397,7 @@ public final class LauncherVerifier {
             expected = DefaultEntitlements.APP_STORE;
             expectedEntitlementsOrigin = "App Store entitlements";
         } else {
-            expectedEntitlementsOrigin = "Default entitlements";
+            expectedEntitlementsOrigin = "default entitlements";
             expected = DefaultEntitlements.STANDARD;
         }
 
