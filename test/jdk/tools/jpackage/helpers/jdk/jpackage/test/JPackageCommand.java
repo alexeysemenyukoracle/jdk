@@ -1447,10 +1447,9 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
             }
         }),
         FILE_ASSOCIATIONS(cmd -> {
-            if (cmd.isRuntime()) {
-                cmd = convertFromRuntime(cmd);
+            if (!cmd.isRuntime()) {
+                FileAssociations.validateFileAssociations(cmd);
             }
-            FileAssociations.validateFileAssociations(cmd);
         }),
         MAC_BUNDLE_STRUCTURE(cmd -> {
             if (TKit.isOSX()) {
