@@ -868,6 +868,7 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
         } else if (TKit.isLinux()) {
             criticalRuntimeFiles = LinuxHelper.CRITICAL_RUNTIME_FILES;
         } else if (TKit.isOSX()) {
+            runtimeDir = MacBundle.fromPath(runtimeDir).map(MacBundle::homeDir).orElse(runtimeDir);
             criticalRuntimeFiles = MacHelper.CRITICAL_RUNTIME_FILES;
         } else {
             throw TKit.throwUnknownPlatformError();
