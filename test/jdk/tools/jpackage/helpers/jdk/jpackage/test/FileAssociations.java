@@ -275,6 +275,14 @@ public final class FileAssociations {
     }
 
     static void validateFileAssociations(JPackageCommand cmd) {
+        if (TKit.isOSX() && cmd.hasArgument("--app-image")) {
+            // It fails on macOS because jpackage ignores --file-associations and many other options
+            // when building a package from the predefined app image.
+            TKit.trace("Not validating FA because jpackage ignores --file-associations option "
+                    + "when building a package from the predefined app image");
+            return;
+        }
+
         var comm = Comm.compare(Set.copyOf(declaredFileAssociations(cmd)), Set.copyOf(definedFileAssociations(cmd)));
         if (!Stream.of(comm.unique1(), comm.unique2(), comm.common()).allMatch(Collection::isEmpty)) {
             trace(comm.common(), "Expected file associations (size=%d):");
@@ -307,7 +315,11 @@ public final class FileAssociations {
 
     private static Collection<FileAssociationDescriptor> definedFileAssociations(JPackageCommand cmd) {
         if (cmd.isImagePackageType()) {
-            return List.of();
+            if (TKit.isOSX()) {
+                return MacHelper.fileAssociations(cmd);
+            } else {
+                return List.of();
+            }
         } else if (TKit.isWindows()) {
             return WindowsHelper.fileAssociations(cmd);
         } else if (TKit.isLinux()) {
