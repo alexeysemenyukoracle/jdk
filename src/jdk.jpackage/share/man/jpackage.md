@@ -419,7 +419,7 @@ The `jpackage` tool will take as input a Java application and a Java run-time im
 
 <a id="option-win-per-user-install">`--win-per-user-install`</a>
 
-:   Installs the application on a per-user basis
+:   Installs the application on a per-user basis. Without this option installs per-machine
 
 <a id="option-win-shortcut">`--win-shortcut`</a>
 

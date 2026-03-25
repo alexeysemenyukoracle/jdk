@@ -194,7 +194,8 @@ Platform dependent options for creating the application package:
   --win-menu-group <menu group name>
           Start Menu group this application is placed in
   --win-per-user-install
-          Installs the application on a per-user basis
+          Installs the application on a per-user basis.
+          Without this option installs per-machine
   --win-shortcut [<shortcut startup directory>]
           Adds a desktop shortcut for this application, or requests
           to do so if --win-shortcut-prompt is specified
