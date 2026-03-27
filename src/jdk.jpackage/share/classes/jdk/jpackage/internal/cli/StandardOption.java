@@ -69,6 +69,7 @@ import jdk.jpackage.internal.model.LauncherShortcutStartupDirectory;
 import jdk.jpackage.internal.model.SelfContainedException;
 import jdk.jpackage.internal.util.RootedPath;
 import jdk.jpackage.internal.util.SetBuilder;
+import jdk.jpackage.internal.util.PathUtils;
 
 /**
  * jpackage command line options
@@ -183,6 +184,53 @@ public final class StandardOption {
                 }
             })
             .inScope(LauncherProperty.VALUE)
+            .mutate(createOptionSpecBuilderMutator((b, context) -> {
+                var extension = switch (context.os()) {
+                    case WINDOWS -> ".ico";
+                    case MACOS -> ".icns";
+                    case LINUX -> ".png";
+                    default -> {
+                        throw new AssertionError();
+                    }
+                };
+
+                String errorKey;
+                if (context.asFileSource().isPresent()) {
+                    errorKey = switch (context.os()) {
+                        case WINDOWS -> "error.properties-parameter-not-ico-icon";
+                        case MACOS -> "error.properties-parameter-not-icns-icon";
+                        case LINUX -> "error.properties-parameter-not-png-icon";
+                        default -> {
+                            throw new AssertionError();
+                        }
+                    };
+                } else {
+                    errorKey = switch (context.os()) {
+                        case WINDOWS -> "error.parameter-not-ico-icon";
+                        case MACOS -> "error.parameter-not-icns-icon";
+                        case LINUX -> "error.parameter-not-png-icon";
+                        default -> {
+                            throw new AssertionError();
+                        }
+                    };
+                }
+
+                var fileValidator = b.createValidator().orElseThrow();
+                var extensionValidator = b
+                        .validatorExceptionFormatString(errorKey)
+                        .validator(new Predicate<>() {
+                            @Override
+                            public boolean test(Path path) {
+                                if (!path.toString().isEmpty()) {
+                                    return extension.equals(PathUtils.getSuffix(path));
+                                } else {
+                                    return true;
+                                }
+                            }
+                        })
+                        .createValidator().orElseThrow();
+                b.validator(Validator.andLazy(fileValidator, extensionValidator));
+            }))
             .create();
 
     public static final OptionValue<String> COPYRIGHT = stringOption("copyright").valuePattern("copyright string").create();
