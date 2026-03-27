@@ -327,6 +327,38 @@ public class StandardOptionTest extends JUnitAdapter.TestSrcInitializer {
     }
 
     @ParameterizedTest
+    @MethodSource
+    void test_INSTALL_DIR_valid(StandardBundlingOperation bunldingOperation, String value, Path output) {
+
+        @SuppressWarnings("unchecked")
+        var spec = Optional.ofNullable(bunldingOperation).map(OptionsProcessor::optionSpecMapper).map(specMapper -> {
+            return (OptionSpec<Path>)specMapper.apply(StandardOption.INSTALL_DIR.getSpec());
+        }).orElseGet(StandardOption.INSTALL_DIR::getSpec);
+
+        var result = spec.convert(spec.name(), StringToken.of(value)).orElseThrow();
+
+        assertEquals(result, Optional.ofNullable(output).orElseGet(() -> {
+            return Path.of(value);
+        }));
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void test_INSTALL_DIR_invalid(StandardBundlingOperation bunldingOperation, String value) {
+
+        @SuppressWarnings("unchecked")
+        var spec = Optional.ofNullable(bunldingOperation).map(OptionsProcessor::optionSpecMapper).map(specMapper -> {
+            return (OptionSpec<Path>)specMapper.apply(StandardOption.INSTALL_DIR.getSpec());
+        }).orElseGet(StandardOption.INSTALL_DIR::getSpec);
+
+        var result = spec.convert(spec.name(), StringToken.of(value));
+
+        var ex = assertThrows(JPackageException.class, result::orElseThrow);
+
+        assertEquals(I18N.format("error.parameter-not-install-dir", value, "--install-dir"), ex.getMessage());
+    }
+
+    @ParameterizedTest
     @ValueSource(strings = {
         ".",
         "a-b.c",
@@ -634,6 +666,48 @@ public class StandardOptionTest extends JUnitAdapter.TestSrcInitializer {
                 Arguments.of("'\\' a ", List.of("' a")),
                 Arguments.of("\"" + "\\\"".repeat(10000) + "A", List.of("\"".repeat(10000) + "A"))
         );
+    }
+
+    private static Collection<Arguments> test_INSTALL_DIR_valid() {
+        var testCases = new ArrayList<Arguments>();
+
+        if (OperatingSystem.isWindows()) {
+            for (var bundlingOperation : StandardBundlingOperation.WINDOWS_CREATE_NATIVE) {
+                testCases.add(Arguments.of(bundlingOperation, "Foo", null));
+                testCases.add(Arguments.of(bundlingOperation, "Foo/\\/", "Foo"));
+            }
+        }
+
+        if (OperatingSystem.isMacOS()) {
+            for (var bundlingOperation : StandardBundlingOperation.MACOS_CREATE_NATIVE) {
+                testCases.add(Arguments.of(bundlingOperation, "/Application", null));
+                testCases.add(Arguments.of(bundlingOperation, "/Application//", "/Application"));
+            }
+        }
+
+        if (OperatingSystem.isLinux()) {
+            for (var bundlingOperation : StandardBundlingOperation.LINUX_CREATE_NATIVE) {
+                testCases.add(Arguments.of(bundlingOperation, "/opt", null));
+                testCases.add(Arguments.of(bundlingOperation, "/opt//", "/opt"));
+                testCases.add(Arguments.of(bundlingOperation, "/foo/bar///", "/foo/bar"));
+            }
+        }
+
+        return testCases;
+    }
+
+    private static Collection<Arguments> test_INSTALL_DIR_invalid() {
+        final var testCases = new ArrayList<Arguments>();
+
+        // Just a few invalid values. To ensure option spec converter thtows expected error.
+        // More thorough test coverage is in StandardValidatorTest.test_installDirValidator_invalid()
+        for (var bundlingOperation : StandardBundlingOperation.CREATE_NATIVE) {
+            testCases.add(Arguments.of(bundlingOperation, ""));
+            testCases.add(Arguments.of(bundlingOperation, "."));
+            testCases.add(Arguments.of(bundlingOperation, ".."));
+        }
+
+        return testCases;
     }
 
 

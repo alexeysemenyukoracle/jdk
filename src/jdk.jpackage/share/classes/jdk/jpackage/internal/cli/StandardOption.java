@@ -67,9 +67,9 @@ import jdk.jpackage.internal.model.JPackageException;
 import jdk.jpackage.internal.model.LauncherShortcut;
 import jdk.jpackage.internal.model.LauncherShortcutStartupDirectory;
 import jdk.jpackage.internal.model.SelfContainedException;
+import jdk.jpackage.internal.util.PathUtils;
 import jdk.jpackage.internal.util.RootedPath;
 import jdk.jpackage.internal.util.SetBuilder;
-import jdk.jpackage.internal.util.PathUtils;
 
 /**
  * jpackage command line options
@@ -285,6 +285,12 @@ public final class StandardOption {
                 if (context.os() == OperatingSystem.WINDOWS) {
                     b.description("help.option.install-dir" + resourceKeySuffix(context.os()));
                 }
+
+                context.bundlingOperation().ifPresent(bundlingOperation -> {
+                    b.validatorExceptionFormatString("error.parameter-not-install-dir");
+                    b.validatorExceptionFactory(ERROR_WITH_VALUE_AND_OPTION_NAME);
+                    b.validator(StandardValidator.installDirValidator(bundlingOperation.packageType()));
+                });
             }))
             .create();
 
