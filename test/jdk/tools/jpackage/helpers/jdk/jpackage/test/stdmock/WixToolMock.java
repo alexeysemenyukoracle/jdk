@@ -28,7 +28,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import jdk.jpackage.internal.util.PathUtils;
-import jdk.jpackage.internal.util.function.ExceptionBox;
 import jdk.jpackage.test.mock.CommandActionSpec;
 import jdk.jpackage.test.mock.CommandActionSpecs;
 import jdk.jpackage.test.mock.CommandMockSpec;
@@ -39,21 +38,17 @@ public final class WixToolMock {
         Objects.requireNonNull(type);
         Objects.requireNonNull(version);
 
-        CommandActionSpec action;
-        switch (type) {
+        CommandActionSpec action = switch (type) {
             case CANDLE3 -> {
-                action = candleAction(fips, version);
+                yield candleAction(fips, version);
             }
             case LIGHT3 -> {
-                action = lightAction(version);
+                yield lightAction(version);
             }
             case WIX4 -> {
-                action = wixAction(version);
+                yield wixAction(version);
             }
-            default -> {
-                throw ExceptionBox.reachedUnreachable();
-            }
-        }
+        };
 
         var toolPath = Optional.ofNullable(dir).map(d -> {
             return d.resolve(type.fileName);

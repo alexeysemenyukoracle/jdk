@@ -26,6 +26,7 @@ package jdk.jpackage.internal;
 
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -76,10 +77,12 @@ record WixToolset(Map<WixTool, WixTool.ToolInfo> tools) {
                 .anyMatch(WixTool.CandleInfo::fips);
     }
 
-    static Optional<WixToolset> create(Set<WixTool> requiredTools, Map<WixTool, WixTool.ToolInfo> allTools) {
-        if (requiredTools.isEmpty()) {
-            throw new IllegalArgumentException();
-        }
+    static Optional<WixToolset> create(WixToolsetType type, Map<WixTool, WixTool.ToolInfo> allTools) {
+        Objects.requireNonNull(type);
+        Objects.requireNonNull(allTools);
+
+        var requiredTools = type.getTools();
+
         var filteredTools = allTools.entrySet().stream().filter(e -> {
             return requiredTools.contains(e.getKey());
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
