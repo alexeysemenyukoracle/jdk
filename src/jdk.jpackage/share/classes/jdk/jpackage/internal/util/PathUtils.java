@@ -24,6 +24,7 @@
  */
 package jdk.jpackage.internal.util;
 
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Optional;
@@ -31,18 +32,26 @@ import java.util.function.UnaryOperator;
 
 public final class PathUtils {
 
+    private PathUtils() {
+    }
+
     public static String getSuffix(Path path) {
         String filename = replaceSuffix(path.getFileName(), null).toString();
         return path.getFileName().toString().substring(filename.length());
     }
 
     public static Path addSuffix(Path path, String suffix) {
+        Objects.requireNonNull(path);
+        Objects.requireNonNull(suffix);
+
         Path parent = path.getParent();
         String filename = path.getFileName().toString() + suffix;
         return parent != null ? parent.resolve(filename) : Path.of(filename);
     }
 
     public static Path replaceSuffix(Path path, String suffix) {
+        Objects.requireNonNull(path);
+
         Path parent = path.getParent();
         String filename = path.getFileName().toString().replaceAll("\\.[^.]*$",
                 "") + Optional.ofNullable(suffix).orElse("");
@@ -59,18 +68,22 @@ public final class PathUtils {
     }
 
     public static Path normalizedAbsolutePath(Path path) {
-        if (path != null) {
+        return mapNullablePath(_ -> {
             return path.normalize().toAbsolutePath();
-        } else {
-            return null;
-        }
+        }, path);
     }
 
     public static String normalizedAbsolutePathString(Path path) {
-        if (path != null) {
-            return normalizedAbsolutePath(path).toString();
-        } else {
-            return null;
-        }
+        return Optional.ofNullable(normalizedAbsolutePath(path)).map(Path::toString).orElse(null);
+    }
+
+    public static Optional<Path> asPath(String value) {
+        return Optional.ofNullable(value).map(v -> {
+            try {
+                return Path.of(v);
+            } catch (InvalidPathException ex) {
+                return null;
+            }
+        });
     }
 }
