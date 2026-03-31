@@ -24,15 +24,18 @@ package jdk.jpackage.internal.util;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 
-public class CompositeProxyTest {
+class CompositeProxyTest {
 
     static interface Smalltalk {
 
@@ -86,14 +89,18 @@ public class CompositeProxyTest {
     }
 
     @Test
-    public void testSmalltalk() {
-        var convo = CompositeProxy.create(Smalltalk.class);
-        assertEquals("Hello", convo.sayHello());
-        assertEquals("Bye", convo.sayBye());
+    void testSmalltalk() {
+        var ex = assertThrowsExactly(IllegalArgumentException.class, () -> {
+            CompositeProxy.create(Smalltalk.class);
+        });
+
+        assertEquals(
+                String.format("Type %s is not extending interfaces", Smalltalk.class.getName()),
+                ex.getMessage());
     }
 
     @Test
-    public void testConvo() {
+    void testConvo() {
         final var otherThings = "How is your day?";
         var convo = CompositeProxy.create(Convo.class,
                 new Smalltalk() {}, new ConvoMixin.Stub(otherThings));
@@ -103,7 +110,7 @@ public class CompositeProxyTest {
     }
 
     @Test
-    public void testConvoWithDuke() {
+    void testConvoWithDuke() {
         final var otherThings = "How is your day?";
         var convo = CompositeProxy.create(Convo.class, new Smalltalk() {
             @Override
@@ -117,7 +124,7 @@ public class CompositeProxyTest {
     }
 
     @Test
-    public void testConvoWithCustomSayBye() {
+    void testConvoWithCustomSayBye() {
         var mixin = new ConvoMixinWithOverrideSayBye.Stub("How is your day?", "See you");
 
         var convo = CompositeProxy.create(ConvoWithOverrideSayBye.class, new Smalltalk() {}, mixin);
@@ -140,7 +147,7 @@ public class CompositeProxyTest {
     }
 
     @Test
-    public void testConvoWithCustomSayHelloAndSayBye() {
+    void testConvoWithCustomSayHelloAndSayBye() {
         var mixin = new ConvoMixinWithOverrideSayBye.Stub("How is your day?", "See you");
 
         var convo = CompositeProxy.create(ConvoWithDefaultSayHelloWithOverrideSayBye.class, new Smalltalk() {}, mixin);
@@ -164,7 +171,7 @@ public class CompositeProxyTest {
     }
 
     @Test
-    public void testInherited() {
+    void testInherited() {
         interface Base {
             String doSome();
         }
@@ -193,7 +200,7 @@ public class CompositeProxyTest {
     }
 
     @Test
-    public void testNestedProxy() {
+    void testNestedProxy() {
         interface AddM {
             String m();
         }
@@ -231,7 +238,7 @@ public class CompositeProxyTest {
     }
 
     @Test
-    public void testComposite() {
+    void testComposite() {
         interface A {
             String sayHello();
             String sayBye();
@@ -263,7 +270,7 @@ public class CompositeProxyTest {
     }
 
     @Test
-    public void testBasicObjectMethods() {
+    void testBasicObjectMethods() {
         interface Foo {
         }
 
@@ -279,7 +286,174 @@ public class CompositeProxyTest {
     }
 
     @Test
-    public void testJavadocExample() {
+    void testConflictAutoResolved() {
+
+        interface Foo {
+            String getString();
+        }
+
+        interface Bar {
+            String getString();
+        }
+
+        interface FooBar extends Foo, Bar {}
+
+        record FooBarImpl(String getString) implements Foo, Bar {}
+
+        record BarImpl(String getString) implements Bar {}
+
+        var foo = new FooBarImpl("foo");
+        var bar = new BarImpl("bar");
+
+        for (var slices : List.of(
+                List.of(foo, bar),
+                List.of(bar, foo)
+        )) {
+            FooBar proxy = CompositeProxy.create(FooBar.class, slices.toArray());
+
+            assertTrue(Set.of("foo", "bar").contains(proxy.getString()));
+        }
+    }
+
+    @Test
+    void testNotExtendingInterfaces() {
+
+        @FunctionalInterface
+        interface Foo {
+            String getString();
+        }
+
+        Foo foo = () -> { throw new AssertionError(); };
+
+        for (var slices : List.of(
+                List.of(new Object()),
+                List.of(new Object(), new Object()),
+                List.of(foo)
+        )) {
+            var ex = assertThrowsExactly(IllegalArgumentException.class, () -> {
+                CompositeProxy.create(Foo.class, slices.toArray());
+            });
+
+            assertEquals(
+                    String.format("Type %s is not extending interfaces", Foo.class.getName()),
+                    ex.getMessage());
+        }
+    }
+
+    @Test
+    void testWrongSlicesNumber() {
+
+        @FunctionalInterface
+        interface Foo {
+            String getString();
+        }
+
+        @FunctionalInterface
+        interface Bar {
+            String getString();
+        }
+
+        interface FooBar extends Foo, Bar {}
+
+        Foo foo = () -> { throw new AssertionError(); };
+
+        for (var slices : List.of(
+                List.of(foo),
+                List.of(foo, new Object(), new Object())
+        )) {
+            var ex = assertThrowsExactly(IllegalArgumentException.class, () -> {
+                CompositeProxy.create(FooBar.class, slices.toArray());
+            });
+
+            assertEquals(
+                    String.format("Expected 2 objects to implement %s interface", FooBar.class.getName()),
+                    ex.getMessage());
+        }
+    }
+
+    @Test
+    void testMissingImplementer() {
+
+        @FunctionalInterface
+        interface A {
+            String getString();
+        }
+
+        interface B {
+            String getString();
+        }
+
+        interface C {
+            String getString();
+        }
+
+        interface ABC extends A, B, C {}
+
+        A a = () -> { throw new AssertionError(); };
+
+        for (var slices : List.of(
+                List.of(new Object()),
+                List.of(a, new Object()),
+                List.of(a, new Object(), new Object()),
+                List.of(a, new Object(), new Object(), new Object())
+        )) {
+            var ex = assertThrowsExactly(IllegalArgumentException.class, () -> {
+                CompositeProxy.create(ABC.class, slices.toArray());
+            });
+
+            if (slices.size() == 3) {
+                var messages = Set.of(
+                        String.format("None of the slices implement %s", List.of(B.class, C.class)),
+                        String.format("None of the slices implement %s", List.of(C.class, B.class))
+                );
+                assertTrue(messages.contains(ex.getMessage()));
+            } else {
+                assertEquals(
+                        String.format("Expected 3 objects to implement %s interface", ABC.class.getName()),
+                        ex.getMessage());
+            }
+        }
+    }
+
+    @Test
+    void testAmbigousImplementers() {
+
+        @FunctionalInterface
+        interface A {
+            String getString();
+        }
+
+        @FunctionalInterface
+        interface B {
+            String getString();
+        }
+
+        @FunctionalInterface
+        interface AB extends A, B {}
+
+        AB ab = () -> "ab";
+        AB ab2 = () -> { throw new AssertionError(); };
+
+        var ex = assertThrowsExactly(IllegalArgumentException.class, () -> {
+            CompositeProxy.create(AB.class, ab, ab2);
+        });
+
+        var messages = Set.of(
+                String.format("Multiple slices %s implement %s", List.of(ab, ab2), A.class),
+                String.format("Multiple slices %s implement %s", List.of(ab2, ab), A.class),
+                String.format("Multiple slices %s implement %s", List.of(ab, ab2), B.class),
+                String.format("Multiple slices %s implement %s", List.of(ab2, ab), B.class)
+        );
+
+        assertTrue(messages.contains(ex.getMessage()));
+
+        var proxy = CompositeProxy.create(AB.class, ab, ab);
+
+        assertEquals("ab", proxy.getString());
+    }
+
+    @Test
+    void testJavadocExample() {
         interface Sailboat {
             default void trimSails() {}
         }

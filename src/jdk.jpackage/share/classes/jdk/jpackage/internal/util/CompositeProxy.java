@@ -330,11 +330,15 @@ public final class CompositeProxy {
         validateTypeIsInterface(interfaceType);
 
         final var interfaces = interfaceType.getInterfaces();
+        if (interfaces.length == 0) {
+            throw new IllegalArgumentException(String.format("Type %s is not extending interfaces", interfaceType.getName()));
+        }
+
         List.of(interfaces).forEach(CompositeProxy::validateTypeIsInterface);
 
         if (interfaces.length != slices.length) {
             throw new IllegalArgumentException(
-                    String.format("type %s must extend %d interfaces", interfaceType.getName(), slices.length));
+                    String.format("Expected %d objects to implement %s interface", interfaces.length, interfaceType.getName()));
         }
 
         final Map<Class<?>, Object> interfaceDispatch = createInterfaceDispatch(interfaces, slices, interfaceConflictResolver);
@@ -377,9 +381,9 @@ public final class CompositeProxy {
         Map<? extends Class<?>, List<Object>> createDispatchGroups() {
             return interfaces.stream().collect(toMap(x -> x, iface -> {
                 return slices.stream().filter(obj -> {
-                    return Stream.of(obj.getClass().getInterfaces()).flatMap(sliceIface -> {
-                        return unfoldInterface(sliceIface);
-                    }).anyMatch(Predicate.isEqual(iface));
+                    return Stream.of(obj.getClass().getInterfaces())
+                            .flatMap(CompositeProxy::unfoldInterface)
+                            .anyMatch(Predicate.isEqual(iface));
                 }).toList();
             }));
         }
@@ -397,14 +401,12 @@ public final class CompositeProxy {
                 return e.getValue().size() != 1;
             }).map(Map.Entry::getKey).collect(toSet());
 
-            var usedSliceIdentities = dispatch.values().stream()
-                    .map(IdentityWrapper::new)
-                    .collect(toSet());
+            var unusedSlices = SetBuilder.build(toIdentitySet(slices))
+                    .remove(toIdentitySet(dispatch.values()))
+                    .emptyAllowed(true)
+                    .create().stream().map(IdentityWrapper::value).toList();
 
-            var unusedSliceIdentities = new HashSet<>(toIdentitySet(slices));
-            unusedSliceIdentities.removeAll(usedSliceIdentities);
-
-            return new Result(dispatch, unservedInterfaces, unusedSliceIdentities.stream().map(IdentityWrapper::value).toList());
+            return new Result(dispatch, unservedInterfaces, unusedSlices);
         }
 
         private record Result(Map<? extends Class<?>, Object> dispatch, Set<? extends Class<?>> unservedInterfaces, Collection<Object> unusedSlices) {
@@ -432,13 +434,19 @@ public final class CompositeProxy {
     private static Map<Class<?>, Object> createInterfaceDispatch(
             Class<?>[] interfaces, Object[] slices, InterfaceConflictResolver interfaceConflictResolver) {
 
-        if (interfaces.length == 0) {
-            return Collections.emptyMap();
+        if (interfaces.length == 0 || slices.length == 0) {
+            throw new IllegalArgumentException();
         }
+
+        Objects.requireNonNull(interfaceConflictResolver);
 
         Map<Class<?>, Object> dispatch = new HashMap<>();
 
-        var builder = new InterfaceDispatchBuilder(Set.of(interfaces), List.of(slices));
+        var builder = new InterfaceDispatchBuilder(
+                Set.of(interfaces),
+                // Filter out duplicates.
+                Stream.of(slices).map(IdentityWrapper::wrapIdentity).distinct().map(IdentityWrapper::value).toList());
+
         for (;;) {
             var result = builder.createDispatch();
             if (result.dispatch().isEmpty()) {
@@ -448,7 +456,7 @@ public final class CompositeProxy {
                     var ifaceSlices = e.getValue();
                     if (ifaceSlices.size() > 1) {
                         throw new IllegalArgumentException(
-                                String.format("multiple slices %s implement %s", ifaceSlices, iface));
+                                String.format("Multiple slices %s implement %s", ifaceSlices, iface));
                     }
                 }
 
@@ -492,12 +500,12 @@ public final class CompositeProxy {
 
     private static IllegalArgumentException createInterfaceNotImplementedException(
             Collection<? extends Class<?>> missingInterfaces) {
-        return new IllegalArgumentException(String.format("none of the slices implement %s", missingInterfaces));
+        return new IllegalArgumentException(String.format("None of the slices implement %s", missingInterfaces));
     }
 
     private static void validateTypeIsInterface(Class<?> type) {
         if (!type.isInterface()) {
-            throw new IllegalArgumentException(String.format("type %s must be an interface", type.getName()));
+            throw new IllegalArgumentException(String.format("Type %s must be an interface", type.getName()));
         }
     }
 
@@ -529,7 +537,7 @@ public final class CompositeProxy {
                     return null;
                 }
             }).filter(Objects::nonNull).reduce(new ConflictResolverAdapter(conflictResolver)).orElseThrow(() -> {
-                return new IllegalArgumentException(String.format("none of the slices can handle %s", method));
+                return new IllegalArgumentException(String.format("None of the slices can handle %s", method));
             });
 
             return handler;
@@ -589,7 +597,7 @@ public final class CompositeProxy {
             return obj.getClass().getName() + '@' + Integer.toHexString(System.identityHashCode(obj));
         }
 
-        private static boolean objectEquals(Object obj, Object other) {
+        private static boolean objectIsSame(Object obj, Object other) {
             return obj == other;
         }
 
@@ -624,7 +632,7 @@ public final class CompositeProxy {
                 getMethod(Object.class, "toString"),
                 new ObjectMethodHandler(getMethod(CompositeProxyInvocationHandler.class, "objectToString", Object.class)),
                 getMethod(Object.class, "equals", Object.class),
-                new ObjectMethodHandler(getMethod(CompositeProxyInvocationHandler.class, "objectEquals", Object.class, Object.class)),
+                new ObjectMethodHandler(getMethod(CompositeProxyInvocationHandler.class, "objectIsSame", Object.class, Object.class)),
                 getMethod(Object.class, "hashCode"),
                 new ObjectMethodHandler(getMethod(System.class, "identityHashCode", Object.class))
         );
@@ -709,7 +717,7 @@ public final class CompositeProxy {
 
     private static final BinaryOperator<Method> STANDARD_CONFLICT_RESOLVER = (a, b) -> {
         if (a.isDefault() == b.isDefault()) {
-            throw new IllegalArgumentException(String.format("ambiguous choice between %s and %s", a, b));
+            throw new IllegalArgumentException(String.format("Ambiguous choice between %s and %s", a, b));
         } else if (!a.isDefault()) {
             return a;
         } else {
@@ -720,7 +728,7 @@ public final class CompositeProxy {
     private static final InterfaceConflictResolver STANDARD_INTERFACE_CONFLICT_RESOLVER = new InterfaceConflictResolver() {
         @Override
         public <T> T chooseImplementer(Class<T> iface, T a, T b) {
-            throw new IllegalArgumentException(String.format("ambiguous choice between %s and %s for implementing %s", a, b, iface));
+            throw new IllegalArgumentException(String.format("Ambiguous choice between %s and %s for implementing %s", a, b, iface));
         }
     };
 }
