@@ -749,6 +749,6 @@ class WixToolTest {
         }
     }
 
-    final static Path LOOKUP_IN_PATH = Path.of("");
+    static final Path LOOKUP_IN_PATH = Path.of("");
 }
 
