@@ -213,17 +213,14 @@ public final class WinShortcutVerifier {
         final var installDir = Path.of(installRoot.getMsiPropertyName()).resolve(getInstallationSubDirectory(cmd));
 
         final Function<StartupDirectory, Path> workDir = startupDirectory -> {
-            switch (startupDirectory) {
+            return switch (startupDirectory) {
                 case DEFAULT -> {
-                    return installDir;
+                    yield installDir;
                 }
                 case APP_DIR -> {
-                    return ApplicationLayout.windowsAppImage().resolveAt(installDir).appDirectory();
+                    yield ApplicationLayout.windowsAppImage().resolveAt(installDir).appDirectory();
                 }
-                default -> {
-                    throw new IllegalArgumentException();
-                }
-            }
+            };
         };
 
         if (winMenu.isPresent()) {

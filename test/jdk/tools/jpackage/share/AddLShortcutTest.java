@@ -458,9 +458,6 @@ public class AddLShortcutTest {
                 case DEFAULT -> {
                     cmd.addArgument(shortcut.optionName());
                 }
-                default -> {
-                    cmd.addArguments(shortcut.optionName(), value);
-                }
             }
         }
 
