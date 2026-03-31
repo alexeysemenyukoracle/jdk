@@ -65,7 +65,6 @@ import jdk.jpackage.internal.model.DottedVersion;
 import jdk.jpackage.internal.util.MacBundle;
 import jdk.jpackage.internal.util.Result;
 import jdk.jpackage.internal.util.RuntimeReleaseFile;
-import jdk.jpackage.internal.util.function.ExceptionBox;
 import jdk.jpackage.internal.util.function.ThrowingConsumer;
 import jdk.jpackage.internal.util.function.ThrowingFunction;
 import jdk.jpackage.internal.util.function.ThrowingRunnable;
@@ -495,8 +494,7 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
     public static Path createInputRuntimeImage(RuntimeImageType role) {
         Objects.requireNonNull(role);
 
-        final Path runtimeImageDir;
-        switch (role) {
+        return switch (role) {
 
             case RUNTIME_TYPE_FAKE -> {
                 Consumer<Path> createBulkFile = ThrowingConsumer.toConsumer(path -> {
@@ -508,7 +506,7 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
                     }
                 });
 
-                runtimeImageDir = TKit.createTempDirectory("fake_runtime");
+                var runtimeImageDir = TKit.createTempDirectory("fake_runtime");
 
                 TKit.trace(String.format("Init fake runtime in [%s] directory", runtimeImageDir));
 
@@ -521,10 +519,12 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
                 // Package bundles with 0KB size are unexpected and considered
                 // an error by PackageTest.
                 createBulkFile.accept(runtimeImageDir.resolve(Path.of("lib", "bulk")));
+
+                yield runtimeImageDir;
             }
 
             case RUNTIME_TYPE_HELLO_APP -> {
-                runtimeImageDir = DEFAULT_RUNTIME_IMAGE.filter(Predicate.not(JPackageCommand::isFakeRuntime)).orElseGet(() -> {
+                yield DEFAULT_RUNTIME_IMAGE.filter(Predicate.not(JPackageCommand::isFakeRuntime)).orElseGet(() -> {
                     var dir = TKit.createTempDirectory("runtime-image").resolve("data");
 
                     new Executor().setToolProvider(JavaTool.JLINK)
@@ -540,13 +540,7 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
                     return dir;
                 });
             }
-
-            default -> {
-                throw ExceptionBox.reachedUnreachable();
-            }
-        }
-
-        return runtimeImageDir;
+        };
     }
 
     public JPackageCommand setPackageType(PackageType type) {
@@ -2018,26 +2012,23 @@ public class JPackageCommand extends CommandArguments<JPackageCommand> {
         }
 
         Optional<ToolProvider> toolProvider() {
-            switch (mode) {
+            return switch (mode) {
                 case USE_PROCESS -> {
-                    return Optional.empty();
+                    yield Optional.empty();
                 }
                 case USE_TOOL_PROVIDER -> {
                     if (customToolProvider != null) {
-                        return Optional.of(customToolProvider);
+                        yield Optional.of(customToolProvider);
                     } else {
-                        return TKit.state().findProperty(DefaultToolProviderKey.VALUE).map(ToolProvider.class::cast).or(() -> {
+                        yield TKit.state().findProperty(DefaultToolProviderKey.VALUE).map(ToolProvider.class::cast).or(() -> {
                             return Optional.of(JavaTool.JPACKAGE.asToolProvider());
                         });
                     }
                 }
                 case INHERIT_DEFAULTS -> {
-                    return TKit.state().findProperty(DefaultToolProviderKey.VALUE).map(ToolProvider.class::cast);
+                    yield TKit.state().findProperty(DefaultToolProviderKey.VALUE).map(ToolProvider.class::cast);
                 }
-                default -> {
-                    throw ExceptionBox.reachedUnreachable();
-                }
-            }
+            };
         }
 
         ToolProviderSource() {
