@@ -38,7 +38,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.converter.ConvertWith;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import jdk.jpackage.internal.util.CompositeProxy.InterfaceConflictResolver;
 
 
 class CompositeProxyTest {
@@ -96,13 +95,9 @@ class CompositeProxyTest {
 
     @Test
     void testSmalltalk() {
-        var ex = assertThrowsExactly(IllegalArgumentException.class, () -> {
-            CompositeProxy.create(Smalltalk.class);
-        });
-
-        assertEquals(
-                String.format("Type %s is not extending interfaces", Smalltalk.class.getName()),
-                ex.getMessage());
+        var convo = CompositeProxy.create(Smalltalk.class);
+        assertEquals("Hello", convo.sayHello());
+        assertEquals("Bye", convo.sayBye());
     }
 
     @Test
@@ -365,15 +360,11 @@ class CompositeProxyTest {
             };
         }).toArray();
 
-        FooBar proxy = CompositeProxy.build().interfaceConflictResolver(new InterfaceConflictResolver() {
-            @SuppressWarnings("unchecked")
-            @Override
-            public <T> T chooseImplementer(Class<T> iface, T a, T b) {
-                if (iface.equals(Bar.class)) {
-                    return (T)bar;
-                } else {
-                    return (T)foo;
-                }
+        FooBar proxy = CompositeProxy.build().objectConflictResolver((method, a, b) -> {
+            if (method.getDeclaringClass().equals(Bar.class)) {
+                return bar;
+            } else {
+                return foo;
             }
         }).create(FooBar.class, slices);
 
@@ -493,7 +484,7 @@ class CompositeProxyTest {
         "'ab2,ab',false",
         "'ab2,ab',true",
     })
-    void testAmbigousImplementers(@ConvertWith(StringArrayConverter.class) String[] slicesSpec, boolean withInterfaceConflictResolver) {
+    void testAmbigousImplementers(@ConvertWith(StringArrayConverter.class) String[] slicesSpec, boolean withObjectConflictResolver) {
 
         @FunctionalInterface
         interface A {
@@ -523,17 +514,13 @@ class CompositeProxyTest {
             var proxy = CompositeProxy.create(AB.class, slices);
 
             assertEquals("ab", proxy.getString());
-        } else if (withInterfaceConflictResolver) {
-            var proxy  =CompositeProxy.build().interfaceConflictResolver(new InterfaceConflictResolver() {
-                @SuppressWarnings("unchecked")
-                @Override
-                public <T> T chooseImplementer(Class<T> iface, T a, T b) {
-                    if (iface.equals(A.class)) {
-                        return (T)ab;
+        } else if (withObjectConflictResolver) {
+            var proxy = CompositeProxy.build().objectConflictResolver((method, a, b) -> {
+                    if (method.getDeclaringClass().equals(A.class)) {
+                        return ab;
                     } else {
-                        return (T)ab2;
+                        return ab2;
                     }
-                }
             }).create(AB.class, slices);
 
             assertTrue(Set.of("ab2", "ab").contains(proxy.getString()));
