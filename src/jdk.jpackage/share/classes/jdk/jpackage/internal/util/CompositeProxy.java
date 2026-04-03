@@ -32,14 +32,16 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 /**
@@ -135,8 +137,8 @@ public final class CompositeProxy {
         public <T> T create(Class<T> interfaceType, Object... slices) {
             return CompositeProxy.createCompositeProxy(
                     interfaceType,
-                    Optional.ofNullable(methodConflictResolver).orElse(STANDARD_METHOD_CONFLICT_RESOLVER),
-                    Optional.ofNullable(objectConflictResolver).orElse(STANDARD_OBJECT_CONFLICT_RESOLVER),
+                    Optional.ofNullable(methodConflictResolver).orElse(JPACKAGE_METHOD_CONFLICT_RESOLVER),
+                    Optional.ofNullable(objectConflictResolver).orElse(JPACKAGE_OBJECT_CONFLICT_RESOLVER),
                     invokeTunnel,
                     slices);
         }
@@ -189,30 +191,29 @@ public final class CompositeProxy {
     }
 
     /**
-     * Method conflict resolver. Used when an instance of a class has several
-     * methods that are candidates to implement some method in an interface and the
-     * composite proxy needs to choose one of these methods.
+     * Method conflict resolver. Used when the composite proxy needs to decide if
+     * the default method of the interface it implements should be overridden by an
+     * implementing object.
      */
     @FunctionalInterface
     public interface MethodConflictResolver {
 
         /**
-         * Returns the method of {@code obj} that should be used in a composite proxy to
-         * implement an abstract {@code method}.
+         * Returns {@code true} if the composite proxy should override the default
+         * method {@code method} in {@code interfaceType} type with the corresponding
+         * method form the {@code obj}.
          *
          * @param interfaceType the interface type composite proxy instance should
          *                      implement
-         * @param method        an abstract method composite proxy needs to implement
-         * @param obj           object
-         * @param candidates    methods from the class of the {@code obj} object with
-         *                      the same signature (the name, return and parameter
-         *                      types) as the {@code method}; the array is unordered and
-         *                      doesn't contain duplicates
-         * @return either one of items from the {@code candidates} or {@code method} if
-         *         the {@code method} is the default method and it should not be
-         *         overridden, or {@code null} if can't choose one
+         * @param slices        all objects passed to the calling composite proxy. The
+         *                      value is a copy of the last parameter passed in the
+         *                      {@link Builder#create(Class, Object...)}
+         * @param method        default method in {@code interfaceType} type
+         * @param obj           object providing a usable method with the same signature
+         *                      (the name and parameter types) as the signature of the
+         *                      {@code method} method
          */
-        Method choose(Class<?> interfaceType, Method method, Object obj, Method[] candidates);
+        boolean isOverrideDefault(Class<?> interfaceType, Object[] slices, Method method, Object obj);
     }
 
     /**
@@ -229,15 +230,19 @@ public final class CompositeProxy {
          *
          * @param interfaceType the interface type composite proxy instance should
          *                      implement
+         * @param slices        all objects passed to the calling composite proxy. The
+         *                      value is a copy of the last parameter passed in the
+         *                      {@link Builder#create(Class, Object...)}
          * @param method        abstract method
-         * @param candidates    objects with a method with the same signature (the name,
-         *                      return and parameter types) as the signature of the
-         *                      {@code method} method; the array is unordered and
-         *                      doesn't contain duplicates
+         * @param candidates    objects with a method with the same signature (the name
+         *                      and parameter types) as the signature of the
+         *                      {@code method} method. The array is unordered, doesn't
+         *                      contain duplicates, and is a subset of the
+         *                      {@code slices} array
          * @return either one of items from the {@code candidates} or {@code null} if
          *         can't choose one
          */
-        Object choose(Class<?> interfaceType, Method method, Object[] candidates);
+        Object choose(Class<?> interfaceType, Object[] slices, Method method, Object[] candidates);
     }
 
     /**
@@ -352,18 +357,24 @@ public final class CompositeProxy {
         final var unreferencedSlicesBuilder = SetBuilder.build(uniqueSlices).emptyAllowed(true);
 
         final Map<Method, Handler> methodDispatch = getProxyableMethods(interfaceType).map(method -> {
-            return Map.entry(method, uniqueSlices.stream().map(slice -> {
-                return Map.entry(slice, getImplementerMethods(slice.value()).filter(sliceMethod -> {
+            return Map.entry(method, uniqueSlices.stream().flatMap(slice -> {
+                var sliceMethods = getImplementerMethods(slice.value()).filter(sliceMethod -> {
                     return signatureEquals(sliceMethod, method);
-                }).toList());
-            }).filter(e -> {
-                return !e.getValue().isEmpty();
+                }).toList();
+
+                if (sliceMethods.size() > 1) {
+                    throw new AssertionError();
+                }
+
+                return sliceMethods.stream().findFirst().map(sliceMethod -> {
+                    return Map.entry(slice, sliceMethod);
+                }).stream();
             }).toList());
         }).flatMap(e -> {
             final Method method = e.getKey();
-            final List<Map.Entry<IdentityWrapper<Object>, List<Method>>> slicesWithMethods = e.getValue();
+            final List<Map.Entry<IdentityWrapper<Object>, Method>> slicesWithMethods = e.getValue();
 
-            final Map.Entry<IdentityWrapper<Object>, List<Method>> sliceWithMethods;
+            final Map.Entry<IdentityWrapper<Object>, Method> sliceWithMethods;
             switch (slicesWithMethods.size()) {
                 case 0 -> {
                     if (!method.isDefault()) {
@@ -382,7 +393,8 @@ public final class CompositeProxy {
                         return sliceEntry.getKey().value();
                     }).toList();
 
-                    var candidate = objectConflictResolver.choose(interfaceType, method, candidates.toArray());
+                    var candidate = objectConflictResolver.choose(
+                            interfaceType, Arrays.copyOf(slices, slices.length), method, candidates.toArray());
                     if (candidate == null) {
                         throw new IllegalArgumentException(String.format(
                                 "Ambiguous choice between %s for %s", candidates, method));
@@ -401,35 +413,14 @@ public final class CompositeProxy {
             }
 
             final var slice = sliceWithMethods.getKey().value();
-            final var sliceMethods = sliceWithMethods.getValue();
+            final var sliceMethod = sliceWithMethods.getValue();
             final Handler handler;
-            if (sliceMethods.size() == 1 && !method.isDefault()) {
+            if (!method.isDefault() || methodConflictResolver.isOverrideDefault(
+                    interfaceType, Arrays.copyOf(slices, slices.length), method, slice)) {
                 unreferencedSlicesBuilder.remove(sliceWithMethods.getKey());
-                handler = createHandlerForMethod(slice, sliceMethods.getFirst(), invokeTunnel);
+                handler = createHandlerForMethod(slice, sliceMethod, invokeTunnel);
             } else {
-                var candidate = Optional.ofNullable(methodConflictResolver.choose(
-                        interfaceType,
-                        method,
-                        slice,
-                        sliceMethods.toArray(Method[]::new)
-                )).orElseGet(() -> {
-                    if (sliceMethods.size() == 1) {
-                        return method;
-                    } else {
-                        return null;
-                    }
-                });
-                if (candidate == null) {
-                    throw new IllegalArgumentException(String.format(
-                            "Ambiguous choice between %s in %s", sliceMethods, slice));
-                } else if (candidate == method && method.isDefault()) {
-                    handler = createHandlerForDefaultMethod(candidate, invokeTunnel);
-                } else if (sliceMethods.contains(candidate)) {
-                    unreferencedSlicesBuilder.remove(sliceWithMethods.getKey());
-                    handler = createHandlerForMethod(slice, candidate, invokeTunnel);
-                } else {
-                    throw new UnsupportedOperationException();
-                }
+                handler = createHandlerForDefaultMethod(method, invokeTunnel);
             }
 
             return Optional.ofNullable(handler).map(h -> {
@@ -546,14 +537,6 @@ public final class CompositeProxy {
             return obj == other;
         }
 
-        private static Method getMethod(Class<?> type, String methodName, Class<?>...paramaterTypes) {
-            try {
-                return type.getDeclaredMethod(methodName, paramaterTypes);
-            } catch (NoSuchMethodException|SecurityException ex) {
-                throw new InternalError(ex);
-            }
-        }
-
         private record ObjectMethodHandler(Method method) implements Handler {
 
             ObjectMethodHandler {
@@ -573,14 +556,24 @@ public final class CompositeProxy {
             }
         }
 
-        private static final Map<Method, Handler> OBJECT_METHOD_DISPATCH = Map.of(
-                getMethod(Object.class, "toString"),
-                new ObjectMethodHandler(getMethod(CompositeProxyInvocationHandler.class, "objectToString", Object.class)),
-                getMethod(Object.class, "equals", Object.class),
-                new ObjectMethodHandler(getMethod(CompositeProxyInvocationHandler.class, "objectIsSame", Object.class, Object.class)),
-                getMethod(Object.class, "hashCode"),
-                new ObjectMethodHandler(getMethod(System.class, "identityHashCode", Object.class))
-        );
+        private static final Map<Method, Handler> OBJECT_METHOD_DISPATCH;
+
+        static {
+            try {
+                OBJECT_METHOD_DISPATCH = Map.of(
+                        Object.class.getMethod("toString"),
+                        new ObjectMethodHandler(CompositeProxyInvocationHandler.class.getDeclaredMethod("objectToString", Object.class)),
+
+                        Object.class.getMethod("equals", Object.class),
+                        new ObjectMethodHandler(CompositeProxyInvocationHandler.class.getDeclaredMethod("objectIsSame", Object.class, Object.class)),
+
+                        Object.class.getMethod("hashCode"),
+                        new ObjectMethodHandler(System.class.getMethod("identityHashCode", Object.class))
+                );
+            } catch (NoSuchMethodException | SecurityException ex) {
+                throw new InternalError(ex);
+            }
+        }
     }
 
     private static Handler createHandlerForDefaultMethod(Method method, InvokeTunnel invokeTunnel) {
@@ -614,74 +607,109 @@ public final class CompositeProxy {
         Object invoke(Object proxy, Object[] args) throws Throwable;
     }
 
-    private record MethodSignature(String name, Class<?> returnType, List<Class<?>> parameterTypes) {
+    private record MethodSignature(String name, List<Class<?>> parameterTypes) {
         MethodSignature {
             Objects.requireNonNull(name);
-            Objects.requireNonNull(returnType);
             parameterTypes.forEach(Objects::requireNonNull);
         }
 
         MethodSignature(Method m) {
-            this(m.getName(), m.getReturnType(), List.of(m.getParameterTypes()));
+            this(m.getName(), List.of(m.getParameterTypes()));
         }
     }
 
+    /**
+     * Returns the standard jpackage configuration if the values of
+     * {@code interfaceType} and {@code slices} parameters comprise such or an empty
+     * {@code Optional} otherwise.
+     * <p>
+     * Standard jpackage configuration is:
+     * <ul>
+     * <li>The proxy implements an interface comprised of two direct
+     * superinterfaces.
+     * <li>The superinterfaces are distinct, i.e. they are not superinterfaces of
+     * each other.
+     * <li>Each supplied slice implements one of the superinterfaces.
+     * </ul>
+     *
+     * @param interfaceType the interface type composite proxy instance should
+     *                      implement
+     * @param slices        all objects passed to the calling composite proxy. The
+     *                      value is a copy of the last parameter passed in the
+     *                      {@link Builder#create(Class, Object...)}
+     */
+    static Optional<Map<IdentityWrapper<Object>, Class<?>>> detectJPackageConfiguration(Class<?> interfaceType, Object... slices) {
+        var interfaces = interfaceType.getInterfaces();
 
-    private static int comparePriorityInConflictResolution(Method a, Method b) {
-        Objects.requireNonNull(a);
-        Objects.requireNonNull(b);
-
-        if (Objects.equals(a, b)) {
-            return 0;
+        if (interfaces.length != 2) {
+            return Optional.empty();
         }
 
-        var ac = a.getDeclaringClass();
-        var bc = b.getDeclaringClass();
-        if (Objects.equals(ac, bc)) {
-            if (a.isDefault() && !b.isDefault()) {
-                return -1;
-            } else if (!a.isDefault() && b.isDefault()) {
-                return 1;
+        if (interfaces[0].isAssignableFrom(interfaces[1]) || interfaces[1].isAssignableFrom(interfaces[0])) {
+            return Optional.empty();
+        }
+
+        var uniqueSlices = Stream.of(slices).map(IdentityWrapper::new).distinct().toList();
+        if (uniqueSlices.size() != interfaces.length) {
+            return Optional.empty();
+        }
+
+        Map<Class<?>, List<IdentityWrapper<Object>>> dispatch = Stream.of(interfaces).collect(toMap(x -> x, iface -> {
+            return uniqueSlices.stream().filter(slice -> {
+                return iface.isInstance(slice.value());
+            }).toList();
+        }));
+
+        return dispatch.values().stream().filter(v -> {
+            return v.size() == 1;
+        }).findFirst().map(anambiguous -> {
+            return dispatch.entrySet().stream().collect(toMap(e -> {
+                var ifaceSlices = e.getValue();
+                if (ifaceSlices.size() == 1) {
+                    return ifaceSlices.getFirst();
+                } else {
+                    return ifaceSlices.stream().filter(Predicate.isEqual(anambiguous).negate()).findFirst().orElseThrow();
+                }
+            }, Map.Entry::getKey));
+        });
+    }
+
+    // jpackage-specific object conflict resolver
+    private static final ObjectConflictResolver JPACKAGE_OBJECT_CONFLICT_RESOLVER = (interfaceType, slices, method, candidates) -> {
+        return detectJPackageConfiguration(interfaceType, slices).map(dispatch -> {
+            // In this configuration, if one slice contains matching default method and
+            // another contains matching implemented method,
+            // the latter slice is selected as a supplier of this method for the composite proxy.
+
+            var nonDefaultImplementations = new BitSet(candidates.length);
+            for (int i = 0; i != candidates.length; i++) {
+                var slice = candidates[i];
+
+                var limitSignatures = getProxyableMethods(dispatch.get(IdentityWrapper.wrapIdentity(slice)))
+                        .map(MethodSignature::new)
+                        .toList();
+
+                if (getImplementerMethods(slice).filter(sliceMethod -> {
+                    return limitSignatures.contains(new MethodSignature(sliceMethod));
+                }).filter(sliceMethod -> {
+                    return signatureEquals(sliceMethod, method);
+                }).findFirst().map(m -> {
+                    return !m.isDefault();
+                }).orElse(false)) {
+                    nonDefaultImplementations.set(i);
+                }
             }
-        } else if (ac.isAssignableFrom(bc)) {
-            return -1;
-        } else if (bc.isAssignableFrom(ac)) {
-            return 1;
-        }
 
-        throw new IllegalArgumentException();
-    }
-
-    private static final ObjectConflictResolver STANDARD_OBJECT_CONFLICT_RESOLVER = (_, _, _) -> {
-        return null;
+            if (nonDefaultImplementations.cardinality() == 1) {
+                return candidates[nonDefaultImplementations.nextSetBit(0)];
+            } else {
+                return null;
+            }
+        }).orElse(null);
     };
 
-    private static final MethodConflictResolver STANDARD_METHOD_CONFLICT_RESOLVER = (_, method, obj, candidates) -> {
-        if (!method.isDefault()) {
-            return null;
-        } else if (Stream.of(candidates).noneMatch(Predicate.isEqual(method))) {
-            return method;
-        } else {
-            Comparator<Method> c = CompositeProxy::comparePriorityInConflictResolution;
-            candidates = Stream.of(candidates)
-                    .filter(Predicate.isEqual(method).negate())
-                    .sorted(c.reversed()).limit(2)
-                    .toArray(Method[]::new);
-            return switch (candidates.length) {
-                case 0 -> {
-                    yield method;
-                }
-                case 1 -> {
-                    yield candidates[0];
-                }
-                default -> {
-                    if (c.compare(candidates[0], candidates[1]) == 0) {
-                        yield null;
-                    } else {
-                        yield candidates[0];
-                    }
-                }
-            };
-        }
+    // jpackage-specific method conflict resolver
+    private static final MethodConflictResolver JPACKAGE_METHOD_CONFLICT_RESOLVER = (interfaceType, slices, method, obj) -> {
+        return detectJPackageConfiguration(interfaceType, slices).isPresent();
     };
 }

@@ -22,17 +22,21 @@
  */
 package jdk.jpackage.internal.util;
 
-import static jdk.jpackage.internal.util.function.ExceptionBox.toUnchecked;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.function.Function;
 import java.util.stream.Stream;
+import jdk.jpackage.internal.util.CompositeProxy.InvokeTunnel;
 import jdk.jpackage.test.JUnitUtils.StringArrayConverter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -105,7 +109,7 @@ class CompositeProxyTest {
     void testConvo() {
         final var otherThings = "How is your day?";
         var convo = CompositeProxy.create(Convo.class,
-                new Smalltalk() {}, new ConvoMixin.Stub(otherThings));
+                new ConvoMixin.Stub(otherThings));
         assertEquals("Hello", convo.sayHello());
         assertEquals("Bye", convo.sayBye());
         assertEquals(otherThings, convo.sayThings());
@@ -152,7 +156,7 @@ class CompositeProxyTest {
     void testConvoWithCustomSayHelloAndSayBye() {
         var mixin = new ConvoMixinWithOverrideSayBye.Stub("How is your day?", "See you");
 
-        var convo = CompositeProxy.create(ConvoWithDefaultSayHelloWithOverrideSayBye.class, new Smalltalk() {}, mixin);
+        var convo = CompositeProxy.create(ConvoWithDefaultSayHelloWithOverrideSayBye.class, mixin);
 
         var expectedConvo = new ConvoWithDefaultSayHelloWithOverrideSayBye() {
             @Override
@@ -307,7 +311,7 @@ class CompositeProxyTest {
             }
         };
 
-        var proxy = CompositeProxy.build().create(AB.class, foo);
+        var proxy = CompositeProxy.create(AB.class, foo);
         assertEquals("foo", proxy.getString());
     }
 
@@ -332,7 +336,7 @@ class CompositeProxyTest {
             }
         };
 
-        var proxy = CompositeProxy.build().create(AB.class, foo);
+        var proxy = CompositeProxy.create(AB.class, foo);
         assertEquals("foo", proxy.getString());
     }
 
@@ -349,7 +353,7 @@ class CompositeProxyTest {
 
         interface AB extends A, B {
             default String getString() {
-                return "AB";
+                throw new AssertionError();
             }
         }
 
@@ -360,7 +364,7 @@ class CompositeProxyTest {
         };
 
         var ex = assertThrowsExactly(IllegalArgumentException.class, () -> {
-            CompositeProxy.build().create(AB.class, foo);
+            CompositeProxy.create(AB.class, foo);
         });
 
         assertEquals(String.format("Unreferenced slices: %s", List.of(foo)), ex.getMessage());
@@ -383,8 +387,37 @@ class CompositeProxyTest {
             }
         }
 
-        var proxy = CompositeProxy.build().create(AB.class);
+        var proxy = CompositeProxy.create(AB.class);
         assertEquals("AB", proxy.getString());
+    }
+
+    @Test
+    void testAutoMethodConflictResolver4_1() {
+
+        interface A {
+            String foo();
+            String bar();
+        }
+
+        interface B {
+            String foo();
+            String bar();
+        }
+
+        interface AB extends A, B {
+            default String foo() {
+                return "AB.foo";
+            }
+        }
+
+        var proxy = CompositeProxy.create(AB.class, new AB() {
+            @Override
+            public String bar() {
+                return "Obj.bar";
+            }
+        });
+        assertEquals("AB.foo", proxy.foo());
+        assertEquals("Obj.bar", proxy.bar());
     }
 
     @Test
@@ -410,7 +443,7 @@ class CompositeProxyTest {
             }
         };
 
-        var proxy = CompositeProxy.build().create(AB.class, foo);
+        var proxy = CompositeProxy.create(AB.class, foo);
         assertEquals("foo", proxy.getString());
     }
 
@@ -433,7 +466,7 @@ class CompositeProxyTest {
             }
         }
 
-        var proxy = CompositeProxy.build().create(AB.class);
+        var proxy = CompositeProxy.create(AB.class);
         assertEquals("A!", proxy.getString());
     }
 
@@ -456,7 +489,7 @@ class CompositeProxyTest {
             }
         }
 
-        var proxy = CompositeProxy.build().create(AB.class);
+        var proxy = CompositeProxy.create(AB.class);
         assertEquals("B!", proxy.getString());
     }
 
@@ -484,16 +517,12 @@ class CompositeProxyTest {
                 }
             };
 
-            var proxy = CompositeProxy.build().methodConflictResolver((_, method, _, _) -> {
-                try {
-                    return foo.getClass().getMethod("getString");
-                } catch (Exception ex) {
-                    throw toUnchecked(ex);
-                }
+            var proxy = CompositeProxy.build().methodConflictResolver((_, _, _, _) -> {
+                return true;
             }).create(AB.class, foo);
             assertEquals("foo", proxy.getString());
         } else {
-            var proxy = CompositeProxy.build().create(AB.class);
+            var proxy = CompositeProxy.create(AB.class);
             assertEquals("B", proxy.getString());
         }
     }
@@ -507,7 +536,7 @@ class CompositeProxyTest {
 
         interface B extends A {
             default String getString() {
-                return "B";
+                throw new AssertionError();
             }
         }
 
@@ -521,7 +550,7 @@ class CompositeProxyTest {
             String getString();
         }
 
-        var ab = CompositeProxy.build().create(AB.class, foo);
+        var ab = CompositeProxy.create(AB.class, foo);
         assertEquals("foo", ab.getString());
     }
 
@@ -551,10 +580,10 @@ class CompositeProxyTest {
                 }
             };
 
-            var proxy = CompositeProxy.build().create(AB.class, foo);
+            var proxy = CompositeProxy.create(AB.class, foo);
             assertEquals("B!", proxy.getString());
         } else {
-            var proxy = CompositeProxy.build().create(AB.class, new B() {});
+            var proxy = CompositeProxy.create(AB.class, new B() {});
             assertEquals("B", proxy.getString());
         }
     }
@@ -592,52 +621,129 @@ class CompositeProxyTest {
     }
 
     @ParameterizedTest
-    @ValueSource( strings = {
-        "foo,bar",
-        "bar,foo",
-    })
-    void testObjectConflictResolver(@ConvertWith(StringArrayConverter.class) String[] slicesSpec) {
+    @ValueSource(booleans = {true, false})
+    void testAutoMethodConflictResolver12(boolean override) {
 
-        interface Foo {
+        interface A {
             String getString();
         }
 
-        interface Bar {
-            String getString();
-        }
-
-        interface FooBar extends Foo, Bar {}
-
-        record FooBarImpl(String getString) implements Foo, Bar {}
-
-        record BarImpl(String getString) implements Bar {}
-
-        var foo = new FooBarImpl("foo");
-        var bar = new BarImpl("bar");
-
-        var slices = Stream.of(slicesSpec).map(slice -> {
-            return switch (slice) {
-                case "foo" -> foo;
-                case "bar" -> bar;
-                default -> { throw new AssertionError(); }
-            };
-        }).toArray();
-
-        FooBar proxy = CompositeProxy.build().objectConflictResolver((_, method, _) -> {
-            if (method.getDeclaringClass().equals(Bar.class)) {
-                return bar;
-            } else {
-                return foo;
+        interface B {
+            default String getString() {
+                return "foo";
             }
-        }).create(FooBar.class, slices);
+        }
 
-        assertTrue(Set.of("foo", "bar").contains(proxy.getString()));
+        if (override) {
+            class BImpl implements B {
+                @Override
+                public String getString() {
+                    return "bar";
+                }
+            }
+
+            var proxy = CompositeProxy.create(A.class, new BImpl() {});
+            assertEquals("bar", proxy.getString());
+        } else {
+            class BImpl implements B {
+            }
+
+            var proxy = CompositeProxy.create(A.class, new BImpl() {});
+            assertEquals("foo", proxy.getString());
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "a,b",
+        "b,a",
+    })
+    void testObjectConflictResolver(String fooResolve, String barResolve) {
+
+        interface I {
+            String foo();
+            String bar();
+        }
+
+        var a = new I() {
+            @Override
+            public String foo() {
+                return "a-foo";
+            }
+
+            @Override
+            public String bar() {
+                return "a-bar";
+            }
+        };
+
+        var b = new Object() {
+            public String foo() {
+                return "b-foo";
+            }
+
+            public String bar() {
+                return "b-bar";
+            }
+        };
+
+        Function<String, Object> resolver = tag -> {
+            return switch (tag) {
+                case "a" -> a;
+                case "b" -> b;
+                default -> {
+                    throw new AssertionError();
+                }
+            };
+        };
+
+        var proxy = CompositeProxy.build().objectConflictResolver((_, _, method, _) -> {
+            return switch (method.getName()) {
+                case "foo" -> resolver.apply(fooResolve);
+                case "bar" -> resolver.apply(barResolve);
+                default -> {
+                    throw new AssertionError();
+                }
+            };
+        }).create(I.class, a, b);
+
+        assertEquals(fooResolve + "-foo", proxy.foo());
+        assertEquals(barResolve + "-bar", proxy.bar());
+    }
+
+    @Test
+    void testObjectConflictResolverInvalid() {
+
+        interface I {
+            String foo();
+        }
+
+        var a = new I() {
+            @Override
+            public String foo() {
+                throw new AssertionError();
+            }
+        };
+
+        var b = new Object() {
+            public String foo() {
+                throw new AssertionError();
+            }
+        };
+
+        assertThrowsExactly(UnsupportedOperationException.class, () -> {
+            CompositeProxy.build().objectConflictResolver((_, _, _, _) -> {
+                return new Object();
+            }).create(I.class, a, b);
+        });
     }
 
     @ParameterizedTest
     @ValueSource( strings = {
         "no-foo",
         "private-foo",
+        "protected-foo",
+        "package-foo",
         "static-foo",
         "static-foo,private-foo,no-foo",
     })
@@ -651,11 +757,23 @@ class CompositeProxyTest {
             return switch (slice) {
                 case "no-foo" -> new Object();
                 case "private-foo" -> new Object() {
+                    private void foo() {
+                        throw new AssertionError();
+                    }
+                };
+                case "protected-foo" -> new Object() {
+                    protected void foo() {
+                        throw new AssertionError();
+                    }
+                };
+                case "package-foo" -> new Object() {
                     void foo() {
+                        throw new AssertionError();
                     }
                 };
                 case "static-foo" -> new Object() {
                     public static void foo() {
+                        throw new AssertionError();
                     }
                 };
                 default -> { throw new AssertionError(); }
@@ -750,7 +868,7 @@ class CompositeProxyTest {
         }).toArray();
 
         if (withObjectConflictResolver) {
-            var proxy = CompositeProxy.build().objectConflictResolver((_, _, _) -> {
+            var proxy = CompositeProxy.build().objectConflictResolver((_, _, _, _) -> {
                 return b;
             }).create(A.class, slices);
 
@@ -770,6 +888,38 @@ class CompositeProxyTest {
         }
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void testDiferentReturnTypes(boolean compatible) {
+
+        interface A {
+            Number foo();
+        }
+
+        Object obj;
+        if (compatible) {
+            obj = new Object() {
+                public Integer foo() {
+                    return 123;
+                }
+            };
+        } else {
+            obj = new Object() {
+                public String foo() {
+                    return "123";
+                }
+            };
+        }
+
+        var proxy = CompositeProxy.create(A.class, obj);
+
+        if (compatible) {
+            assertEquals(123, proxy.foo());
+        } else {
+            assertThrows(ClassCastException.class, proxy::foo);
+        }
+    }
+
     @Test
     void testNotInterface() {
         var ex = assertThrowsExactly(IllegalArgumentException.class, () -> {
@@ -777,6 +927,87 @@ class CompositeProxyTest {
         });
 
         assertEquals(String.format("Type %s must be an interface", Integer.class.getName()), ex.getMessage());
+    }
+
+    @Test
+    void testExcessiveInterfaces() {
+
+        interface Launcher {
+            String name();
+
+            record Stub(String name) implements Launcher {
+            }
+        }
+
+        interface WinLauncherMixin {
+            String version();
+
+            record Stub(String version) implements WinLauncherMixin {
+            }
+        }
+
+        interface WinLauncher extends Launcher, WinLauncherMixin {
+        }
+
+        var winLauncher = CompositeProxy.create(WinLauncher.class, new Launcher.Stub("foo"), new WinLauncherMixin.Stub("1.0"));
+
+        var winLauncher2 = CompositeProxy.create(WinLauncher.class, new Launcher.Stub("bar"), winLauncher);
+
+        assertEquals("foo", winLauncher.name());
+        assertEquals("1.0", winLauncher.version());
+
+        assertEquals("bar", winLauncher2.name());
+        assertEquals("1.0", winLauncher2.version());
+    }
+
+    @Test
+    void testInvokeTunnel() {
+
+        interface A {
+            default String foo() {
+                return "foo";
+            }
+            String bar();
+        }
+
+        var obj = new Object() {
+            public String bar() {
+                return "bar";
+            }
+        };
+
+        Slot<Boolean> invokeCalled = Slot.createEmpty();
+        invokeCalled.set(false);
+
+        Slot<Boolean> invokeDefaultCalled = Slot.createEmpty();
+        invokeDefaultCalled.set(false);
+
+        var proxy = CompositeProxy.build().invokeTunnel(new InvokeTunnel() {
+
+            @Override
+            public Object invoke(Object obj, Method method, Object[] args) throws Throwable {
+                invokeCalled.set(true);
+                return method.invoke(obj, args);
+            }
+
+            @Override
+            public Object invokeDefault(Object proxy, Method method, Object[] args) throws Throwable {
+                invokeDefaultCalled.set(true);
+                return InvocationHandler.invokeDefault(proxy, method, args);
+            }
+
+        }).create(A.class, obj);
+
+        assertFalse(invokeCalled.get());
+        assertFalse(invokeDefaultCalled.get());
+        assertEquals("foo", proxy.foo());
+        assertFalse(invokeCalled.get());
+        assertTrue(invokeDefaultCalled.get());
+
+        invokeDefaultCalled.set(false);
+        assertEquals("bar", proxy.bar());
+        assertTrue(invokeCalled.get());
+        assertFalse(invokeDefaultCalled.get());
     }
 
     @Test
