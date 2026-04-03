@@ -22,6 +22,7 @@
  */
 package jdk.jpackage.internal.util;
 
+import static jdk.jpackage.internal.util.function.ExceptionBox.toUnchecked;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -286,9 +287,8 @@ class CompositeProxyTest {
         assertTrue(proxy2.equals(proxy2));
     }
 
-    @ParameterizedTest
-    @ValueSource(booleans = {true, false})
-    void testSimpleConflictResolver(boolean withOverride) {
+    @Test
+    void testAutoMethodConflictResolver() {
 
         interface A {
             String getString();
@@ -300,32 +300,295 @@ class CompositeProxyTest {
 
         interface AB extends A, B {
         }
-        interface ABWithOverride extends A, B {
+
+        var foo = new Object() {
+            public String getString() {
+                return "foo";
+            }
+        };
+
+        var proxy = CompositeProxy.build().create(AB.class, foo);
+        assertEquals("foo", proxy.getString());
+    }
+
+    @Test
+    void testAutoMethodConflictResolver2() {
+
+        interface A {
+            String getString();
+        }
+
+        interface B {
+            String getString();
+        }
+
+        interface AB extends A, B {
+            String getString();
+        }
+
+        var foo = new Object() {
+            public String getString() {
+                return "foo";
+            }
+        };
+
+        var proxy = CompositeProxy.build().create(AB.class, foo);
+        assertEquals("foo", proxy.getString());
+    }
+
+    @Test
+    void testAutoMethodConflictResolver3() {
+
+        interface A {
+            String getString();
+        }
+
+        interface B {
+            String getString();
+        }
+
+        interface AB extends A, B {
+            default String getString() {
+                return "AB";
+            }
+        }
+
+        var foo = new Object() {
+            public String getString() {
+                throw new AssertionError();
+            }
+        };
+
+        var ex = assertThrowsExactly(IllegalArgumentException.class, () -> {
+            CompositeProxy.build().create(AB.class, foo);
+        });
+
+        assertEquals(String.format("Unreferenced slices: %s", List.of(foo)), ex.getMessage());
+    }
+
+    @Test
+    void testAutoMethodConflictResolver4() {
+
+        interface A {
+            String getString();
+        }
+
+        interface B {
+            String getString();
+        }
+
+        interface AB extends A, B {
+            default String getString() {
+                return "AB";
+            }
+        }
+
+        var proxy = CompositeProxy.build().create(AB.class);
+        assertEquals("AB", proxy.getString());
+    }
+
+    @Test
+    void testAutoMethodConflictResolver5() {
+
+        interface A {
+            default String getString() {
+                throw new AssertionError();
+            }
+        }
+
+        interface B {
+            String getString();
+        }
+
+        interface AB extends A, B {
+            String getString();
+        }
+
+        var foo = new Object() {
+            public String getString() {
+                return "foo";
+            }
+        };
+
+        var proxy = CompositeProxy.build().create(AB.class, foo);
+        assertEquals("foo", proxy.getString());
+    }
+
+    @Test
+    void testAutoMethodConflictResolver6() {
+
+        interface A {
+            default String getString() {
+                return "A";
+            }
+        }
+
+        interface B {
+            String getString();
+        }
+
+        interface AB extends A, B {
+            default String getString() {
+                return A.super.getString() + "!";
+            }
+        }
+
+        var proxy = CompositeProxy.build().create(AB.class);
+        assertEquals("A!", proxy.getString());
+    }
+
+    @Test
+    void testAutoMethodConflictResolver7() {
+
+        interface A {
+            String getString();
+        }
+
+        interface B extends A {
+            default String getString() {
+                return "B";
+            }
+        }
+
+        interface AB extends A, B {
+            default String getString() {
+                return B.super.getString() + "!";
+            }
+        }
+
+        var proxy = CompositeProxy.build().create(AB.class);
+        assertEquals("B!", proxy.getString());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void testAutoMethodConflictResolver8(boolean override) {
+
+        interface A {
+            String getString();
+        }
+
+        interface B extends A {
+            default String getString() {
+                return "B";
+            }
+        }
+
+        interface AB extends A, B {
+        }
+
+        if (override) {
+            var foo = new Object() {
+                public String getString() {
+                    return "foo";
+                }
+            };
+
+            var proxy = CompositeProxy.build().methodConflictResolver((_, method, _, _) -> {
+                try {
+                    return foo.getClass().getMethod("getString");
+                } catch (Exception ex) {
+                    throw toUnchecked(ex);
+                }
+            }).create(AB.class, foo);
+            assertEquals("foo", proxy.getString());
+        } else {
+            var proxy = CompositeProxy.build().create(AB.class);
+            assertEquals("B", proxy.getString());
+        }
+    }
+
+    @Test
+    void testAutoMethodConflictResolver9() {
+
+        interface A {
+            String getString();
+        }
+
+        interface B extends A {
+            default String getString() {
+                return "B";
+            }
+        }
+
+        var foo = new Object() {
+            public String getString() {
+                return "foo";
+            }
+        };
+
+        interface AB extends A, B {
+            String getString();
+        }
+
+        var ab = CompositeProxy.build().create(AB.class, foo);
+        assertEquals("foo", ab.getString());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void testAutoMethodConflictResolver10(boolean override) {
+
+        interface A {
+            String getString();
+        }
+
+        interface B extends A {
+            default String getString() {
+                return "B";
+            }
+        }
+
+        interface AB extends A, B {
+            String getString();
+        }
+
+        if (override) {
+            var foo = new B() {
+                @Override
+                public String getString() {
+                    return B.super.getString() + "!";
+                }
+            };
+
+            var proxy = CompositeProxy.build().create(AB.class, foo);
+            assertEquals("B!", proxy.getString());
+        } else {
+            var proxy = CompositeProxy.build().create(AB.class, new B() {});
+            assertEquals("B", proxy.getString());
+        }
+    }
+
+    @Test
+    void testAutoMethodConflictResolver11() {
+
+        interface A {
             String getString();
         }
 
         class Foo implements A {
+            @Override
             public String getString() {
-                return "foo";
+                throw new AssertionError();
             }
         }
 
-        class Bar implements B {
+        class Bar extends Foo {
+            @Override
             public String getString() {
-                return "bar";
+                throw new AssertionError();
             }
         }
 
-        var foo = new Foo();
-        var bar = new Bar();
-
-        if (withOverride) {
-            var proxy = CompositeProxy.build().create(ABWithOverride.class, foo, bar);
-            assertEquals("bar", proxy.getString());
-        } else {
-            var proxy = CompositeProxy.build().create(AB.class, foo, bar);
-            assertEquals("bar", proxy.getString());
+        class Buz extends Bar {
+            @Override
+            public String getString() {
+                return "buz";
+            }
         }
+
+        var proxy = CompositeProxy.create(A.class, new Buz());
+        assertEquals("buz", proxy.getString());
     }
 
     @ParameterizedTest
@@ -333,7 +596,7 @@ class CompositeProxyTest {
         "foo,bar",
         "bar,foo",
     })
-    void testSimpleInterfaceConflictResolver(@ConvertWith(StringArrayConverter.class) String[] slicesSpec) {
+    void testObjectConflictResolver(@ConvertWith(StringArrayConverter.class) String[] slicesSpec) {
 
         interface Foo {
             String getString();
@@ -360,7 +623,7 @@ class CompositeProxyTest {
             };
         }).toArray();
 
-        FooBar proxy = CompositeProxy.build().objectConflictResolver((method, a, b) -> {
+        FooBar proxy = CompositeProxy.build().objectConflictResolver((_, method, _) -> {
             if (method.getDeclaringClass().equals(Bar.class)) {
                 return bar;
             } else {
@@ -373,167 +636,134 @@ class CompositeProxyTest {
 
     @ParameterizedTest
     @ValueSource( strings = {
-        "obj",
-        "obj,obj",
-        "foo",
+        "no-foo",
+        "private-foo",
+        "static-foo",
+        "static-foo,private-foo,no-foo",
     })
-    void testNotExtendingInterfaces(@ConvertWith(StringArrayConverter.class) String[] slicesSpec) {
+    void testMissingImplementer(@ConvertWith(StringArrayConverter.class) String[] slicesSpec) throws NoSuchMethodException, SecurityException {
 
-        @FunctionalInterface
-        interface Foo {
-            String getString();
-        }
-
-        Foo foo = () -> { throw new AssertionError(); };
-
-        var slices = Stream.of(slicesSpec).map(slice -> {
-            return switch (slice) {
-                case "foo" -> foo;
-                case "obj" -> new Object();
-                default -> { throw new AssertionError(); }
-            };
-        }).toArray();
-
-        var ex = assertThrowsExactly(IllegalArgumentException.class, () -> {
-            CompositeProxy.create(Foo.class, slices);
-        });
-
-        assertEquals(
-                String.format("Type %s is not extending interfaces", Foo.class.getName()),
-                ex.getMessage());
-    }
-
-    @ParameterizedTest
-    @ValueSource( strings = {
-        "obj",
-        "a,obj",
-    })
-    void testMissingImplementer(@ConvertWith(StringArrayConverter.class) String[] slicesSpec) {
-
-        @FunctionalInterface
         interface A {
-            String getString();
+            void foo();
         }
-
-        interface B {
-            String getString();
-        }
-
-        interface AB extends A, B {}
-
-        A a = () -> { throw new AssertionError(); };
 
         var slices = Stream.of(slicesSpec).map(slice -> {
             return switch (slice) {
-                case "a" -> a;
-                case "obj" -> new Object();
+                case "no-foo" -> new Object();
+                case "private-foo" -> new Object() {
+                    void foo() {
+                    }
+                };
+                case "static-foo" -> new Object() {
+                    public static void foo() {
+                    }
+                };
                 default -> { throw new AssertionError(); }
             };
         }).toList();
 
         var ex = assertThrowsExactly(IllegalArgumentException.class, () -> {
-            CompositeProxy.create(AB.class, slices.toArray());
+            CompositeProxy.create(A.class, slices.toArray());
         });
 
-        Set<String> messages;
-        if (slices.contains(a)) {
-            messages = Set.of(String.format("None of the slices implement %s", List.of(B.class))
-            );
-        } else {
-            messages = Set.of(
-                    String.format("None of the slices implement %s", List.of(B.class, A.class)),
-                    String.format("None of the slices implement %s", List.of(A.class, B.class))
-            );
-        }
-
-        assertTrue(messages.contains(ex.getMessage()));
+        assertEquals(String.format("None of the slices can handle %s", A.class.getMethod("foo")), ex.getMessage());
     }
 
-    @Test
-    void testUnusedSlice() {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void testUnusedSlice(boolean all) {
 
         interface A {
-            default String getString() {
+            default void foo() {
                 throw new AssertionError();
             }
         }
 
-        interface B extends A {}
-
         A a = new A() {};
         var obj = new Object();
-        var obj2 = new Object();
 
-        var ex = assertThrowsExactly(IllegalArgumentException.class, () -> {
-            CompositeProxy.create(B.class, a, obj, obj2);
-        });
+        if (all) {
+            var messages = Set.of(
+                    String.format("Unreferenced slices: %s", List.of(a, obj)),
+                    String.format("Unreferenced slices: %s", List.of(obj, a))
+            );
 
-        var messages = Set.of(
-                String.format("Unreferenced slices: %s", List.of(obj, obj2)),
-                String.format("Unreferenced slices: %s", List.of(obj2, obj))
-        );
+            var ex = assertThrowsExactly(IllegalArgumentException.class, () -> {
+                CompositeProxy.create(A.class, a, obj);
+            });
 
-        assertTrue(messages.contains(ex.getMessage()));
+            assertTrue(messages.contains(ex.getMessage()));
+        } else {
+            interface B extends A {
+                void foo();
+            }
+
+            var ex = assertThrowsExactly(IllegalArgumentException.class, () -> {
+                CompositeProxy.create(B.class, a, obj);
+            });
+
+            assertEquals(String.format("Unreferenced slices: %s", List.of(obj)), ex.getMessage());
+        }
     }
 
     @ParameterizedTest
     @CsvSource({
-        "'ab,ab',false",
-        "'ab,ab2',false",
-        "'ab,ab2',true",
-        "'ab2,ab',false",
-        "'ab2,ab',true",
+        "'a,b,a',false",
+        "'a,b,a',true",
+        "'a,b',true",
+        "'b,a',true",
+        "'a,b',false",
+        "'b,a',false",
     })
-    void testAmbigousImplementers(@ConvertWith(StringArrayConverter.class) String[] slicesSpec, boolean withObjectConflictResolver) {
+    void testAmbigousImplementers(
+            @ConvertWith(StringArrayConverter.class) String[] slicesSpec,
+            boolean withObjectConflictResolver) throws NoSuchMethodException, SecurityException {
 
-        @FunctionalInterface
         interface A {
-            String getString();
+            String foo();
+            String bar();
         }
 
-        @FunctionalInterface
-        interface B {
-            String getString();
-        }
+        var a = new Object() {
+            public String foo() {
+                return "a-foo";
+            }
+            public String bar() {
+                throw new AssertionError();
+            }
+        };
 
-        @FunctionalInterface
-        interface AB extends A, B {}
+        var b = new Object() {
+            public String bar() {
+                return "b-bar";
+            }
+        };
 
-        AB ab = () -> "ab";
-        AB ab2 = () -> "ab2";
+        var ambiguousMethod = A.class.getMethod("bar");
 
         var slices = Stream.of(slicesSpec).map(slice -> {
             return switch (slice) {
-                case "ab" -> ab;
-                case "ab2" -> ab2;
+                case "a" -> a;
+                case "b" -> b;
                 default -> { throw new AssertionError(); }
             };
         }).toArray();
 
-        if (Stream.of(slices).collect(Collectors.toSet()).size() == 1) {
-            var proxy = CompositeProxy.create(AB.class, slices);
+        if (withObjectConflictResolver) {
+            var proxy = CompositeProxy.build().objectConflictResolver((_, _, _) -> {
+                return b;
+            }).create(A.class, slices);
 
-            assertEquals("ab", proxy.getString());
-        } else if (withObjectConflictResolver) {
-            var proxy = CompositeProxy.build().objectConflictResolver((method, a, b) -> {
-                    if (method.getDeclaringClass().equals(A.class)) {
-                        return ab;
-                    } else {
-                        return ab2;
-                    }
-            }).create(AB.class, slices);
-
-            assertTrue(Set.of("ab2", "ab").contains(proxy.getString()));
+            assertEquals("a-foo", proxy.foo());
+            assertEquals("b-bar", proxy.bar());
         } else {
             var ex = assertThrowsExactly(IllegalArgumentException.class, () -> {
-                CompositeProxy.create(AB.class, slices);
+                CompositeProxy.create(A.class, slices);
             });
 
             var messages = Set.of(
-                    String.format("Ambiguous choice between %s and %s for implementing %s", ab, ab2, A.class),
-                    String.format("Ambiguous choice between %s and %s for implementing %s", ab2, ab, A.class),
-                    String.format("Ambiguous choice between %s and %s for implementing %s", ab, ab2, B.class),
-                    String.format("Ambiguous choice between %s and %s for implementing %s", ab2, ab, B.class)
+                    String.format("Ambiguous choice between %s for %s", List.of(a, b), ambiguousMethod),
+                    String.format("Ambiguous choice between %s for %s", List.of(b, a), ambiguousMethod)
             );
 
             assertTrue(messages.contains(ex.getMessage()));
@@ -594,9 +824,9 @@ class CompositeProxyTest {
             }
         };
 
-        Sloop sloop = CompositeProxy.create(Sloop.class, new Sailboat() {}, withMain, withJib);
+        Sloop sloop = CompositeProxy.create(Sloop.class, withMain, withJib);
 
-        Catboat catboat = CompositeProxy.create(Catboat.class, new Sailboat() {}, withMain);
+        Catboat catboat = CompositeProxy.create(Catboat.class, withMain);
 
         sloop.trimSails();
         catboat.trimSails();
