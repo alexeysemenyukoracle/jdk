@@ -28,7 +28,6 @@ import java.util.List;
 import java.util.stream.Stream;
 import jdk.jpackage.internal.cli.Options;
 import jdk.jpackage.internal.util.CompositeProxy;
-import jdk.jpackage.internal.util.CompositeProxy.InterfaceConflictResolver;
 
 public interface AllLoggers extends
         Logger,
@@ -45,18 +44,11 @@ public interface AllLoggers extends
         var loggers = new ArrayList<Logger>(slices);
         loggers.add(stub);
 
-        return CompositeProxy.build().interfaceConflictResolver(new InterfaceConflictResolver() {
-            @Override
-            public <T> T chooseImplementer(Class<T> iface, T a, T b) {
-                if (!iface.equals(Logger.class)) {
-                    throw new IllegalArgumentException();
-                }
-                if (a == stub) {
-                    return a;
-                } else {
-                    return b;
-                }
+        return CompositeProxy.build().objectConflictResolver((_, _, method, candidates) -> {
+            if (!Logger.class.isAssignableFrom(method.getDeclaringClass())) {
+                throw new IllegalArgumentException();
             }
+            return stub;
         }).create(AllLoggers.class, loggers.toArray());
     }
 
