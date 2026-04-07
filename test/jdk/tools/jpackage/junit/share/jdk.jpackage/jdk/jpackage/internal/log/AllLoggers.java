@@ -44,12 +44,17 @@ public interface AllLoggers extends
         var loggers = new ArrayList<Logger>(slices);
         loggers.add(stub);
 
-        return CompositeProxy.build().objectConflictResolver((_, _, method, candidates) -> {
-            if (!Logger.class.isAssignableFrom(method.getDeclaringClass())) {
-                throw new IllegalArgumentException();
-            }
-            return stub;
-        }).create(AllLoggers.class, loggers.toArray());
+        return CompositeProxy.build()
+                .allowUnreferencedSlices(true)
+                .objectConflictResolver((_, _, method, candidates) -> {
+                    if (!Logger.class.isAssignableFrom(method.getDeclaringClass())) {
+                        throw new IllegalArgumentException();
+                    }
+                    return stub;
+                })
+                .methodConflictResolver((_, _, method, _) -> {
+                    return false;
+                }).create(AllLoggers.class, loggers.toArray());
     }
 
     public static AllLoggers create(Logger... slices) {
