@@ -441,13 +441,20 @@ public final class CompositeProxy {
             final var slice = sliceWithMethods.getKey().value();
             final var sliceMethod = sliceWithMethods.getValue();
             final Handler handler;
-            if (!method.isDefault() || (
-                       method.getReturnType().equals(sliceMethod.getReturnType())
-                    && !sliceMethod.isDefault()
-                    && methodConflictResolver.isOverrideDefault(interfaceType, Arrays.copyOf(slices, slices.length), method, slice))) {
+            if (!method.isDefault()
+                    || (method.equals(sliceMethod)
+                            && getUnfilteredImplementerMethods(slice)
+                                    .map(FullMethodSignature::new)
+                                    .anyMatch(Predicate.isEqual(new FullMethodSignature(sliceMethod))))
+                    || (       method.getReturnType().equals(sliceMethod.getReturnType())
+                            && !sliceMethod.isDefault()
+                            && methodConflictResolver.isOverrideDefault(interfaceType, Arrays.copyOf(slices, slices.length), method, slice))) {
                 // Use implementation from the slice if one of the statements is "true":
                 // - The target method is abstract (not default)
-                // - The target method is default and the matching slice method has the same return type, is not default, and the method conflict resolver approves the use of the slice method
+                // - The target method is default and it is the same method in the slice which overrides it.
+                //   This is a special case when default method must not be invoked via InvocationHandler.invokeDefault().
+                // - The target method is default and the matching slice method has the same return type,
+                //   is not default, and the method conflict resolver approves the use of the slice method
                 if (!allowUnreferencedSlices) {
                     unreferencedSlicesBuilder.remove(sliceWithMethods.getKey());
                 }
@@ -496,31 +503,62 @@ public final class CompositeProxy {
         return superclasses;
     }
 
-    private static Stream<Method> getProxyableMethods(Class<?> interfaceType) {
-        var methods = unfoldInterface(interfaceType).flatMap(type -> {
+    private static Stream<Method> getUnfilteredProxyableMethods(Class<?> interfaceType) {
+        return unfoldInterface(interfaceType).flatMap(type -> {
             return Stream.of(type.getMethods());
         }).filter(method -> {
             return     !Modifier.isStatic(method.getModifiers())
                     && !method.isBridge();
         });
-        return removeRedundancy(methods);
     }
 
-    private static Stream<Method> getImplementerMethods(Object slice) {
+    private static Stream<Method> getProxyableMethods(Class<?> interfaceType) {
+        return removeRedundancy(getUnfilteredProxyableMethods(interfaceType));
+    }
+
+    private static Stream<Method> getUnfilteredImplementerMethods(Object slice) {
         var sliceType = slice.getClass();
-        var methods = Stream.of(
+
+        return Stream.of(
                 Stream.of(sliceType),
-                getSuperclasses(sliceType).stream(),
-                Stream.of(sliceType.getInterfaces()).flatMap(CompositeProxy::unfoldInterface)
+                getSuperclasses(sliceType).stream()
         ).flatMap(x -> x).flatMap(type -> {
             return Stream.of(type.getMethods());
         }).filter(method -> {
             return     !Modifier.isStatic(method.getModifiers())
                     && !method.isBridge()
-                    && !Modifier.isPrivate(method.getModifiers())
-                    && !Modifier.isAbstract(method.getModifiers());
+                    && !method.isDefault()
+                    && !Modifier.isPrivate(method.getModifiers());
         });
-        return removeRedundancy(methods);
+    }
+
+    private static Stream<Method> getImplementerMethods(Object slice) {
+        var sliceType = slice.getClass();
+
+        Stream.of(
+                Stream.of(sliceType),
+                getSuperclasses(sliceType).stream()
+        ).flatMap(x -> x).map(Class::getInterfaces).flatMap(Stream::of);
+
+        var proxyableMethods = Stream.of(
+                Stream.of(sliceType),
+                getSuperclasses(sliceType).stream()
+        ).flatMap(x -> x)
+                .map(Class::getInterfaces)
+                .flatMap(Stream::of)
+                .flatMap(CompositeProxy::unfoldInterface)
+                .flatMap(CompositeProxy::getUnfilteredProxyableMethods)
+                .toList();
+
+        var proxyableMethodSignatures = proxyableMethods.stream()
+                .map(FullMethodSignature::new)
+                .collect(toSet());
+
+        var methods = getUnfilteredImplementerMethods(slice).filter(method -> {
+            return !proxyableMethodSignatures.contains(new FullMethodSignature(method));
+        });
+
+        return removeRedundancy(Stream.concat(methods, proxyableMethods.stream()));
     }
 
     private static Stream<Method> removeRedundancy(Stream<Method> methods) {
@@ -531,6 +569,8 @@ public final class CompositeProxy {
                 var ac = a.getDeclaringClass();
                 var bc = b.getDeclaringClass();
                 if (ac.equals(bc)) {
+                    // Both methods don't fit: they are declared in the same class and have the same signatures.
+                    // That is possible only with code generation bypassing compiler checks.
                     throw new AssertionError();
                 } else if (ac.isAssignableFrom(bc)) {
                     return b;
@@ -657,6 +697,17 @@ public final class CompositeProxy {
         }
     }
 
+    private record FullMethodSignature(MethodSignature signature, Class<?> returnType) {
+        FullMethodSignature {
+            Objects.requireNonNull(signature);
+            Objects.requireNonNull(returnType);
+        }
+
+        FullMethodSignature(Method m) {
+            this(new MethodSignature(m), m.getReturnType());
+        }
+    }
+
     /**
      * Returns the standard jpackage configuration if the values of
      * {@code interfaceType} and {@code slices} parameters comprise such or an empty
@@ -707,7 +758,10 @@ public final class CompositeProxy {
                 if (ifaceSlices.size() == 1) {
                     return ifaceSlices.getFirst();
                 } else {
-                    return ifaceSlices.stream().filter(Predicate.isEqual(anambiguous).negate()).findFirst().orElseThrow();
+                    if (anambiguous.size() != 1) {
+                        throw new AssertionError();
+                    }
+                    return ifaceSlices.stream().filter(Predicate.isEqual(anambiguous.getFirst()).negate()).findFirst().orElseThrow();
                 }
             }, Map.Entry::getKey));
         });
