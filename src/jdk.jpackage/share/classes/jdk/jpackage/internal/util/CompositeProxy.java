@@ -139,6 +139,7 @@ public final class CompositeProxy {
                     Optional.ofNullable(methodConflictResolver).orElse(JPACKAGE_METHOD_CONFLICT_RESOLVER),
                     Optional.ofNullable(objectConflictResolver).orElse(JPACKAGE_OBJECT_CONFLICT_RESOLVER),
                     invokeTunnel,
+                    allowUnreferencedSlices,
                     slices);
         }
 
@@ -171,6 +172,26 @@ public final class CompositeProxy {
         }
 
         /**
+         * Configures if this builder allows unreferenced slices in the
+         * {@link #create(Class, Object...)}.
+         * <p>
+         * By default, if the builder happens to create such a composite proxy that one
+         * or more slices passed in the {@link #create(Class, Object...)} method happen
+         * to be unreferenced, it will throw {@code IllegalArgumentException}. Passing
+         * <code>true</code> disables this throw cause.
+         *
+         * @param v <code>true</code> to disable throwing of
+         *          {@code IllegalArgumentException} from
+         *          {@link #create(Class, Object...)} if some of the passed in slices
+         *          happen to be unreferenced and <code>false</code> otherwise
+         * @return this
+         */
+        public Builder allowUnreferencedSlices(boolean v) {
+            allowUnreferencedSlices = v;
+            return this;
+        }
+
+        /**
          * Sets the invocation tunnel for this builder.
          *
          * @param v the invocation tunnel for this builder or <code>null</code> if no
@@ -187,6 +208,7 @@ public final class CompositeProxy {
         private MethodConflictResolver methodConflictResolver;
         private ObjectConflictResolver objectConflictResolver;
         private InvokeTunnel invokeTunnel;
+        private boolean allowUnreferencedSlices;
     }
 
     /**
@@ -340,6 +362,7 @@ public final class CompositeProxy {
             MethodConflictResolver methodConflictResolver,
             ObjectConflictResolver objectConflictResolver,
             InvokeTunnel invokeTunnel,
+            boolean allowUnreferencedSlices,
             Object... slices) {
 
         Objects.requireNonNull(interfaceType);
@@ -353,7 +376,11 @@ public final class CompositeProxy {
 
         final var uniqueSlices = Stream.of(slices).map(IdentityWrapper::new).collect(toSet());
 
-        final var unreferencedSlicesBuilder = SetBuilder.build(uniqueSlices).emptyAllowed(true);
+        final var unreferencedSlicesBuilder = SetBuilder.<IdentityWrapper<Object>>build().emptyAllowed(true);
+
+        if (!allowUnreferencedSlices) {
+            unreferencedSlicesBuilder.add(uniqueSlices);
+        }
 
         final Map<Method, Handler> methodDispatch = getProxyableMethods(interfaceType).map(method -> {
             return Map.entry(method, uniqueSlices.stream().flatMap(slice -> {
@@ -421,7 +448,9 @@ public final class CompositeProxy {
                 // Use implementation from the slice if one of the statements is "true":
                 // - The target method is abstract (not default)
                 // - The target method is default and the matching slice method has the same return type, is not default, and the method conflict resolver approves the use of the slice method
-                unreferencedSlicesBuilder.remove(sliceWithMethods.getKey());
+                if (!allowUnreferencedSlices) {
+                    unreferencedSlicesBuilder.remove(sliceWithMethods.getKey());
+                }
                 handler = createHandlerForMethod(slice, sliceMethod, invokeTunnel);
             } else {
                 handler = createHandlerForDefaultMethod(method, invokeTunnel);
@@ -433,9 +462,11 @@ public final class CompositeProxy {
 
         }).collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
 
-        var unreferencedSlices = unreferencedSlicesBuilder.create().stream().map(IdentityWrapper::value).toList();
-        if (!unreferencedSlices.isEmpty()) {
-            throw new IllegalArgumentException(String.format("Unreferenced slices: %s", unreferencedSlices));
+        if (!allowUnreferencedSlices) {
+            var unreferencedSlices = unreferencedSlicesBuilder.create().stream().map(IdentityWrapper::value).toList();
+            if (!unreferencedSlices.isEmpty()) {
+                throw new IllegalArgumentException(String.format("Unreferenced slices: %s", unreferencedSlices));
+            }
         }
 
         @SuppressWarnings("unchecked")

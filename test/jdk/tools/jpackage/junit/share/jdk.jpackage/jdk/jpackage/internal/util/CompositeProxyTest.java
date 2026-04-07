@@ -134,27 +134,40 @@ class CompositeProxyTest {
         assertEquals(otherThings, convo.sayThings());
     }
 
-    @Test
-    void testConvoWithCustomSayBye() {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void testConvoWithCustomSayBye(boolean allowUnreferencedSlices) {
         var mixin = new ConvoMixinWithOverrideSayBye.Stub("How is your day?", "See you");
 
-        var convo = CompositeProxy.create(ConvoWithOverrideSayBye.class, mixin);
+        var smalltalk = new Smalltalk() {};
 
-        var expectedConvo = new ConvoWithOverrideSayBye() {
-            @Override
-            public String sayBye() {
-                return mixin.sayBye;
-            }
+        var proxyBuilder = CompositeProxy.build().allowUnreferencedSlices(allowUnreferencedSlices);
 
-            @Override
-            public String sayThings() {
-                return mixin.sayThings;
-            }
-        };
+        if (!allowUnreferencedSlices) {
+            var ex = assertThrowsExactly(IllegalArgumentException.class, () -> {
+                proxyBuilder.create(ConvoWithOverrideSayBye.class, smalltalk, mixin);
+            });
 
-        assertEquals(expectedConvo.sayHello(), convo.sayHello());
-        assertEquals(expectedConvo.sayBye(), convo.sayBye());
-        assertEquals(expectedConvo.sayThings(), convo.sayThings());
+            assertEquals(String.format("Unreferenced slices: %s", List.of(smalltalk)), ex.getMessage());
+        } else {
+            var convo = proxyBuilder.create(ConvoWithOverrideSayBye.class, smalltalk, mixin);
+
+            var expectedConvo = new ConvoWithOverrideSayBye() {
+                @Override
+                public String sayBye() {
+                    return mixin.sayBye;
+                }
+
+                @Override
+                public String sayThings() {
+                    return mixin.sayThings;
+                }
+            };
+
+            assertEquals(expectedConvo.sayHello(), convo.sayHello());
+            assertEquals(expectedConvo.sayBye(), convo.sayBye());
+            assertEquals(expectedConvo.sayThings(), convo.sayThings());
+        }
     }
 
     @Test
