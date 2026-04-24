@@ -67,10 +67,19 @@ public final class CannedMessageFormat {
         return toPattern(MATCH_ANY);
     }
 
-    public static CannedMessageFormat create(String messageFormatFormatString, Object... args) {
+    /**
+     * Creates {@code CannedMessageFormat} instance from the given format string and
+     * format arguments.
+     * 
+     * @param formatString format string suitable for use as the first argument of
+     *                     {@link MessageFormat#format(String, Object...)} call
+     * @param args         an array of objects to be formatted and substituted
+     * @return the {@code CannedMessageFormat} instance
+     */
+    public static CannedMessageFormat create(String formatString, Object... args) {
         return create(
-                defaultInvalidFormatArgumentCountExceptionSupplier(messageFormatFormatString, args.length),
-                messageFormatFormatString,
+                defaultInvalidFormatArgumentCountExceptionSupplier(formatString, args.length),
+                formatString,
                 args);
     }
 
