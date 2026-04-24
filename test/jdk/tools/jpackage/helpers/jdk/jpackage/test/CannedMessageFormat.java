@@ -85,21 +85,21 @@ public final class CannedMessageFormat {
 
     static CannedMessageFormat create(
             Function<Integer, RuntimeException> invalidFormatArgumentCountExceptionSupplier,
-            String messageFormatFormatString,
+            String formatString,
             Object... args) {
 
         Objects.requireNonNull(invalidFormatArgumentCountExceptionSupplier);
-        Objects.requireNonNull(messageFormatFormatString);
+        Objects.requireNonNull(formatString);
         List.of(args).forEach(Objects::requireNonNull);
 
-        var mf = new MessageFormat(messageFormatFormatString);
+        var mf = new MessageFormat(formatString);
         var formatCount = mf.getFormatsByArgumentIndex().length;
         if (formatCount != args.length) {
             throw Objects.requireNonNull(invalidFormatArgumentCountExceptionSupplier.apply(formatCount));
         }
 
         if (formatCount == 0) {
-            return new CannedMessageFormat(messageFormatFormatString);
+            return new CannedMessageFormat(formatString);
         } else {
             return new CannedMessageFormat(mf, args);
         }
