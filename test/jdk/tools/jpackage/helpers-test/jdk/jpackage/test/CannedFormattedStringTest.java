@@ -97,7 +97,7 @@ class CannedFormattedStringTest {
         assertEquals("Hello Duke!", a.getValue());
         assertEquals("Bye Duke!", c.getValue());
 
-        assertEquals("Repeated messagge: Hello Duke! Hello Duke!", a.addPrefix("Repeated message: {0} {0}").getValue());
+        assertEquals("Repeated message: Hello Duke! Hello Duke!", a.addPrefix("Repeated message: {0} {0}").getValue());
 
         assertEquals("No formatting", CannedFormattedString.createFromMessageFormat("No formatting").getValue());
 
