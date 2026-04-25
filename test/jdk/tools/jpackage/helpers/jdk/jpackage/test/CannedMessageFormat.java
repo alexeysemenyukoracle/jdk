@@ -70,7 +70,7 @@ public final class CannedMessageFormat {
     /**
      * Creates {@code CannedMessageFormat} instance from the given format string and
      * format arguments.
-     * 
+     *
      * @param formatString format string suitable for use as the first argument of
      *                     {@link MessageFormat#format(String, Object...)} call
      * @param args         an array of objects to be formatted and substituted
