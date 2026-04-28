@@ -65,7 +65,7 @@ final class IOUtils {
         try {
             Files.deleteIfExists(path);
         } catch (IOException ex) {
-            Log.trace(ex, "Faile to delete [%s]", path);
+            Log.trace(ex, "Failed to delete [%s]", path);
         }
     }
 }

@@ -98,7 +98,7 @@ public class AppContentTest {
 
     @Test(ifOS = MACOS)
     @Parameter("NOT_DIRECTORY")
-    @Parameter("NON_STANDARD_DIRECTOTY_NAME")
+    @Parameter("NON_STANDARD_DIRECTORY_NAME")
     public void testWarnings(AppContentMultiLineWarning type) throws Exception {
 
         var cmd = JPackageCommand.helloAppImage()
@@ -149,7 +149,7 @@ public class AppContentTest {
 
     public enum AppContentMultiLineWarning {
         NOT_DIRECTORY("warning.non-standard-app-content.not-dir", Path.of("apps/dukeplug.png")),
-        NON_STANDARD_DIRECTOTY_NAME("warning.non-standard-app-content.non-standard-dir-name", Path.of("apps")),
+        NON_STANDARD_DIRECTORY_NAME("warning.non-standard-app-content.non-standard-dir-name", Path.of("apps")),
         ;
 
         AppContentMultiLineWarning(String formatKey, Path appContent) {
@@ -162,16 +162,14 @@ public class AppContentTest {
         }
 
         List<CannedFormattedString> expectedWarnings() {
-            switch (this) {
+            return switch (this) {
                 case NOT_DIRECTORY -> {
-                    return List.of(JPackageStringBundle.MAIN.cannedFormattedString(formatKey, appContent));
+                    yield List.of(JPackageStringBundle.MAIN.cannedFormattedString(formatKey, appContent));
                 }
-                case NON_STANDARD_DIRECTOTY_NAME -> {
-                    return List.of(JPackageStringBundle.MAIN.cannedFormattedString(formatKey, appContent.getFileName(), appContent));
+                case NON_STANDARD_DIRECTORY_NAME -> {
+                    yield List.of(JPackageStringBundle.MAIN.cannedFormattedString(formatKey, appContent.getFileName(), appContent));
                 }
-            }
-
-            throw new UnsupportedOperationException();
+            };
         }
 
         private final String formatKey;

@@ -50,7 +50,7 @@ public final class LogConfigParser {
         Objects.requireNonNull(str);
 
         Supplier<IllegalArgumentException> ex = () -> {
-            return new IllegalArgumentException(String.format("Inavlid value: [%s]", str));
+            return new IllegalArgumentException(String.format("Invalid value: [%s]", str));
         };
 
         var groupCategories = new BitSet(MessageCategory.values().length);
