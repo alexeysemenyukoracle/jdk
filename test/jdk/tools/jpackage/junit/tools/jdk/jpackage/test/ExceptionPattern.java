@@ -119,7 +119,7 @@ public interface ExceptionPattern {
         return new Builder();
     }
 
-    public static final class Builder {
+    public static class Builder {
 
         public Builder initFrom(ExceptionPattern pattern) {
             pattern.message().ifPresentOrElse(v -> {
@@ -134,52 +134,52 @@ public interface ExceptionPattern {
             return this;
         }
 
-        public Builder expectMessage(String v) {
+        final public Builder expectMessage(String v) {
             return expectMessage(CannedArgument.ofString(v));
         }
 
-        public Builder expectMessage(CannedArgument v) {
+        final public Builder expectMessage(CannedArgument v) {
             message = Optional.ofNullable(v);
             return this;
         }
 
-        public Builder expectNullMessage() {
+        final public Builder expectNullMessage() {
             message = Optional.empty();
             return this;
         }
 
-        public Builder expectType(Class<? extends Exception> v) {
+        final public Builder expectType(Class<? extends Exception> v) {
             type = v;
             return this;
         }
 
-        public Builder expectCause(ExceptionPattern v) {
+        final public Builder expectCause(ExceptionPattern v) {
             cause = Optional.ofNullable(v);
             return this;
         }
 
-        public Builder expectCause(Class<? extends Exception> v) {
+        final public Builder expectCause(Class<? extends Exception> v) {
             return expectCause(Optional.ofNullable(v).map(type -> {
                 return build().expectType(type).create();
             }).orElse(null));
         }
 
-        public Builder expectNullCause() {
+        final public Builder expectNullCause() {
             cause = Optional.empty();
             return this;
         }
 
-        public Builder skipMessageCheck() {
+        final public Builder skipMessageCheck() {
             message = null;
             return this;
         }
 
-        public Builder skipCauseCheck() {
+        final public Builder skipCauseCheck() {
             cause = null;
             return this;
         }
 
-        public Builder skipTypeCheck() {
+        final public Builder skipTypeCheck() {
             return expectType(null);
         }
 
